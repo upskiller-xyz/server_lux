@@ -1,0 +1,50 @@
+[tool.poetry]
+name = "Upskiller-tool"
+version = "0.1.0"
+description = "case study for RTE RFQ process"
+authors = ["stasja fedorova <stasja.fedorova@upskiller.xyz>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+
+setuptools = "66.1.1"
+
+flask = "^3.0.0"
+werkzeug = "^3.0.0"
+requests = "^2.32.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+coverage = "6.5.0"
+pyfakefs = "5.7.4"
+mypy = "1.14.0"
+ruff = "0.9.4"
+pre-commit = "3.5.0"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "1.6.1"
+mkdocstrings-python = "1.10.9"
+
+
+[tool.poetry.scripts]
+
+
+[[tool.poetry.source]]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+disable_error_code = ["import-untyped", "no-any-return"]
+explicit_package_bases = true
+
+[tool.ruff]
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["Upskiller-torch"]

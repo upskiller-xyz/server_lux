@@ -1,0 +1,19 @@
+# Production dependencies for Model Server
+# Generated from pyproject.toml
+
+
+# Web Framework & Server
+flask>=3.0.0,<4.0.0
+werkzeug>=3.0.0,<4.0.0
+
+
+# HTTP Client
+requests>=2.32.0,<3.0.0
+
+# Utilities & Logging
+rich==14.0.0
+setuptools==66.1.1
+
+
+# Production Server (optional for Docker deployment)
+gunicorn>=21.0.0,<23.0.0
