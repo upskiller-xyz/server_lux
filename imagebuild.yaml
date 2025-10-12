@@ -8,4 +8,4 @@ substitutions:
   _IMAGE_NAME: $IMAGE_NAME
   _PROJECT_ID: $PROJECT_ID
 images:
-- '${_GCP_REGION}-docker.pkg.dev/${_SERVER_NAME}/${_REPO_NAME}/${_IMAGE_NAME}'
+- '${_GCP_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}'
