@@ -30,6 +30,7 @@ class ServerApplication:
         self._app = Flask(app_name)
         CORS(self._app)
         self._controller = None
+        self._endpoint_controller = None
         self._logger = None
         self._setup_dependencies()
         self._setup_routes()
@@ -39,15 +40,45 @@ class ServerApplication:
         from src.server.services.logging import StructuredLogger
         from src.server.enums import LogLevel
         from src.server.controllers.base_controller import ServerController
+        from src.server.services.http_client import HTTPClient
+        from src.server.services.remote_service import (
+            ColorManageService, DaylightService, DFEvalService
+        )
+        from src.server.services.orchestration import OrchestrationService
+        from src.server.controllers.endpoint_controller import EndpointController
 
         # Logger
         self._logger = StructuredLogger("Server", LogLevel.INFO)
 
-        # TODO: Initialize your services here and add them to the services dict
-        # Example:
-        # my_service = MyService()
-        # services = {"my_service": my_service}
-        services = {}
+        # HTTP Client
+        http_client = HTTPClient(self._logger)
+
+        # Remote Services
+        colormanage_service = ColorManageService(http_client, self._logger)
+        daylight_service = DaylightService(http_client, self._logger)
+        df_eval_service = DFEvalService(http_client, self._logger)
+
+        # Orchestration Service
+        orchestration_service = OrchestrationService(
+            colormanage_service, daylight_service, self._logger
+        )
+
+        # Endpoint Controller
+        self._endpoint_controller = EndpointController(
+            colormanage_service,
+            daylight_service,
+            df_eval_service,
+            orchestration_service,
+            self._logger
+        )
+
+        services = {
+            "http_client": http_client,
+            "colormanage_service": colormanage_service,
+            "daylight_service": daylight_service,
+            "df_eval_service": df_eval_service,
+            "orchestration_service": orchestration_service
+        }
 
         # Controller
         self._controller = ServerController(
@@ -59,40 +90,118 @@ class ServerApplication:
         self._controller.initialize()
 
     def _setup_routes(self) -> None:
-        """Setup Flask routes"""
-        self._app.add_url_rule("/", "get_status", self._get_status, methods=["GET"])
-        self._app.add_url_rule("/route_example", "route_example", self._route_example, methods=["POST"])
+        """Setup Flask routes using strategy pattern"""
+        routes = [
+            ("/", "get_status", self._get_status, ["GET"]),
+            ("/to_rgb", "to_rgb", self._to_rgb, ["POST"]),
+            ("/to_values", "to_values", self._to_values, ["POST"]),
+            ("/get_df", "get_df", self._get_df, ["POST"]),
+            ("/get_stats", "get_stats", self._get_stats, ["POST"]),
+            ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"])
+        ]
+
+        [self._app.add_url_rule(path, name, handler, methods=methods)
+         for path, name, handler, methods in routes]
 
     def _get_status(self) -> Dict[str, Any]:
         """Get server status endpoint"""
         return jsonify(self._controller.get_status())
 
-    def _route_example(self) -> Dict[str, Any]:
-        """Run prediction endpoint"""
-        # Check if file was uploaded
-        if 'file' not in request.files:
-            raise BadRequest("No file uploaded")
-
-        file = request.files['file']
-
-        # Validate content type
-        # remove if using other input types
-        if not ContentType.is_image(file.content_type):
-            raise BadRequest("File must be an image")
-
+    def _to_rgb(self) -> Dict[str, Any]:
+        """Convert values to RGB endpoint"""
         try:
-            # endpoint logic
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
 
-            result = {}
+            result = self._endpoint_controller.to_rgb(request_data)
 
-            # Check for errors
             if result.get("status") == "error":
                 return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
             return jsonify(result)
 
         except Exception as e:
-            return jsonify({"error": f"Prediction failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            self._logger.error(f"to_rgb failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _to_values(self) -> Dict[str, Any]:
+        """Convert RGB to values endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.to_values(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"to_values failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _get_df(self) -> Dict[str, Any]:
+        """Get dataframe endpoint"""
+        try:
+            # Handle multipart form data with file upload
+            if 'file' not in request.files:
+                raise BadRequest("No file provided in request")
+
+            file = request.files['file']
+            form_data = request.form.to_dict()
+
+            result = self._endpoint_controller.get_df(file, form_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"get_df failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _get_stats(self) -> Dict[str, Any]:
+        """Get statistics endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.get_stats(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"get_stats failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _get_df_rgb(self) -> Dict[str, Any]:
+        """Get dataframe and convert to RGB endpoint"""
+        try:
+            # Handle multipart form data with file upload
+            if 'file' not in request.files:
+                raise BadRequest("No file provided in request")
+
+            file = request.files['file']
+            form_data = request.form.to_dict()
+
+            result = self._endpoint_controller.get_df_rgb(file, form_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"get_df_rgb failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     @property
     def app(self) -> Flask:

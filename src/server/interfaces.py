@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class IModelLoader(ABC):
@@ -69,4 +69,32 @@ class IServerController(ABC):
     @abstractmethod
     def get_status(self) -> Dict[str, Any]:
         """Get server status"""
+        pass
+
+
+class IHTTPClient(ABC):
+    """Interface for HTTP client strategies"""
+
+    @abstractmethod
+    def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Make POST request to URL with JSON data"""
+        pass
+
+    @abstractmethod
+    def post_multipart(
+        self,
+        url: str,
+        files: Dict[str, Any],
+        data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Make POST request with multipart/form-data"""
+        pass
+
+
+class IRemoteService(ABC):
+    """Interface for remote service callers"""
+
+    @abstractmethod
+    def call(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Call remote service endpoint with data"""
         pass

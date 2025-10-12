@@ -11,20 +11,20 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/upskiller-xyz/server_template">
+  <a href="https://github.com/upskiller-xyz/server_lux">
     <img src="https://github.com/upskiller-xyz/DaylightFactor/blob/main/docs/images/logo_upskiller.png" alt="Logo" height="100" >
   </a>
 
-  <h3 align="center">XXX Server</h3>
+  <h3 align="center">Lux Server</h3>
 
   <p align="center">
-    Short description
+    Gateway server for daylight analysis, color management, and dataframe evaluation services
     <br />
-    <a href="https://github.com/upskiller-xyz/server_template">View Demo</a>
+    <a href="https://github.com/upskiller-xyz/server_lux">View Demo</a>
     ·
-    <a href="https://github.com/upskiller-xyz/server_template/issues">Report Bug</a>
+    <a href="https://github.com/upskiller-xyz/server_lux/issues">Report Bug</a>
     ·
-    <a href="https://github.com/upskiller-xyz/server_template/issues">Request Feature</a>
+    <a href="https://github.com/upskiller-xyz/server_lux/issues">Request Feature</a>
   </p>
 </div>
 
@@ -59,7 +59,6 @@
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contribution">Contribution</a></li>
     <li><a href="#license">License</a></li>
-    <li><a href="#attribution">Attribution</a></li>
     <li><a href="#trademark-notice">Trademark notice</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
@@ -71,7 +70,12 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-Longer description
+The Daylight Server is a gateway service that orchestrates requests to remote microservices for:
+- **Daylight Factor Analysis** - Process building images to estimate daylight distribution
+- **Color Management** - Convert between numeric values and RGB color representations
+- **Dataframe Evaluation** - Statistical analysis of daylight data
+
+The server acts as a unified interface, handling multipart file uploads, forwarding requests to specialized remote services, and managing response orchestration.
 
 
 
@@ -83,6 +87,7 @@ Longer description
 
 * [Python](https://www.python.org/)
 * [Flask](https://flask.palletsprojects.com/)
+* [Requests](https://requests.readthedocs.io/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -93,188 +98,154 @@ To get a local copy up and running follow these simple steps.
 
 ### Prerequisites
 
-* [Python 3.13+](https://www.python.org/downloads/)
-* [Poetry](https://python-poetry.org/docs/#installation)
-* CUDA-capable GPU (optional, for GPU acceleration)
+* [Python 3.10+](https://www.python.org/downloads/)
 
 ### Installation
 
 1. Clone the repo
    ```sh
-   git clone https://github.com/upskiller-xyz/server_template.git
-   cd server_template
+   git clone https://github.com/upskiller-xyz/server_lux.git
+   cd server_lux
    ```
 
-2. Install dependencies using Poetry:
+2. Install dependencies:
    ```sh
-   poetry install
+   pip install -r requirements.txt
    ```
 
-3. Activate the virtual environment:
+3. Run the server:
    ```sh
-   poetry shell
+   python src/main.py
    ```
 
-4. Set environment variables (optional):
-   ```sh
-   export PORT=8000               # Server port
-   ```
-
-5. Run the server:
-   ```sh
-   python main.py
-   ```
+   The server will start on `http://localhost:8081` by default.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-### 🎯 Interactive Demo with PyTorch Models
+### 🎯 Interactive Demo
 
-**Start here!** For hands-on examples with PyTorch model loading and feature extraction, see the **[Playground Notebook](example/demo.ipynb)**:
+**Start here!** For hands-on examples, see the **[Demo Notebook](example/demo.ipynb)**:
 
 ```bash
 # Install Jupyter and start the demo
-poetry run jupyter notebook example/demo.ipynb
+jupyter notebook example/demo.ipynb
 ```
 
 ### 🔧 API Endpoints
 
-The server provides REST API endpoints for model predictions:
+The server provides REST API endpoints for daylight analysis and color management:
 
 #### Health Check
-Check if the server is running and model is loaded:
+Check server status:
 
 ```python
 import requests
 
-response = requests.get("http://localhost:8000/")
+response = requests.get("http://localhost:8081/")
 print(response.json())
-# Output: {"status": "ready", "model_loaded": true, "timestamp": "2024-01-01T00:00:00Z"}
+# Output: {"status": "running", "services": {...}}
 ```
 
-#### Image Prediction
-Submit an image for model prediction:
+#### get_df - Daylight Factor Analysis
+Process building images with transformation parameters:
 
 ```python
 import requests
+import json
 
-# Send image file for prediction
-with open("input_image.jpg", "rb") as f:
-    files = {"file": f}
-    response = requests.post("http://localhost:8000/run", files=files)
+with open("building.png", "rb") as f:
+    files = {"file": ("building.png", f)}
+    response = requests.post(
+        "http://localhost:8081/get_df",
+        files=files,
+        data={
+            "translation": json.dumps({"x": 750, "y": 0}),
+            "rotation": json.dumps([0])
+        }
+    )
 
 result = response.json()
-print(f"Prediction result: {result}")
+# Returns base64-encoded numpy array with daylight factor values
 ```
 
-#### Example with OpenCV preprocessing:
+#### to_rgb - Convert Values to RGB
+Convert numeric values to color representation:
 
 ```python
-import cv2
 import requests
 import numpy as np
-from io import BytesIO
 
-# Load and preprocess image
-image = cv2.imread("input.jpg")
-image = cv2.resize(image, (480, 640))  # Resize to model input size
+values = np.random.rand(100, 100)  # Your numeric data
+response = requests.post(
+    "http://localhost:8081/to_rgb",
+    json={"data": values.tolist(), "colorscale": "df"}
+)
 
-# Convert to bytes
-_, buffer = cv2.imencode('.jpg', image)
-image_bytes = BytesIO(buffer)
+rgb_image = response.json()["data"]
+```
 
-# Send prediction request
-files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
-response = requests.post("http://localhost:8000/run", files=files)
+#### to_values - Convert RGB to Values
+Convert RGB colors back to numeric values:
 
-prediction = response.json()
-print(f"Model output shape: {prediction.get('output_shape')}")
-print(f"Processing time: {prediction.get('processing_time_ms')}ms")
+```python
+import requests
+from PIL import Image
+import numpy as np
+
+img = np.array(Image.open("colored_result.png"))
+response = requests.post(
+    "http://localhost:8081/to_values",
+    json={"data": img.tolist(), "colorscale": "df"}
+)
+
+values = response.json()["data"]
 ```
 
 ### Deployment
 
 #### Environment Configuration
-Create a `.env` file with required configurations:
+Configure the server port:
 ```sh
-MODEL=df_default_2.0.0
-PORT=8000
-GCP_REGION=us-central1
-SERVER_NAME=model-server
-REPO_NAME=server_template
-IMAGE_NAME=model-server
-
-SCW_REGISTRY_NAMESPACE=nsp
-SCW_PROJECT_ID=project-id
-SCW_SERVER=serve-container
-SCW_IMAGE=server_template
+export PORT=8081  # Default port
 ```
 
 #### Docker Deployment
 Build and run using Docker:
 ```sh
-docker build -t model-server .
-docker run -p 8000:8000 model-server
-```
-
-#### Cloud Deployment
-Deploy to Google Cloud Platform:
-```sh
-gcloud auth login
-bash build.sh
-```
-
-or Scaleway:
-```sh
-bash build_scw.sh
+docker build -t daylight-server .
+docker run -p 8081:8081 daylight-server
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 #### Locally
 
-Set up the Model Server locally for development and testing:
+Set up the Daylight Server locally for development and testing:
 
 1. **Clone the Repository**
    ```bash
-   git clone <your-repo-url>
-   cd server_template
+   git clone https://github.com/upskiller-xyz/server_lux.git
+   cd server_lux
    ```
 
-2. **Install Dependencies with Poetry**
+2. **Install Dependencies**
    ```bash
-   poetry install
+   pip install -r requirements.txt
    ```
 
-3. **Activate Virtual Environment**
+3. **Set Environment Variables (Optional)**
    ```bash
-   poetry shell
+   export PORT=8081
    ```
 
-4. **Set Environment Variables (Optional)**
+4. **Run the Server**
    ```bash
-   export MODEL=df_default_2.0.0
-   export PORT=8000
+   python src/main.py
    ```
-
-5. **Run the Server**
-   ```bash
-   python main.py
-   ```
-   The server will start on `http://localhost:8000` by default.
-
-6. **Run Tests**
-   ```bash
-   poetry run pytest
-   ```
-
-7. **Code Quality Checks**
-   ```bash
-   poetry run ruff check .
-   poetry run mypy .
-   ```
+   The server will start on `http://localhost:8081` by default.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -283,27 +254,27 @@ Set up the Model Server locally for development and testing:
 
 ### Architecture
 
-The Model Server follows object-oriented design principles with clean separation of concerns:
+The Daylight Server follows object-oriented design principles with clean separation of concerns:
 
 ```
-ModelServerApplication
-├── DownloadStrategy (handles model downloads)
-└── StructuredLogger (logging system)
+ServerApplication
+├── HTTPClient (connection pooling, retries)
+├── Remote Services
+│   ├── ColorManageService
+│   ├── DaylightService
+│   └── DFEvalService
+├── OrchestrationService (multi-service workflows)
+└── EndpointController (request handling)
 ```
 
-**Key Components:**
-- **Dependency Injection**: All services are injected through constructors
-- **Factory Patterns**: Services are created using factory classes
-- **Strategy Pattern**: Different loading and processing strategies
-- **Single Responsibility**: Each class has one clear purpose
-- **Abstract Base Classes**: Define contracts for implementations
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ROADMAP -->
 ## Roadmap
 
-See the [open issues](https://github.com/upskiller-xyz/server_template/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/upskiller-xyz/server_lux/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -322,19 +293,19 @@ If you have a suggestion that would make this better, please fork the repo and c
 
 **Development Guidelines:**
 
-* Follow Object-Oriented Programming principles and design patterns
-* Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/)
-* Follow [semantic versioning](https://semver.org/)
-* Add type hints and documentation
-* Write tests for new functionality
-* Run `poetry run ruff check` and `poetry run mypy` before committing
+* Follow Object-Oriented Programming principles and design patterns (see [CLAUDE.md](CLAUDE.md))
+* Use Enumerator pattern instead of magic strings
+* Use Strategy pattern instead of if-else chains
+* Implement proper inheritance hierarchies
+* Add type hints to all functions
+* Use structured logging (no print statements)
 
 See [CLAUDE.md](CLAUDE.md) for detailed development instructions.
 
 ### Top contributors:
 
-<a href="https://github.com/upskiller-xyz/server_template/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=upskiller-xyz/server_template" alt="Top Contributors" />
+<a href="https://github.com/upskiller-xyz/server_lux/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=upskiller-xyz/server_lux" alt="Top Contributors" />
 </a>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -352,22 +323,15 @@ Strong copyleft. You **can** use, distribute and modify this code in both academ
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
-## Attribution
-
-📖 **Academic/Industry Use**: Please cite this work as described in [CITATION.cff](docs/citation/CITATION.cff), [CITE.txt](docs/citation/CITE.txt) or [ATTRIBUTION.md](docs/citation/ATTRIBUTION.md). Alternatively you can download the BibTeX file [here](docs/citation/model-server.bib) by adding it to `.tex` files by
-
-```tex
-\bibliography{model-server}
-```
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 ## Trademark Notice
 
 - **"Upskiller"** is an informal collaborative name used by contributors affiliated with BIMTech Innovations AB.
-- BIMTech Innovations AB owns all legal rights to the **Model Server** project.
+- BIMTech Innovations AB owns all legal rights to the **Daylight Server** project.
 - The GPL-3.0 license applies to code, not branding. Commercial use of the names requires permission.
 
 Contact: [Upskiller](mailto:info@upskiller.xyz)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contact
 
@@ -379,8 +343,8 @@ Stanislava Fedorova - [e-mail](mailto:stasya.fedorova@gmail.com)
 ## Acknowledgments
 
 * [README template](https://github.com/othneildrew/Best-README-Template)
-* [PyTorch](https://pytorch.org/) - Deep learning framework
 * [Flask](https://flask.palletsprojects.com/) - Web framework
+* [Requests](https://requests.readthedocs.io/) - HTTP library
 * Alberto Floris - [e-mail](mailto:alberto.floris@arkion.co)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -389,13 +353,13 @@ Stanislava Fedorova - [e-mail](mailto:stasya.fedorova@gmail.com)
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/upskiller-xyz/server_template.svg?style=for-the-badge
-[contributors-url]: https://github.com/upskiller-xyz/server_template/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/upskiller-xyz/server_template.svg?style=for-the-badge
-[forks-url]: https://github.com/upskiller-xyz/server_template/network/members
-[stars-shield]: https://img.shields.io/github/stars/upskiller-xyz/server_template.svg?style=for-the-badge
-[stars-url]: https://github.com/upskiller-xyz/server_template/stargazers
-[issues-shield]: https://img.shields.io/github/issues/upskiller-xyz/server_template.svg?style=for-the-badge
-[issues-url]: https://github.com/upskiller-xyz/server_template/issues
-[license-shield]: https://img.shields.io/github/license/upskiller-xyz/server_template.svg?style=for-the-badge
-[license-url]: https://github.com/upskiller-xyz/server_template/blob/master/docs/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/upskiller-xyz/server_lux.svg?style=for-the-badge
+[contributors-url]: https://github.com/upskiller-xyz/server_lux/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/upskiller-xyz/server_lux.svg?style=for-the-badge
+[forks-url]: https://github.com/upskiller-xyz/server_lux/network/members
+[stars-shield]: https://img.shields.io/github/stars/upskiller-xyz/server_lux.svg?style=for-the-badge
+[stars-url]: https://github.com/upskiller-xyz/server_lux/stargazers
+[issues-shield]: https://img.shields.io/github/issues/upskiller-xyz/server_lux.svg?style=for-the-badge
+[issues-url]: https://github.com/upskiller-xyz/server_lux/issues
+[license-shield]: https://img.shields.io/github/license/upskiller-xyz/server_lux.svg?style=for-the-badge
+[license-url]: https://github.com/upskiller-xyz/server_lux/blob/master/docs/LICENSE.txt
