@@ -42,7 +42,7 @@ class ServerApplication:
         from src.server.controllers.base_controller import ServerController
         from src.server.services.http_client import HTTPClient
         from src.server.services.remote_service import (
-            ColorManageService, DaylightService, DFEvalService
+            ColorManageService, DaylightService, DFEvalService, ObstructionService
         )
         from src.server.services.orchestration import OrchestrationService
         from src.server.controllers.endpoint_controller import EndpointController
@@ -57,6 +57,7 @@ class ServerApplication:
         colormanage_service = ColorManageService(http_client, self._logger)
         daylight_service = DaylightService(http_client, self._logger)
         df_eval_service = DFEvalService(http_client, self._logger)
+        obstruction_service = ObstructionService(http_client, self._logger)
 
         # Orchestration Service
         orchestration_service = OrchestrationService(
@@ -68,6 +69,7 @@ class ServerApplication:
             colormanage_service,
             daylight_service,
             df_eval_service,
+            obstruction_service,
             orchestration_service,
             self._logger
         )
@@ -77,6 +79,7 @@ class ServerApplication:
             "colormanage_service": colormanage_service,
             "daylight_service": daylight_service,
             "df_eval_service": df_eval_service,
+            "obstruction_service": obstruction_service,
             "orchestration_service": orchestration_service
         }
 
@@ -97,7 +100,10 @@ class ServerApplication:
             ("/to_values", "to_values", self._to_values, ["POST"]),
             ("/get_df", "get_df", self._get_df, ["POST"]),
             ("/get_stats", "get_stats", self._get_stats, ["POST"]),
-            ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"])
+            ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"]),
+            ("/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
+            ("/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
+            ("/obstruction", "obstruction", self._obstruction, ["POST"])
         ]
 
         [self._app.add_url_rule(path, name, handler, methods=methods)
@@ -201,6 +207,60 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"get_df_rgb failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _horizon_angle(self) -> Dict[str, Any]:
+        """Calculate horizon angle endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.horizon_angle(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"horizon_angle failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _zenith_angle(self) -> Dict[str, Any]:
+        """Calculate zenith angle endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.zenith_angle(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"zenith_angle failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _obstruction(self) -> Dict[str, Any]:
+        """Calculate both horizon and zenith angles endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.obstruction(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"obstruction failed: {str(e)}")
             return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     @property

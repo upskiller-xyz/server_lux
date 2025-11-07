@@ -74,3 +74,49 @@ class DFEvalService(RemoteService):
     def get_stats(self, **kwargs) -> Dict[str, Any]:
         """Get statistics from DF evaluation service"""
         return self.call(f"/{EndpointType.GET_STATS.value}", kwargs)
+
+
+class ObstructionService(RemoteService):
+    """Service for obstruction angle calculations"""
+
+    def __init__(self, http_client: IHTTPClient, logger: ILogger):
+        super().__init__(ServiceURL.OBSTRUCTION, http_client, logger)
+
+    def calculate_horizon_angle(self, x: float, y: float, z: float,
+                               rad_x: float, rad_y: float, mesh: list) -> Dict[str, Any]:
+        """Calculate horizon angle from window position"""
+        request_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "rad_x": rad_x,
+            "rad_y": rad_y,
+            "mesh": mesh
+        }
+        return self.call(f"/{EndpointType.HORIZON_ANGLE.value}", request_data)
+
+    def calculate_zenith_angle(self, x: float, y: float, z: float,
+                              rad_x: float, rad_y: float, mesh: list) -> Dict[str, Any]:
+        """Calculate zenith angle from window position"""
+        request_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "rad_x": rad_x,
+            "rad_y": rad_y,
+            "mesh": mesh
+        }
+        return self.call(f"/{EndpointType.ZENITH_ANGLE.value}", request_data)
+
+    def calculate_obstruction(self, x: float, y: float, z: float,
+                            rad_x: float, rad_y: float, mesh: list) -> Dict[str, Any]:
+        """Calculate both horizon and zenith angles from window position"""
+        request_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "rad_x": rad_x,
+            "rad_y": rad_y,
+            "mesh": mesh
+        }
+        return self.call(f"/{EndpointType.OBSTRUCTION.value}", request_data)
