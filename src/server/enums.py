@@ -44,9 +44,13 @@ class EndpointType(Enum):
     GET_DF = "get_df"
     GET_STATS = "get_stats"
     GET_DF_RGB = "get_df_rgb"
+    HORIZON_ANGLE = "horizon_angle"
+    ZENITH_ANGLE = "zenith_angle"
+    OBSTRUCTION = "obstruction"
 
 
 class ServiceURL(Enum):
     COLORMANAGE = "https://colormanage-server-jia3y72oka-ma.a.run.app"
     DAYLIGHT = "https://daylight-processing-jia3y72oka-ma.a.run.app"
     DF_EVAL = "https://df-eval-server-jia3y72oka-ma.a.run.app"
+    OBSTRUCTION = "https://obstruction-server-182483330095.europe-north2.run.app"
