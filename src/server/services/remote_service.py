@@ -185,3 +185,60 @@ class EncoderService(RemoteService):
                 window_data["obstruction_angle_zenith"] = obstruction_angles_zenith
 
         return self.encode(model_type, enhanced_parameters)
+
+
+class PostprocessService(RemoteService):
+    """Service for postprocessing daylight simulation results"""
+
+    def __init__(self, http_client: IHTTPClient, logger: ILogger):
+        super().__init__(ServiceURL.POSTPROCESS, http_client, logger)
+
+    def postprocess(
+        self,
+        window_results: Dict[str, Dict[str, Any]],
+        room_polygon: List[List[float]]
+    ) -> Dict[str, Any]:
+        """Postprocess daylight simulation results for all windows
+
+        Args:
+            window_results: Dictionary mapping window names to their simulation results and locations
+                Format: {
+                    "window_name": {
+                        "result": {...},  # Daylight simulation result
+                        "x1": float, "y1": float, "z1": float,
+                        "x2": float, "y2": float, "z2": float
+                    }
+                }
+            room_polygon: Room polygon coordinates [[x, y], ...]
+
+        Returns:
+            Postprocessed result matrix
+        """
+        # Construct request payload
+        windows_data = {}
+        results_data = {}
+
+        for window_name, window_info in window_results.items():
+            # Extract window location
+            windows_data[window_name] = {
+                "x1": window_info.get("x1"),
+                "y1": window_info.get("y1"),
+                "z1": window_info.get("z1"),
+                "x2": window_info.get("x2"),
+                "y2": window_info.get("y2"),
+                "z2": window_info.get("z2")
+            }
+
+            # Extract simulation result
+            results_data[window_name] = window_info.get("result")
+
+        request_data = {
+            "windows": windows_data,
+            "results": results_data,
+            "room_polygon": room_polygon
+        }
+
+        url = f"{self._service_url.value}/{EndpointType.POSTPROCESS.value}"
+        self._logger.info(f"Calling {self._service_url.name} service: {EndpointType.POSTPROCESS.value}")
+
+        return self._http_client.post(url, request_data)

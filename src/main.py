@@ -44,7 +44,7 @@ class ServerApplication:
         from src.server.controllers.base_controller import ServerController
         from src.server.services.http_client import HTTPClient
         from src.server.services.remote_service import (
-            ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService
+            ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService, PostprocessService
         )
         from src.server.services.orchestration import OrchestrationService, RunOrchestrationService
         from src.server.controllers.endpoint_controller import EndpointController
@@ -61,13 +61,14 @@ class ServerApplication:
         df_eval_service = DFEvalService(http_client, self._logger)
         obstruction_service = ObstructionService(http_client, self._logger)
         encoder_service = EncoderService(http_client, self._logger)
+        postprocess_service = PostprocessService(http_client, self._logger)
 
         # Orchestration Services
         orchestration_service = OrchestrationService(
             colormanage_service, daylight_service, self._logger
         )
         run_orchestration_service = RunOrchestrationService(
-            obstruction_service, encoder_service, daylight_service, self._logger
+            obstruction_service, encoder_service, daylight_service, postprocess_service, self._logger
         )
 
         # Endpoint Controller

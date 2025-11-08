@@ -51,6 +51,7 @@ class EndpointType(Enum):
     OBSTRUCTION_ALL = "obstruction_all"
     ENCODE = "encode"
     RUN = "run"
+    POSTPROCESS = "postprocess"
 
 
 class ServiceURL(Enum):

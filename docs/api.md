@@ -43,7 +43,7 @@ fetch("http://localhost:8000/")
 
 ## `/run`
 **POST** `/run`
-Executes complete daylight simulation workflow: obstruction angle calculation → room encoding → daylight simulation.
+Executes complete daylight simulation workflow: obstruction angle calculation → room encoding → daylight simulation → postprocessing.
 
 **For detailed schema documentation, see [run_schema.md](run_schema.md)**
 

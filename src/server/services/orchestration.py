@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 import concurrent.futures
 from ..interfaces import ILogger
-from .remote_service import ColorManageService, DaylightService, ObstructionService, EncoderService
+from .remote_service import ColorManageService, DaylightService, ObstructionService, EncoderService, PostprocessService
 
 
 class OrchestrationService:
@@ -43,18 +43,20 @@ class OrchestrationService:
 
 class RunOrchestrationService:
     """Service for orchestrating the complete run workflow:
-    obstruction angles → encoding → daylight simulation"""
+    obstruction angles → encoding → daylight simulation → postprocessing"""
 
     def __init__(
         self,
         obstruction_service: ObstructionService,
         encoder_service: EncoderService,
         daylight_service: DaylightService,
+        postprocess_service: PostprocessService,
         logger: ILogger
     ):
         self._obstruction = obstruction_service
         self._encoder = encoder_service
         self._daylight = daylight_service
+        self._postprocess = postprocess_service
         self._logger = logger
 
     def _process_single_window(
@@ -168,7 +170,13 @@ class RunOrchestrationService:
             return {
                 "window_name": window_name,
                 "status": "success",
-                "result": daylight_result
+                "result": daylight_result,
+                "x1": window_data.get("x1"),
+                "y1": window_data.get("y1"),
+                "z1": window_data.get("z1"),
+                "x2": window_data.get("x2"),
+                "y2": window_data.get("y2"),
+                "z2": window_data.get("z2")
             }
 
         except Exception as e:
@@ -236,8 +244,34 @@ class RunOrchestrationService:
             )
             results[window_name] = result
 
-        # Return results for all windows
-        return {
-            "status": "success",
-            "results": results
-        }
+        # Check if any window processing failed
+        for window_name, result in results.items():
+            if result.get("status") == "error":
+                self._logger.error(f"Window '{window_name}' processing failed, skipping postprocessing")
+                return {
+                    "status": "error",
+                    "error": f"Window '{window_name}' processing failed: {result.get('error')}",
+                    "partial_results": results
+                }
+
+        # Step 4: Postprocess all window results
+        self._logger.info("Starting postprocessing of all window results")
+        room_polygon = parameters.get("room_polygon")
+
+        postprocess_result = self._postprocess.postprocess(
+            window_results=results,
+            room_polygon=room_polygon
+        )
+
+        if postprocess_result.get("status") == "error":
+            self._logger.error("Postprocessing failed")
+            return {
+                "status": "error",
+                "error": f"Postprocessing failed: {postprocess_result.get('error')}",
+                "window_results": results
+            }
+
+        self._logger.info("Complete workflow finished successfully")
+
+        # Return final postprocessed result
+        return postprocess_result

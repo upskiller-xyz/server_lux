@@ -125,24 +125,27 @@ Each window in the `windows` dictionary contains:
 
 ### Success Response (200 OK)
 
-Returns simulation results for all windows:
+Returns the final postprocessed result matrix:
 
 ```json
 {
   "status": "success",
-  "results": {
-    "main_window": {
-      "window_name": "main_window",
-      "status": "success",
-      "result": {
-        "status": "success",
-        "content": "base64_encoded_numpy_array",
-        "shape": [height, width]
-      }
-    }
-  }
+  "content": "base64_encoded_numpy_array",
+  "shape": [height, width]
 }
 ```
+
+Or depending on the postprocessing service configuration:
+
+```json
+{
+  "status": "success",
+  "data": [[...], [...], ...],
+  "metadata": {...}
+}
+```
+
+**Note:** The response dimensions can vary based on the room_polygon and window configurations.
 
 ### Error Response (400 Bad Request)
 
@@ -178,7 +181,7 @@ Returns simulation results for all windows:
 
 ## Workflow Details
 
-The `/run` endpoint processes each window through three sequential steps:
+The `/run` endpoint processes each window through four sequential steps:
 
 1. **Obstruction Service** (`/obstruction_all`)
    - Input: Window center position (calculated from x1,y1,z1,x2,y2,z2), rad_x, rad_y, mesh
@@ -190,10 +193,15 @@ The `/run` endpoint processes each window through three sequential steps:
 
 3. **Daylight Service** (`/simulate`)
    - Input: Encoded PNG image, translation: {x: 0, y: 0}, rotation: [0]
-   - Output: Daylight factor simulation results
+   - Output: Daylight factor simulation results per window
    - Note: Translation and rotation are currently fixed at default values
 
-**Note:** Each window is processed independently through all three steps. The endpoint returns results for all windows in the request.
+4. **Postprocess Service** (`/postprocess`)
+   - Input: All window results (including locations), room_polygon
+   - Output: Final combined result matrix
+   - Note: Dimensions can vary based on room geometry
+
+**Note:** Each window is processed independently through steps 1-3. Step 4 combines all window results into a single output matrix.
 
 ## Validation Rules
 
@@ -301,7 +309,9 @@ fetch(url, {
 ## Notes
 
 - The window center position for obstruction calculation is automatically computed as the midpoint between (x1, y1, z1) and (x2, y2, z2)
-- Each window is processed independently through the complete workflow (obstruction → encoding → simulation)
+- Each window is processed independently through obstruction → encoding → simulation
+- All window results are then combined in the postprocessing step along with room_polygon
 - The calculated obstruction angles (64 floats each for horizon and zenith) are automatically added to each window before encoding
 - Translation and rotation are currently fixed at default values (translation: {x: 0, y: 0}, rotation: [0]) and will be integrated as request parameters in a future update
-- You can include multiple windows in a single request - each will be processed through the complete workflow
+- You can include multiple windows in a single request - each will be processed independently and combined in the final result
+- The final output matrix dimensions can vary based on room geometry and window configurations
