@@ -115,3 +115,37 @@ class HTTPClient(IHTTPClient):
                 self._logger.error(f"Response status: {e.response.status_code}")
                 self._logger.error(f"Response body: {e.response.text}")
             raise
+
+    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes:
+        """Make POST request expecting binary response (e.g., images)"""
+        try:
+            self._logger.info(f"POST request to {url} expecting binary response (timeout: {self._timeout}s)")
+            self._logger.debug(f"Request data keys: {list(data.keys())}")
+
+            response = self._session.post(
+                url,
+                json=data,
+                headers={"Content-Type": "application/json"},
+                timeout=(10, self._timeout)
+            )
+            response.raise_for_status()
+
+            self._logger.info(f"Binary response received from {url} (status: {response.status_code}, size: {len(response.content)} bytes)")
+            return response.content
+
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Request to {url} timed out after {self._timeout}s"
+            self._logger.error(error_msg)
+            self._logger.error(f"Timeout details: {str(e)}")
+            raise
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"Connection error to {url}"
+            self._logger.error(error_msg)
+            self._logger.error(f"Connection details: {str(e)}")
+            raise
+        except requests.exceptions.RequestException as e:
+            self._logger.error(f"Request to {url} failed: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                self._logger.error(f"Response status: {e.response.status_code}")
+                self._logger.error(f"Response body: {e.response.text[:500]}")  # Limit response body log
+            raise

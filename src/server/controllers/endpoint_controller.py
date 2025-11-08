@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from ..interfaces import ILogger
-from ..services.remote_service import ColorManageService, DaylightService, DFEvalService, ObstructionService
-from ..services.orchestration import OrchestrationService
+from ..services.remote_service import ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService
+from ..services.orchestration import OrchestrationService, RunOrchestrationService
 
 
 class EndpointController:
@@ -13,14 +13,18 @@ class EndpointController:
         daylight_service: DaylightService,
         df_eval_service: DFEvalService,
         obstruction_service: ObstructionService,
+        encoder_service: EncoderService,
         orchestration_service: OrchestrationService,
+        run_orchestration_service: RunOrchestrationService,
         logger: ILogger
     ):
         self._colormanage = colormanage_service
         self._daylight = daylight_service
         self._df_eval = df_eval_service
         self._obstruction = obstruction_service
+        self._encoder = encoder_service
         self._orchestration = orchestration_service
+        self._run_orchestration = run_orchestration_service
         self._logger = logger
 
     def to_rgb(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,9 +50,14 @@ class EndpointController:
         return self._colormanage.to_values(data, colorscale)
 
     def get_df(self, file: Any, form_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle get_df endpoint with file upload"""
+        """Handle get_df endpoint with file upload (legacy)"""
         self._logger.info("Processing get_df request with file upload")
         return self._daylight.get_df(file, form_data)
+
+    def simulate(self, file: Any, form_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle simulate endpoint with file upload"""
+        self._logger.info("Processing simulate request with file upload")
+        return self._daylight.simulate(file, form_data)
 
     def get_stats(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle get_stats endpoint"""
@@ -131,3 +140,49 @@ class EndpointController:
             rad_y=request_data["rad_y"],
             mesh=mesh
         )
+
+    def encode(self, request_data: Dict[str, Any]) -> bytes:
+        """Handle encode endpoint (encodes room data to PNG image)"""
+        self._logger.info("Processing encode request")
+
+        # Validate required fields
+        required_fields = ["model_type", "parameters"]
+        for field in required_fields:
+            if field not in request_data:
+                raise ValueError(f"Missing required field: {field}")
+
+        # Validate parameters structure
+        parameters = request_data.get("parameters")
+        if not isinstance(parameters, dict):
+            raise ValueError("Parameters must be a dictionary")
+
+        return self._encoder.encode(
+            model_type=request_data["model_type"],
+            parameters=parameters
+        )
+
+    def run(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle run endpoint (complete simulation: obstruction → encoding → daylight)"""
+        self._logger.info("Processing run request")
+
+        # Validate required fields
+        required_fields = ["model_type", "parameters", "mesh"]
+        for field in required_fields:
+            if field not in request_data:
+                return {"status": "error", "error": f"Missing required field: {field}"}
+
+        # Validate parameters structure
+        parameters = request_data.get("parameters")
+        if not isinstance(parameters, dict):
+            return {"status": "error", "error": "Parameters must be a dictionary"}
+
+        # Validate windows in parameters
+        if "windows" not in parameters:
+            return {"status": "error", "error": "Missing required field: parameters.windows"}
+
+        # Validate mesh data
+        mesh = request_data.get("mesh")
+        if not isinstance(mesh, list) or len(mesh) < 3:
+            return {"status": "error", "error": "Mesh must contain at least 3 points"}
+
+        return self._run_orchestration.run_simulation(request_data)

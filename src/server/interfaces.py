@@ -90,6 +90,11 @@ class IHTTPClient(ABC):
         """Make POST request with multipart/form-data"""
         pass
 
+    @abstractmethod
+    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes:
+        """Make POST request expecting binary response"""
+        pass
+
 
 class IRemoteService(ABC):
     """Interface for remote service callers"""

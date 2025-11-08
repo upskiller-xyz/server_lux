@@ -41,16 +41,22 @@ class HTTPStatus(Enum):
 class EndpointType(Enum):
     TO_RGB = "to_rgb"
     TO_VALUES = "to_values"
-    GET_DF = "get_df"
+    SIMULATE = "simulate"  # Renamed from GET_DF for clarity
+    GET_DF = "get_df"  # Keep for backwards compatibility
     GET_STATS = "get_stats"
     GET_DF_RGB = "get_df_rgb"
     HORIZON_ANGLE = "horizon_angle"
     ZENITH_ANGLE = "zenith_angle"
     OBSTRUCTION = "obstruction"
+    OBSTRUCTION_ALL = "obstruction_all"
+    ENCODE = "encode"
+    RUN = "run"
 
 
 class ServiceURL(Enum):
-    COLORMANAGE = "https://colormanage-server-jia3y72oka-ma.a.run.app"
-    DAYLIGHT = "https://daylight-processing-jia3y72oka-ma.a.run.app"
-    DF_EVAL = "https://df-eval-server-jia3y72oka-ma.a.run.app"
+    COLORMANAGE = "https://colormanage-server-182483330095.europe-north2.run.app"
+    DAYLIGHT = "https://daylight-factor-182483330095.europe-north2.run.app"
+    DF_EVAL = "https://df-eval-server-182483330095.europe-north2.run.app"
     OBSTRUCTION = "https://obstruction-server-182483330095.europe-north2.run.app"
+    ENCODER = "https://encoder-server-182483330095.europe-north2.run.app"
+    POSTPROCESS = "https://daylight-processing-182483330095.europe-north2.run.app"

@@ -74,6 +74,8 @@ The Daylight Server is a gateway service that orchestrates requests to remote mi
 - **Daylight Factor Analysis** - Process building images to estimate daylight distribution
 - **Color Management** - Convert between numeric values and RGB color representations
 - **Dataframe Evaluation** - Statistical analysis of daylight data
+- **Room Encoding** - Convert room parameters to encoded PNG images for model input
+- **Obstruction Analysis** - Calculate horizon and zenith obstruction angles
 
 The server acts as a unified interface, handling multipart file uploads, forwarding requests to specialized remote services, and managing response orchestration.
 
@@ -204,12 +206,57 @@ response = requests.post(
 values = response.json()["data"]
 ```
 
+#### encode - Encode Room Parameters (Protected)
+Convert room and window parameters to encoded PNG image:
+
+```python
+import requests
+
+url = "http://localhost:8081/encode"
+token = "your_api_token_here"  # Set via API_TOKEN env variable
+
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "model_type": "df_default",
+    "parameters": {
+        "height_roof_over_floor": 2.7,
+        "floor_height_above_terrain": 3.0,
+        "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
+        "windows": {
+            "main_window": {
+                "x1": -0.6, "y1": 0.0, "z1": 0.9,
+                "x2": 0.6, "y2": 0.0, "z2": 2.4,
+                "window_sill_height": 0.9,
+                "window_frame_ratio": 0.15,
+                "window_height": 1.5,
+                "obstruction_angle_horizon": 15.0,
+                "obstruction_angle_zenith": 10.0
+            }
+        }
+    }
+}
+
+response = requests.post(url, headers=headers, json=payload)
+
+if response.status_code == 200:
+    with open("encoded_room.png", "wb") as f:
+        f.write(response.content)
+    print("Image saved successfully!")
+```
+
+**Note:** This endpoint requires token authentication. Set the `API_TOKEN` environment variable on the server.
+
 ### Deployment
 
 #### Environment Configuration
-Configure the server port:
+Configure the server port and authentication:
 ```sh
 export PORT=8081  # Default port
+export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
 ```
 
 #### Docker Deployment
@@ -239,6 +286,7 @@ Set up the Daylight Server locally for development and testing:
 3. **Set Environment Variables (Optional)**
    ```bash
    export PORT=8081
+   export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
    ```
 
 4. **Run the Server**
@@ -262,8 +310,11 @@ ServerApplication
 ├── Remote Services
 │   ├── ColorManageService
 │   ├── DaylightService
-│   └── DFEvalService
+│   ├── DFEvalService
+│   ├── ObstructionService
+│   └── EncoderService
 ├── OrchestrationService (multi-service workflows)
+├── TokenAuthenticator (bearer token authentication)
 └── EndpointController (request handling)
 ```
 

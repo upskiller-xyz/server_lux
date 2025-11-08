@@ -14,11 +14,12 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from werkzeug.exceptions import BadRequest
 
 from src.server.enums import ContentType, HTTPStatus
+from src.server.auth import TokenAuthenticator
 
 
 
@@ -32,6 +33,7 @@ class ServerApplication:
         self._controller = None
         self._endpoint_controller = None
         self._logger = None
+        self._authenticator = TokenAuthenticator()
         self._setup_dependencies()
         self._setup_routes()
 
@@ -42,9 +44,9 @@ class ServerApplication:
         from src.server.controllers.base_controller import ServerController
         from src.server.services.http_client import HTTPClient
         from src.server.services.remote_service import (
-            ColorManageService, DaylightService, DFEvalService, ObstructionService
+            ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService
         )
-        from src.server.services.orchestration import OrchestrationService
+        from src.server.services.orchestration import OrchestrationService, RunOrchestrationService
         from src.server.controllers.endpoint_controller import EndpointController
 
         # Logger
@@ -58,10 +60,14 @@ class ServerApplication:
         daylight_service = DaylightService(http_client, self._logger)
         df_eval_service = DFEvalService(http_client, self._logger)
         obstruction_service = ObstructionService(http_client, self._logger)
+        encoder_service = EncoderService(http_client, self._logger)
 
-        # Orchestration Service
+        # Orchestration Services
         orchestration_service = OrchestrationService(
             colormanage_service, daylight_service, self._logger
+        )
+        run_orchestration_service = RunOrchestrationService(
+            obstruction_service, encoder_service, daylight_service, self._logger
         )
 
         # Endpoint Controller
@@ -70,7 +76,9 @@ class ServerApplication:
             daylight_service,
             df_eval_service,
             obstruction_service,
+            encoder_service,
             orchestration_service,
+            run_orchestration_service,
             self._logger
         )
 
@@ -80,6 +88,7 @@ class ServerApplication:
             "daylight_service": daylight_service,
             "df_eval_service": df_eval_service,
             "obstruction_service": obstruction_service,
+            "encoder_service": encoder_service,
             "orchestration_service": orchestration_service
         }
 
@@ -98,12 +107,15 @@ class ServerApplication:
             ("/", "get_status", self._get_status, ["GET"]),
             ("/to_rgb", "to_rgb", self._to_rgb, ["POST"]),
             ("/to_values", "to_values", self._to_values, ["POST"]),
-            ("/get_df", "get_df", self._get_df, ["POST"]),
+            ("/get_df", "get_df", self._get_df, ["POST"]),  # Legacy endpoint
+            ("/simulate", "simulate", self._simulate, ["POST"]),  # New daylight simulation endpoint
             ("/get_stats", "get_stats", self._get_stats, ["POST"]),
             ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"]),
             ("/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
             ("/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
-            ("/obstruction", "obstruction", self._obstruction, ["POST"])
+            ("/obstruction", "obstruction", self._obstruction, ["POST"]),
+            ("/encode", "encode", self._encode, ["POST"]),
+            ("/run", "run", self._run, ["POST"])  # Complete workflow endpoint
         ]
 
         [self._app.add_url_rule(path, name, handler, methods=methods)
@@ -150,7 +162,7 @@ class ServerApplication:
             return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     def _get_df(self) -> Dict[str, Any]:
-        """Get dataframe endpoint"""
+        """Get dataframe endpoint (legacy, use /simulate instead)"""
         try:
             # Handle multipart form data with file upload
             if 'file' not in request.files:
@@ -168,6 +180,27 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"get_df failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _simulate(self) -> Dict[str, Any]:
+        """Run daylight simulation endpoint"""
+        try:
+            # Handle multipart form data with file upload
+            if 'file' not in request.files:
+                raise BadRequest("No file provided in request")
+
+            file = request.files['file']
+            form_data = request.form.to_dict()
+
+            result = self._endpoint_controller.simulate(file, form_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"simulate failed: {str(e)}")
             return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     def _get_stats(self) -> Dict[str, Any]:
@@ -261,6 +294,48 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"obstruction failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    @TokenAuthenticator().require_token
+    def _encode(self) -> Response:
+        """Encode room data to PNG image endpoint (protected by token)"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            image_bytes = self._endpoint_controller.encode(request_data)
+
+            # Return binary PNG data
+            return Response(
+                image_bytes,
+                mimetype=ContentType.IMAGE_PNG.value,
+                headers={"Content-Type": ContentType.IMAGE_PNG.value}
+            )
+
+        except ValueError as e:
+            self._logger.error(f"encode validation failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.BAD_REQUEST.value
+        except Exception as e:
+            self._logger.error(f"encode failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _run(self) -> Dict[str, Any]:
+        """Complete workflow: obstruction → encoding → daylight simulation"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.run(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"run failed: {str(e)}")
             return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     @property
