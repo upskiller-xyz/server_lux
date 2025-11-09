@@ -57,11 +57,11 @@ Converts RGB representation back to numerical values using a specified colorscal
 ### Endpoints
 
 #### `/simulate` (alias: `/get_df`)
-Performs daylight factor simulation on an encoded room image.
+Performs daylight factor simulation on an encoded room representation.
 
 **Input:**
 - **Content-Type:** `multipart/form-data`
-- **file:** PNG image (encoded room representation)
+- **file:** encoded room representation
 - **translation:** JSON string `{"x": float, "y": float}`
 - **rotation:** JSON string `[float]`
 
@@ -214,7 +214,7 @@ Calculates both horizon and zenith obstruction angles (current endpoint).
 ### Endpoints
 
 #### `/encode`
-Encodes room parameters into a PNG image representation.
+Encodes room parameters into a matrix representation.
 
 **Input:**
 ```json
@@ -241,7 +241,7 @@ Encodes room parameters into a PNG image representation.
 
 **Output:**
 - **Content-Type:** `image/png`
-- **Body:** Binary PNG image data
+- **Body:** Binary matrix data
 
 ---
 
@@ -328,9 +328,9 @@ Request
       │   └─> horizon_angles[64], zenith_angles[64]
       │
       ├─> [Encoder] parameters + obstruction angles
-      │   └─> encoded PNG image
+      │   └─> encoded matrix representation
       │
-      └─> [Daylight] PNG image + translation/rotation
+      └─> [Daylight] matrix + translation/rotation
           └─> daylight factor matrix
 
   └─> [Postprocess] all window results + room_polygon
