@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 
 class ModelStatus(Enum):
@@ -54,10 +55,28 @@ class EndpointType(Enum):
     POSTPROCESS = "postprocess"
 
 
+class ServiceName(Enum):
+    """Service name identifiers for configuration lookup"""
+    COLORMANAGE = "colormanage"
+    DAYLIGHT = "daylight"
+    DF_EVAL = "df_eval"
+    OBSTRUCTION = "obstruction"
+    ENCODER = "encoder"
+    POSTPROCESS = "postprocess"
+
+
 class ServiceURL(Enum):
-    COLORMANAGE = "https://colormanage-server-182483330095.europe-north2.run.app"
-    DAYLIGHT = "https://daylight-factor-182483330095.europe-north2.run.app"
-    DF_EVAL = "https://df-eval-server-182483330095.europe-north2.run.app"
-    OBSTRUCTION = "https://obstruction-server-182483330095.europe-north2.run.app"
-    ENCODER = "https://encoder-server-182483330095.europe-north2.run.app"
-    POSTPROCESS = "https://daylight-processing-182483330095.europe-north2.run.app"
+    """Service URL enum - dynamically resolved based on deployment mode"""
+    COLORMANAGE = "colormanage"
+    DAYLIGHT = "daylight"
+    DF_EVAL = "df_eval"
+    OBSTRUCTION = "obstruction"
+    ENCODER = "encoder"
+    POSTPROCESS = "postprocess"
+
+    @property
+    def value(self) -> str:
+        """Get the actual URL based on deployment mode"""
+        from .config import get_service_config
+        config = get_service_config()
+        return config.get_service_url(self._value_)
