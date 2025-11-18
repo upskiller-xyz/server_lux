@@ -171,14 +171,20 @@ class ObstructionCalculationService:
 
         Args:
             x, y, z: Window center coordinates
-            direction_angle: Window's facing direction in radians
+            direction_angle: Window's facing direction in radians (window normal)
             mesh: Geometry mesh data
-            start_angle: Starting angle offset in degrees (default 17.5)
-            end_angle: Ending angle offset in degrees (default 162.5)
+            start_angle: Starting angle in half-circle coordinate system where 90° = direction_angle (default 17.5)
+            end_angle: Ending angle in half-circle coordinate system where 90° = direction_angle (default 162.5)
             num_directions: Number of directions to calculate (default 64)
 
         Returns:
             Dictionary with status and stacked obstruction data
+
+        Note:
+            The half-circle coordinate system is defined as:
+            - 0° = 90° counter-clockwise from window normal
+            - 90° = window normal (direction_angle parameter)
+            - 180° = 90° clockwise from window normal
         """
         self._logger.info(f"Calculating obstruction for window at ({x}, {y}, {z}), "
                          f"direction: {direction_angle} rad")

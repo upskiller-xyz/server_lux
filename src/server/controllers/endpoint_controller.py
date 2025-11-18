@@ -145,7 +145,15 @@ class EndpointController:
         )
 
     def obstruction_multi(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle obstruction_multi endpoint (calculates obstruction for 64 directions)"""
+        """Handle obstruction_multi endpoint (calculates obstruction for 64 directions)
+
+        The start_angle and end_angle parameters use a half-circle coordinate system where:
+        - 0° = 90° counter-clockwise from the window normal (left edge)
+        - 90° = the window normal (direction_angle parameter)
+        - 180° = 90° clockwise from the window normal (right edge)
+
+        Default values (17.5° to 162.5°) skip the extreme edges of the half-circle.
+        """
         self._logger.info("Processing obstruction_multi request")
 
         # Validate required fields
@@ -159,7 +167,7 @@ class EndpointController:
         if not isinstance(mesh, list) or len(mesh) < 3:
             return {"status": "error", "error": "Mesh must contain at least 3 points"}
 
-        # Get optional parameters
+        # Get optional parameters (in half-circle coordinate system where 90° = direction_angle)
         start_angle = request_data.get("start_angle", 17.5)
         end_angle = request_data.get("end_angle", 162.5)
         num_directions = request_data.get("num_directions", 64)
