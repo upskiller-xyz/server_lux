@@ -2,6 +2,7 @@ from typing import Dict, Any
 from ..interfaces import ILogger
 from ..services.remote_service import ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService
 from ..services.orchestration import OrchestrationService, RunOrchestrationService
+from ..services.obstruction_calculation import ObstructionCalculationService
 
 
 class EndpointController:
@@ -13,6 +14,7 @@ class EndpointController:
         daylight_service: DaylightService,
         df_eval_service: DFEvalService,
         obstruction_service: ObstructionService,
+        obstruction_calculation_service: ObstructionCalculationService,
         encoder_service: EncoderService,
         orchestration_service: OrchestrationService,
         run_orchestration_service: RunOrchestrationService,
@@ -22,6 +24,7 @@ class EndpointController:
         self._daylight = daylight_service
         self._df_eval = df_eval_service
         self._obstruction = obstruction_service
+        self._obstruction_calculation = obstruction_calculation_service
         self._encoder = encoder_service
         self._orchestration = orchestration_service
         self._run_orchestration = run_orchestration_service
@@ -139,6 +142,37 @@ class EndpointController:
             rad_x=request_data["rad_x"],
             rad_y=request_data["rad_y"],
             mesh=mesh
+        )
+
+    def obstruction_multi(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle obstruction_multi endpoint (calculates obstruction for 64 directions)"""
+        self._logger.info("Processing obstruction_multi request")
+
+        # Validate required fields
+        required_fields = ["x", "y", "z", "direction_angle", "mesh"]
+        for field in required_fields:
+            if field not in request_data:
+                return {"status": "error", "error": f"Missing required field: {field}"}
+
+        # Validate mesh data
+        mesh = request_data.get("mesh")
+        if not isinstance(mesh, list) or len(mesh) < 3:
+            return {"status": "error", "error": "Mesh must contain at least 3 points"}
+
+        # Get optional parameters
+        start_angle = request_data.get("start_angle", 17.5)
+        end_angle = request_data.get("end_angle", 162.5)
+        num_directions = request_data.get("num_directions", 64)
+
+        return self._obstruction_calculation.calculate_multi_direction(
+            x=request_data["x"],
+            y=request_data["y"],
+            z=request_data["z"],
+            direction_angle=request_data["direction_angle"],
+            mesh=mesh,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            num_directions=num_directions
         )
 
     def encode(self, request_data: Dict[str, Any]) -> bytes:
