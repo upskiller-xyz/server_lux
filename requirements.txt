@@ -10,6 +10,7 @@ werkzeug>=3.0.0,<4.0.0
 
 # HTTP Client
 requests>=2.32.0,<3.0.0
+aiohttp>=3.9.0,<4.0.0
 
 # Utilities & Logging
 rich==14.0.0

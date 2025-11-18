@@ -50,6 +50,7 @@ class EndpointType(Enum):
     ZENITH_ANGLE = "zenith_angle"
     OBSTRUCTION = "obstruction"
     OBSTRUCTION_ALL = "obstruction_all"
+    OBSTRUCTION_MULTI = "obstruction_multi"
     ENCODE = "encode"
     RUN = "run"
     POSTPROCESS = "postprocess"

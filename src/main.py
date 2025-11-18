@@ -47,6 +47,9 @@ class ServerApplication:
             ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService, PostprocessService
         )
         from src.server.services.orchestration import OrchestrationService, RunOrchestrationService
+        from src.server.services.obstruction_calculation import (
+            ObstructionCalculationService, ParallelObstructionCalculator
+        )
         from src.server.controllers.endpoint_controller import EndpointController
 
         # Logger
@@ -71,12 +74,19 @@ class ServerApplication:
             obstruction_service, encoder_service, daylight_service, postprocess_service, self._logger
         )
 
+        # Obstruction Calculation Service
+        obstruction_calculator = ParallelObstructionCalculator(self._logger)
+        obstruction_calculation_service = ObstructionCalculationService(
+            obstruction_calculator, self._logger
+        )
+
         # Endpoint Controller
         self._endpoint_controller = EndpointController(
             colormanage_service,
             daylight_service,
             df_eval_service,
             obstruction_service,
+            obstruction_calculation_service,
             encoder_service,
             orchestration_service,
             run_orchestration_service,
@@ -115,6 +125,7 @@ class ServerApplication:
             ("/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
             ("/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
             ("/obstruction", "obstruction", self._obstruction, ["POST"]),
+            ("/obstruction_multi", "obstruction_multi", self._obstruction_multi, ["POST"]),
             ("/encode", "encode", self._encode, ["POST"]),
             ("/run", "run", self._run, ["POST"])  # Complete workflow endpoint
         ]
@@ -295,6 +306,24 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"obstruction failed: {str(e)}")
+            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+    def _obstruction_multi(self) -> Dict[str, Any]:
+        """Calculate obstruction for 64 directions endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                raise BadRequest("No JSON data provided")
+
+            result = self._endpoint_controller.obstruction_multi(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"obstruction_multi failed: {str(e)}")
             return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
 
     @TokenAuthenticator().require_token
