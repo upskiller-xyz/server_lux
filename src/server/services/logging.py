@@ -23,6 +23,9 @@ class StructuredLogger(ILogger):
 
         self._logger.setLevel(log_levels[level])
 
+        # Prevent propagation to parent loggers to avoid duplicate logs
+        self._logger.propagate = False
+
         if not self._logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
             formatter = logging.Formatter(

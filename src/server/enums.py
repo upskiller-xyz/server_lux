@@ -39,6 +39,26 @@ class HTTPStatus(Enum):
     INTERNAL_SERVER_ERROR = 500
 
 
+class ResponseStatus(Enum):
+    """Status values for API responses"""
+    SUCCESS = "success"
+    ERROR = "error"
+    PENDING = "pending"
+
+
+class ResponseKey(Enum):
+    """Common keys used in API responses"""
+    STATUS = "status"
+    ERROR = "error"
+    DATA = "data"
+    RESULT = "result"
+    RESULTS = "results"
+    MESSAGE = "message"
+    WINDOW_NAME = "window_name"
+    WINDOW_RESULTS = "window_results"
+    PARTIAL_RESULTS = "partial_results"
+
+
 class EndpointType(Enum):
     TO_RGB = "to_rgb"
     TO_VALUES = "to_values"
@@ -54,6 +74,8 @@ class EndpointType(Enum):
     ENCODE = "encode"
     RUN = "run"
     POSTPROCESS = "postprocess"
+    CALCULATE_DIRECTION = "calculate-direction"
+    MERGE = "merge"
 
 
 class ServiceName(Enum):
@@ -64,6 +86,8 @@ class ServiceName(Enum):
     OBSTRUCTION = "obstruction"
     ENCODER = "encoder"
     POSTPROCESS = "postprocess"
+    MODEL = "model"
+    MERGER = "merger"
 
 
 class ServiceURL(Enum):
@@ -74,6 +98,8 @@ class ServiceURL(Enum):
     OBSTRUCTION = "obstruction"
     ENCODER = "encoder"
     POSTPROCESS = "postprocess"
+    MODEL = "model"
+    MERGER = "merger"
 
     @property
     def value(self) -> str:

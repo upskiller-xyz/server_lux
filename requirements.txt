@@ -15,6 +15,7 @@ aiohttp>=3.9.0,<4.0.0
 # Utilities & Logging
 rich==14.0.0
 setuptools==66.1.1
+python-dotenv>=1.0.0,<2.0.0
 
 # Computer Vision & Scientific Computing
 opencv-python>=4.8.0,<5.0.0

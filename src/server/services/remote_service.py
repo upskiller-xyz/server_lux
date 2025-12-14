@@ -3,6 +3,8 @@ import json
 import io
 import numpy as np
 import cv2
+from PIL import Image
+from io import BytesIO
 from ..interfaces import IRemoteService, IHTTPClient, ILogger
 from ..enums import ServiceURL, EndpointType
 
@@ -145,6 +147,21 @@ class EncoderService(RemoteService):
     def __init__(self, http_client: IHTTPClient, logger: ILogger):
         super().__init__(ServiceURL.ENCODER, http_client, logger)
 
+    def calculate_direction_angles(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate direction angles for windows based on room geometry
+
+        Args:
+            parameters: Dictionary containing room_polygon and windows
+
+        Returns:
+            Dictionary with direction_angles (radians) and direction_angles_degrees for each window
+        """
+        request_data = {"parameters": parameters}
+        url = f"{self._service_url.value}/{EndpointType.CALCULATE_DIRECTION.value}"
+        self._logger.info(f"Calling {self._service_url.name} service: {EndpointType.CALCULATE_DIRECTION.value}")
+
+        return self._http_client.post(url, request_data)
+
     def encode(self, model_type: str, parameters: Dict[str, Any]) -> bytes:
         """Encode room parameters to PNG image"""
         request_data = {
@@ -240,5 +257,148 @@ class PostprocessService(RemoteService):
 
         url = f"{self._service_url.value}/{EndpointType.POSTPROCESS.value}"
         self._logger.info(f"Calling {self._service_url.name} service: {EndpointType.POSTPROCESS.value}")
+
+        return self._http_client.post(url, request_data)
+
+
+class ModelService(RemoteService):
+    """Service for running model inference"""
+
+    def __init__(self, http_client: IHTTPClient, logger: ILogger):
+        super().__init__(ServiceURL.MODEL, http_client, logger)
+
+    def run(self, image_bytes: bytes, filename: str = "image.png", invert_channels: bool = False) -> Dict[str, Any]:
+        """Run model inference on image
+
+        Args:
+            image_bytes: Image data as bytes
+            filename: Name of the image file (default: "image.png")
+            invert_channels: If True, convert RGB to BGR before sending (default: False)
+
+        Returns:
+            Model inference result
+        """
+        url = f"{self._service_url.value}/{EndpointType.RUN.value}"
+        self._logger.info(f"Calling {self._service_url.name} service: {EndpointType.RUN.value}")
+
+        # Convert RGB to BGR (or RGBA to BGRA) if requested
+        if invert_channels:
+            # Load image from bytes
+            img = Image.open(BytesIO(image_bytes))
+
+            # Convert RGB to BGR or RGBA to BGRA
+            if img.mode == 'RGB':
+                r, g, b = img.split()
+                img_inverted = Image.merge('RGB', (b, g, r))
+                self._logger.info(f"Converted image from RGB to BGR")
+
+                # Save back to bytes
+                buffer = BytesIO()
+                img_inverted.save(buffer, format='PNG')
+                image_bytes = buffer.getvalue()
+            elif img.mode == 'RGBA':
+                r, g, b, a = img.split()
+                img_inverted = Image.merge('RGBA', (b, g, r, a))
+                self._logger.info(f"Converted image from RGBA to BGRA")
+
+                # Save back to bytes
+                buffer = BytesIO()
+                img_inverted.save(buffer, format='PNG')
+                image_bytes = buffer.getvalue()
+            else:
+                self._logger.warning(f"Image mode is {img.mode}, not RGB or RGBA. Skipping channel inversion.")
+
+        # Prepare file for multipart upload
+        files = {"file": (filename, io.BytesIO(image_bytes), "image/png")}
+
+        return self._http_client.post_multipart(url, files, {})
+
+    def get_df(self, image_data: Any, invert_channels: bool = False) -> Dict[str, Any]:
+        """Send image to simulation service for prediction (legacy daylight simulation)
+
+        Args:
+            image_data: Either bytes, numpy array, or PIL Image
+            invert_channels: If True, convert RGB to BGR before sending (default: False)
+
+        Returns:
+            Simulation result from model service
+        """
+        # Convert input to bytes
+        if isinstance(image_data, np.ndarray):
+            # Convert numpy array to PIL Image then to bytes
+            # Ensure the array is uint8 for PIL compatibility
+            if image_data.dtype != np.uint8:
+                # Normalize to 0-255 range if needed
+                if image_data.max() <= 1.0:
+                    image_data = (image_data * 255).astype(np.uint8)
+                else:
+                    image_data = image_data.astype(np.uint8)
+
+            img = Image.fromarray(image_data)
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            image_bytes = buffer.getvalue()
+        elif isinstance(image_data, Image.Image):
+            # Convert PIL Image to bytes
+            buffer = BytesIO()
+            image_data.save(buffer, format='PNG')
+            image_bytes = buffer.getvalue()
+        elif isinstance(image_data, bytes):
+            image_bytes = image_data
+        else:
+            raise ValueError(f"Unsupported image_data type: {type(image_data)}. Expected bytes, numpy array, or PIL Image.")
+
+        # Use the run method to send to simulation service
+        return self.run(image_bytes, filename="input_image.png", invert_channels=invert_channels)
+
+
+class MergerService(RemoteService):
+    """Service for merging multiple window simulations into a single room result"""
+
+    def __init__(self, http_client: IHTTPClient, logger: ILogger):
+        super().__init__(ServiceURL.MERGER, http_client, logger)
+
+    def merge(
+        self,
+        room_polygon: List[List[float]],
+        windows: Dict[str, Dict[str, float]],
+        simulations: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Merge multiple window simulations into a single room-level result
+
+        Args:
+            room_polygon: Room polygon coordinates [[x, y], ...]
+            windows: Dictionary of window configurations
+                {
+                    "window_name": {
+                        "x1": float, "y1": float, "z1": float,
+                        "x2": float, "y2": float, "z2": float,
+                        "direction_angle": float
+                    }
+                }
+            simulations: Dictionary of simulation results for each window
+                {
+                    "window_name": {
+                        "df_values": [[float]], # 2D array of daylight factor values
+                        "mask": [[int]]         # 2D binary mask
+                    }
+                }
+
+        Returns:
+            {
+                "status": "success" | "error",
+                "df_matrix": [[float]],  # Combined daylight factor matrix
+                "room_mask": [[int]]      # Combined room mask
+            }
+        """
+        request_data = {
+            "room_polygon": room_polygon,
+            "windows": windows,
+            "simulations": simulations
+        }
+
+        url = f"{self._service_url.value}/{EndpointType.MERGE.value}"
+        self._logger.info(f"Calling {self._service_url.name} service: {EndpointType.MERGE.value}")
+        self._logger.info(f"Merging {len(windows)} window simulations for room")
 
         return self._http_client.post(url, request_data)
