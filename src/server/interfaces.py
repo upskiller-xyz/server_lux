@@ -72,28 +72,6 @@ class IServerController(ABC):
         pass
 
 
-class IHTTPClient(ABC):
-    """Interface for HTTP client strategies"""
-
-    @abstractmethod
-    def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Make POST request to URL with JSON data"""
-        pass
-
-    @abstractmethod
-    def post_multipart(
-        self,
-        url: str,
-        files: Dict[str, Any],
-        data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Make POST request with multipart/form-data"""
-        pass
-
-    @abstractmethod
-    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes:
-        """Make POST request expecting binary response"""
-        pass
 
 
 class IRemoteService(ABC):
@@ -102,4 +80,35 @@ class IRemoteService(ABC):
     @abstractmethod
     def call(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Call remote service endpoint with data"""
+        pass
+
+
+class IErrorResponseBuilder(ABC):
+    """Interface for building error responses using Adapter-Map pattern"""
+
+    @abstractmethod
+    def build(self, error_type: Any, message: Optional[str] = None, status_code: Optional[int] = None) -> tuple:
+        """Build error response tuple (json_response, http_status_code)
+
+        Args:
+            error_type: ErrorType enum or error type identifier
+            message: Optional custom error message (overrides default)
+            status_code: Optional HTTP status code (overrides default)
+
+        Returns:
+            Tuple of (jsonify response, status code)
+        """
+        pass
+
+    @abstractmethod
+    def build_from_exception(self, exception: Exception, status_code: Optional[int] = None) -> tuple:
+        """Build error response from exception
+
+        Args:
+            exception: Exception to build response from
+            status_code: Optional HTTP status code (overrides default)
+
+        Returns:
+            Tuple of (jsonify response, status code)
+        """
         pass

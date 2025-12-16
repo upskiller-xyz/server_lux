@@ -1,8 +1,9 @@
 import os
 from functools import wraps
 from typing import Callable, Any
-from flask import request, jsonify
-from .enums import HTTPStatus
+from flask import request
+from .enums import ErrorType
+from .response_builder import ErrorResponseBuilder
 
 
 class TokenAuthenticator:
@@ -11,6 +12,7 @@ class TokenAuthenticator:
     def __init__(self, token_env_var: str = "API_TOKEN"):
         self._token_env_var = token_env_var
         self._token = os.getenv(token_env_var)
+        self._error_builder = ErrorResponseBuilder()
 
     @property
     def is_configured(self) -> bool:
@@ -31,26 +33,17 @@ class TokenAuthenticator:
             auth_header = request.headers.get('Authorization')
 
             if not auth_header:
-                return jsonify({
-                    "status": "error",
-                    "error": "Missing Authorization header"
-                }), HTTPStatus.BAD_REQUEST.value
+                return self._error_builder.build(ErrorType.MISSING_AUTHORIZATION)
 
             # Expected format: "Bearer <token>"
             parts = auth_header.split()
             if len(parts) != 2 or parts[0].lower() != 'bearer':
-                return jsonify({
-                    "status": "error",
-                    "error": "Invalid Authorization header format. Expected: 'Bearer <token>'"
-                }), HTTPStatus.BAD_REQUEST.value
+                return self._error_builder.build(ErrorType.INVALID_AUTH_FORMAT)
 
             token = parts[1]
 
             if not self.validate_token(token):
-                return jsonify({
-                    "status": "error",
-                    "error": "Invalid authentication token"
-                }), HTTPStatus.BAD_REQUEST.value
+                return self._error_builder.build(ErrorType.INVALID_TOKEN)
 
             return f(*args, **kwargs)
 

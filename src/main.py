@@ -22,10 +22,19 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from werkzeug.exceptions import BadRequest
 
-from src.server.enums import ContentType, HTTPStatus
+from src.server.enums import ContentType, HTTPStatus, ErrorType
 from src.server.auth import TokenAuthenticator
+from src.server.response_builder import ErrorResponseBuilder
+from src.server.services.logging import StructuredLogger
+from src.server.enums import LogLevel
+from src.server.controllers.base_controller import ServerController
 
-
+from src.server.services.orchestration import RunOrchestrationService, EncodeOrchestrationService
+from src.server.services.obstruction import (
+    ObstructionCalculationService, ParallelObstructionCalculator, SingleRequestObstructionCalculator
+)
+from src.server.controllers.endpoint_controller import EndpointController
+from src.__version__ import version
 
 
 class ServerApplication:
@@ -38,39 +47,15 @@ class ServerApplication:
         self._endpoint_controller = None
         self._logger = None
         self._authenticator = TokenAuthenticator()
+        self._error_builder = ErrorResponseBuilder()
         self._setup_dependencies()
         self._setup_routes()
 
     def _setup_dependencies(self) -> None:
         """Setup all dependencies using dependency injection"""
-        from src.server.services.logging import StructuredLogger
-        from src.server.enums import LogLevel
-        from src.server.controllers.base_controller import ServerController
-        from src.server.services.http_client import HTTPClient
-        from src.server.services.remote_service import (
-            ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService, ModelService, PostprocessService, MergerService
-        )
-        from src.server.services.orchestration import OrchestrationService, RunOrchestrationService, EncodeOrchestrationService
-        from src.server.services.obstruction_calculation import (
-            ObstructionCalculationService, ParallelObstructionCalculator, SingleRequestObstructionCalculator
-        )
-        from src.server.controllers.endpoint_controller import EndpointController
-
         # Logger
         self._logger = StructuredLogger("Server", LogLevel.INFO)
 
-        # HTTP Client
-        http_client = HTTPClient(self._logger)
-
-        # Remote Services
-        colormanage_service = ColorManageService(http_client, self._logger)
-        daylight_service = DaylightService(http_client, self._logger)
-        df_eval_service = DFEvalService(http_client, self._logger)
-        obstruction_service = ObstructionService(http_client, self._logger)
-        encoder_service = EncoderService(http_client, self._logger)
-        model_service = ModelService(http_client, self._logger)
-        postprocess_service = PostprocessService(http_client, self._logger)
-        merger_service = MergerService(http_client, self._logger)
 
         # Obstruction Calculation Service (initialize before orchestration services)
         # Use SingleRequestObstructionCalculator to send ONE request to /obstruction_parallel
@@ -88,71 +73,44 @@ class ServerApplication:
         )
 
         # Orchestration Services
-        orchestration_service = OrchestrationService(
-            colormanage_service, daylight_service, self._logger
-        )
         run_orchestration_service = RunOrchestrationService(
-            obstruction_service, obstruction_calculation_service, encoder_service, daylight_service, model_service, postprocess_service, merger_service, self._logger
         )
         encode_orchestration_service = EncodeOrchestrationService(
-            obstruction_calculation_service, encoder_service, self._logger
         )
 
         # Endpoint Controller
         self._endpoint_controller = EndpointController(
-            colormanage_service,
-            daylight_service,
-            df_eval_service,
-            obstruction_service,
-            obstruction_calculation_service,
-            encoder_service,
-            orchestration_service,
-            run_orchestration_service,
-            encode_orchestration_service,
-            model_service,
-            merger_service,
-            self._logger
         )
-
-        services = {
-            "http_client": http_client,
-            "colormanage_service": colormanage_service,
-            "daylight_service": daylight_service,
-            "df_eval_service": df_eval_service,
-            "obstruction_service": obstruction_service,
-            "encoder_service": encoder_service,
-            "orchestration_service": orchestration_service
-        }
+        
 
         # Controller
         self._controller = ServerController(
-            logger=self._logger,
-            services=services
         )
 
         # Initialize controller
         self._controller.initialize()
 
     def _setup_routes(self) -> None:
-        """Setup Flask routes using strategy pattern"""
+        """Setup Flask routes using strategy pattern with versioned endpoints"""
+        # Extract major version from version string (e.g., "1.0.0" -> "v1")
+        major_version = f"v{version.split('.')[0]}"
+
         routes = [
             ("/", "get_status", self._get_status, ["GET"]),
-            ("/to_rgb", "to_rgb", self._to_rgb, ["POST"]),
-            ("/to_values", "to_values", self._to_values, ["POST"]),
-            ("/get_df", "get_df", self._get_df, ["POST"]),  # Legacy endpoint
-            ("/get_df_direct", "get_df_direct", self._get_df_direct, ["POST"]),  # Direct image to simulation
-            ("/simulate", "simulate", self._simulate, ["POST"]),  # New daylight simulation endpoint
-            ("/get_stats", "get_stats", self._get_stats, ["POST"]),
-            ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"]),
-            ("/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
-            ("/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
-            ("/obstruction", "obstruction", self._obstruction, ["POST"]),
-            ("/obstruction_multi", "obstruction_multi", self._obstruction_multi, ["POST"]),
-            ("/obstruction_parallel", "obstruction_parallel", self._obstruction_parallel, ["POST"]),
-            ("/encode_raw", "encode_raw", self._encode_raw, ["POST"]),  # Direct encode without obstruction
-            ("/encode", "encode", self._encode, ["POST"]),  # Obstruction + encode workflow
-            ("/run", "run", self._run, ["POST"]),  # Complete workflow endpoint
-            ("/merge", "merge", self._merge, ["POST"])  # Merge multiple window simulations
+            (f"/{major_version}/get_df_direct", "get_df_direct", self._get_df_direct, ["POST"]),  # Direct image to simulation
+            (f"/{major_version}/simulate", "simulate", self._simulate, ["POST"]),  # New daylight simulation endpoint
+            (f"/{major_version}/get_stats", "get_stats", self._get_stats, ["POST"]),
+            
+            (f"/{major_version}/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
+            (f"/{major_version}/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
+            (f"/{major_version}/obstruction", "obstruction", self._obstruction, ["POST"]),
+            (f"/{major_version}/obstruction_multi", "obstruction_multi", self._obstruction_multi, ["POST"]),
+            (f"/{major_version}/obstruction_parallel", "obstruction_parallel", self._obstruction_parallel, ["POST"]),
+            (f"/{major_version}/encode_raw", "encode_raw", self._encode_raw, ["POST"]),  # Direct encode without obstruction
+            (f"/{major_version}/encode", "encode", self._encode, ["POST"]),  # Obstruction + encode workflow
+            (f"/{major_version}/run", "run", self._run, ["POST"]),  # Complete workflow endpoint
+            (f"/{major_version}/merge", "merge", self._merge, ["POST"]),  # Merge multiple window simulations
+            (f"/{major_version}/stats", "stats", self._stats, ["POST"])  # Calculate statistics
         ]
 
         [self._app.add_url_rule(path, name, handler, methods=methods)
@@ -162,69 +120,12 @@ class ServerApplication:
         """Get server status endpoint"""
         return jsonify(self._controller.get_status())
 
-    def _to_rgb(self) -> Dict[str, Any]:
-        """Convert values to RGB endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.to_rgb(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"to_rgb failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _to_values(self) -> Dict[str, Any]:
-        """Convert RGB to values endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.to_values(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"to_values failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _get_df(self) -> Dict[str, Any]:
-        """Get dataframe endpoint (legacy, use /simulate instead)"""
-        try:
-            # Handle multipart form data with file upload
-            if 'file' not in request.files:
-                raise BadRequest("No file provided in request")
-
-            file = request.files['file']
-            form_data = request.form.to_dict()
-
-            result = self._endpoint_controller.get_df(file, form_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"get_df failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
     def _simulate(self) -> Dict[str, Any]:
         """Run daylight simulation endpoint"""
         try:
             # Handle multipart form data with file upload
             if 'file' not in request.files:
-                raise BadRequest("No file provided in request")
+                return self._error_builder.build(ErrorType.MISSING_FILE)
 
             file = request.files['file']
             form_data = request.form.to_dict()
@@ -238,14 +139,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"simulate failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _get_stats(self) -> Dict[str, Any]:
         """Get statistics endpoint"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.get_stats(request_data)
 
@@ -256,14 +157,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"get_stats failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _get_df_rgb(self) -> Dict[str, Any]:
         """Get dataframe and convert to RGB endpoint"""
         try:
             # Handle multipart form data with file upload
             if 'file' not in request.files:
-                raise BadRequest("No file provided in request")
+                return self._error_builder.build(ErrorType.MISSING_FILE)
 
             file = request.files['file']
             form_data = request.form.to_dict()
@@ -277,14 +178,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"get_df_rgb failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _horizon_angle(self) -> Dict[str, Any]:
         """Calculate horizon angle endpoint"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.horizon_angle(request_data)
 
@@ -295,14 +196,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"horizon_angle failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _zenith_angle(self) -> Dict[str, Any]:
         """Calculate zenith angle endpoint"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.zenith_angle(request_data)
 
@@ -313,14 +214,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"zenith_angle failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _obstruction(self) -> Dict[str, Any]:
         """Calculate both horizon and zenith angles endpoint"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.obstruction(request_data)
 
@@ -331,14 +232,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"obstruction failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _obstruction_multi(self) -> Dict[str, Any]:
         """Calculate obstruction for 64 directions endpoint"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.obstruction_multi(request_data)
 
@@ -349,14 +250,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"obstruction_multi failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _obstruction_parallel(self) -> Dict[str, Any]:
         """Calculate obstruction for all directions using parallel service (compatible with /obstruction_all)"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.obstruction_parallel(request_data)
 
@@ -367,7 +268,7 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"obstruction_parallel failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     @TokenAuthenticator().require_token
     def _encode_raw(self) -> Response:
@@ -375,7 +276,7 @@ class ServerApplication:
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             image_bytes = self._endpoint_controller.encode_raw(request_data)
 
@@ -388,17 +289,17 @@ class ServerApplication:
 
         except ValueError as e:
             self._logger.error(f"encode_raw validation failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.BAD_REQUEST.value
+            return self._error_builder.build_from_exception(e, HTTPStatus.BAD_REQUEST.value)
         except Exception as e:
             self._logger.error(f"encode_raw failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _encode(self) -> Dict[str, Any]:
         """Encode endpoint - obstruction + encoding workflow (similar to /run but without simulation)"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.encode(request_data)
 
@@ -409,14 +310,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"encode failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _run(self) -> Dict[str, Any]:
         """Complete workflow: obstruction → encoding → daylight simulation"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.run(request_data)
 
@@ -427,14 +328,14 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"run failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     def _merge(self) -> Dict[str, Any]:
         """Merge multiple window simulations into a single room result"""
         try:
             request_data = request.get_json()
             if not request_data:
-                raise BadRequest("No JSON data provided")
+                return self._error_builder.build(ErrorType.MISSING_JSON)
 
             result = self._endpoint_controller.merge(request_data)
 
@@ -445,7 +346,25 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"merge failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
+
+    def _stats(self) -> Dict[str, Any]:
+        """Calculate statistics endpoint"""
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                return self._error_builder.build(ErrorType.MISSING_JSON)
+
+            result = self._endpoint_controller.stats(request_data)
+
+            if result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result)
+
+        except Exception as e:
+            self._logger.error(f"stats failed: {str(e)}")
+            return self._error_builder.build_from_exception(e)
 
     def _get_df_direct(self) -> Dict[str, Any]:
         """Send image directly to simulation service for prediction"""
@@ -471,7 +390,7 @@ class ServerApplication:
 
         except Exception as e:
             self._logger.error(f"get_df_direct failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+            return self._error_builder.build_from_exception(e)
 
     @property
     def app(self) -> Flask:

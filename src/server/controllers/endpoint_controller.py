@@ -1,12 +1,120 @@
 from typing import Dict, Any
 import time
+import math
+import base64
 import numpy as np
 from PIL import Image
 from io import BytesIO
 from ..interfaces import ILogger
-from ..services.remote_service import ColorManageService, DaylightService, DFEvalService, ObstructionService, EncoderService, ModelService, MergerService
-from ..services.orchestration import OrchestrationService, RunOrchestrationService, EncodeOrchestrationService
+from ..services.remote_service import ObstructionService, EncoderService, ModelService, MergerService, StatsService
+from ..services.orchestration import RunOrchestrationService, EncodeOrchestrationService
 from ..services.obstruction_calculation import ObstructionCalculationService
+from ..enums import RequestField, ResponseKey, ResponseStatus, ImageSize
+
+
+class FieldValidator:
+    """Validates request fields using Strategy pattern"""
+
+    # Common field sets for different endpoint types
+    OBSTRUCTION_FIELDS = [
+        RequestField.X,
+        RequestField.Y,
+        RequestField.Z,
+        RequestField.RAD_X,
+        RequestField.RAD_Y,
+        RequestField.MESH
+    ]
+
+    OBSTRUCTION_MULTI_FIELDS = [
+        RequestField.X,
+        RequestField.Y,
+        RequestField.Z,
+        RequestField.DIRECTION_ANGLE,
+        RequestField.MESH
+    ]
+
+    @staticmethod
+    def validate_required_fields(
+        request_data: Dict[str, Any],
+        required_fields: list[RequestField]
+    ) -> Dict[str, Any] | None:
+        """Validate that all required fields are present
+
+        Args:
+            request_data: Request data dictionary
+            required_fields: List of RequestField enums
+
+        Returns:
+            Error response dict if validation fails, None if success
+        """
+        for field in required_fields:
+            if field.value not in request_data:
+                return {
+                    ResponseKey.STATUS.value: ResponseStatus.ERROR.value,
+                    ResponseKey.ERROR.value: f"Missing required field: {field.value}"
+                }
+        return None
+
+    @staticmethod
+    def extract_obstruction_params(request_data: Dict[str, Any], mesh: Any) -> Dict[str, Any]:
+        """Extract obstruction calculation parameters using RequestField enums
+
+        Args:
+            request_data: Request data dictionary
+            mesh: Validated mesh data
+
+        Returns:
+            Dictionary with x, y, z, rad_x, rad_y, mesh
+        """
+        return {
+            "x": request_data[RequestField.X.value],
+            "y": request_data[RequestField.Y.value],
+            "z": request_data[RequestField.Z.value],
+            "rad_x": request_data[RequestField.RAD_X.value],
+            "rad_y": request_data[RequestField.RAD_Y.value],
+            "mesh": mesh
+        }
+
+
+class ImageResizer:
+    """Handles image resizing using Strategy pattern
+
+    Different interpolation methods for different image types:
+    - BILINEAR for predictions (smooth gradients)
+    - NEAREST for masks (preserve binary values)
+    """
+
+    @staticmethod
+    def resize_to_target(
+        array: np.ndarray,
+        interpolation_method: int,
+        target_width: int = ImageSize.TARGET_WIDTH.value,
+        target_height: int = ImageSize.TARGET_HEIGHT.value
+    ) -> np.ndarray:
+        """Resize array to target size using specified interpolation
+
+        Args:
+            array: Input numpy array
+            interpolation_method: PIL interpolation method (Image.BILINEAR or Image.NEAREST)
+            target_width: Target width in pixels
+            target_height: Target height in pixels
+
+        Returns:
+            Resized numpy array normalized to [0, 1]
+        """
+        target_size = (target_width, target_height)
+
+        if array.shape == target_size:
+            return array
+
+        # Convert to PIL image (scale to 0-255)
+        img = Image.fromarray((array * 255).astype(np.uint8))
+
+        # Resize with specified interpolation
+        img_resized = img.resize(target_size, interpolation_method)
+
+        # Convert back to numpy array and normalize to [0, 1]
+        return np.array(img_resized).astype(np.float32) / 255.0
 
 
 class EndpointController:
@@ -14,97 +122,43 @@ class EndpointController:
 
     def __init__(
         self,
-        colormanage_service: ColorManageService,
-        daylight_service: DaylightService,
-        df_eval_service: DFEvalService,
-        obstruction_service: ObstructionService,
-        obstruction_calculation_service: ObstructionCalculationService,
-        encoder_service: EncoderService,
-        orchestration_service: OrchestrationService,
-        run_orchestration_service: RunOrchestrationService,
-        encode_orchestration_service: EncodeOrchestrationService,
-        model_service: 'ModelService',
-        merger_service: 'MergerService',
-        logger: ILogger
     ):
-        self._colormanage = colormanage_service
-        self._daylight = daylight_service
-        self._df_eval = df_eval_service
-        self._obstruction = obstruction_service
-        self._obstruction_calculation = obstruction_calculation_service
-        self._encoder = encoder_service
-        self._orchestration = orchestration_service
-        self._run_orchestration = run_orchestration_service
-        self._encode_orchestration = encode_orchestration_service
-        self._model = model_service
-        self._merger = merger_service
-        self._logger = logger
-
-    def to_rgb(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle to_rgb endpoint"""
-        self._logger.info("Processing to_rgb request")
-        data = request_data.get("data")
-        colorscale = request_data.get("colorscale", "df")
-
-        if not data:
-            return {"status": "error", "error": "Missing required field: data"}
-
-        return self._colormanage.to_rgb(data, colorscale)
-
-    def to_values(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle to_values endpoint"""
-        self._logger.info("Processing to_values request")
-        data = request_data.get("data")
-        colorscale = request_data.get("colorscale", "df")
-
-        if not data:
-            return {"status": "error", "error": "Missing required field: data"}
-
-        return self._colormanage.to_values(data, colorscale)
-
-    def get_df(self, file: Any, form_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle get_df endpoint with file upload (legacy)"""
-        self._logger.info("Processing get_df request with file upload")
-        return self._daylight.get_df(file, form_data)
-
-    def simulate(self, file: Any, form_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle simulate endpoint with file upload"""
-        self._logger.info("Processing simulate request with file upload")
-        return self._daylight.simulate(file, form_data)
+        # self._daylight = daylight_service
+        # self._df_eval = df_eval_service
+        # self._obstruction = obstruction_service
+        # self._obstruction_calculation = obstruction_calculation_service
+        # self._encoder = encoder_service
+        # self._run_orchestration = run_orchestration_service
+        # self._encode_orchestration = encode_orchestration_service
+        # self._model = model_service
+        # self._merger = merger_service
+        # self._stats = stats_service
+        # self._logger = logger
 
     def get_stats(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle get_stats endpoint"""
         self._logger.info("Processing get_stats request")
-        return self._df_eval.get_stats(**request_data)
-
-    def get_df_rgb(self, file: Any, form_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle get_df_rgb endpoint (orchestrates get_df + to_rgb) with file upload"""
-        self._logger.info("Processing get_df_rgb request with file upload")
-        return self._orchestration.get_df_rgb(file, form_data)
+        return self._df_eval.run(**request_data)
 
     def horizon_angle(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle horizon_angle endpoint"""
         self._logger.info("Processing horizon_angle request")
 
-        # Validate required fields
-        required_fields = ["x", "y", "z", "rad_x", "rad_y", "mesh"]
-        for field in required_fields:
-            if field not in request_data:
-                return {"status": "error", "error": f"Missing required field: {field}"}
+        # Validate required fields using FieldValidator
+        error = FieldValidator.validate_required_fields(request_data, FieldValidator.OBSTRUCTION_FIELDS)
+        if error:
+            return error
 
         # Validate mesh data
-        mesh = request_data.get("mesh")
+        mesh = request_data.get(RequestField.MESH.value)
         if not isinstance(mesh, list) or len(mesh) < 3:
-            return {"status": "error", "error": "Mesh must contain at least 3 points"}
+            return {
+                ResponseKey.STATUS.value: ResponseStatus.ERROR.value,
+                ResponseKey.ERROR.value: "Mesh must contain at least 3 points"
+            }
 
-        return self._obstruction.calculate_horizon_angle(
-            x=request_data["x"],
-            y=request_data["y"],
-            z=request_data["z"],
-            rad_x=request_data["rad_x"],
-            rad_y=request_data["rad_y"],
-            mesh=mesh
-        )
+        params = FieldValidator.extract_obstruction_params(request_data, mesh)
+        return self._obstruction.calculate_horizon_angle(**params)
 
     def zenith_angle(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle zenith_angle endpoint"""
@@ -193,7 +247,6 @@ class EndpointController:
         self._logger.info(f"Processing obstruction_parallel request with {num_mesh_points} mesh points")
 
         # Determine direction_angle
-        import math
         if "direction_angle" in request_data:
             # Format 2: direction_angle provided directly
             direction_angle = request_data["direction_angle"]
@@ -385,21 +438,20 @@ class EndpointController:
             if file is not None:
                 self._logger.info(f"Processing file upload: {file.filename}")
                 image_bytes = file.stream.read()
-                return self._model.get_df(image_bytes, invert_channels=invert_channels)
+                return self._model.run(image_bytes, invert_channels=invert_channels)
 
             # Case 2: Base64-encoded image
             if request_data and "image_base64" in request_data:
                 self._logger.info("Processing base64-encoded image")
-                import base64
                 image_base64 = request_data["image_base64"]
                 image_bytes = base64.b64decode(image_base64)
-                return self._model.get_df(image_bytes, invert_channels=invert_channels)
+                return self._model.run(image_bytes, invert_channels=invert_channels)
 
             # Case 3: Numpy array (as nested list)
             if request_data and "image_array" in request_data:
                 self._logger.info("Processing numpy array")
                 image_array = np.array(request_data["image_array"])
-                return self._model.get_df(image_array, invert_channels=invert_channels)
+                return self._model.run(image_array, invert_channels=invert_channels)
 
             # No valid input provided
             return {
@@ -466,8 +518,44 @@ class EndpointController:
             return {"status": "error", "error": "simulations must be a dictionary"}
 
         # Call merger service
-        return self._merger.merge(
+        return self._merger.run(
             room_polygon=room_polygon,
             windows=windows,
             simulations=simulations
+        )
+
+    def stats(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle stats endpoint (calculate statistics on daylight factor data)
+
+        Expected request_data format:
+        {
+            "df_values": [[float]],  # 2D array of daylight factor values
+            "mask": [[int]]           # 2D binary mask indicating valid areas
+        }
+
+        Returns:
+            Statistics calculation result from stats service
+        """
+        self._logger.info("Processing stats request")
+
+        # Validate required fields
+        required_fields = ["df_values", "mask"]
+        for field in required_fields:
+            if field not in request_data:
+                return {"status": "error", "error": f"Missing required field: {field}"}
+
+        # Validate df_values
+        df_values = request_data.get("df_values")
+        if not isinstance(df_values, list):
+            return {"status": "error", "error": "df_values must be a list"}
+
+        # Validate mask
+        mask = request_data.get("mask")
+        if not isinstance(mask, list):
+            return {"status": "error", "error": "mask must be a list"}
+
+        # Call stats service
+        return self._stats.run(
+            df_values=df_values,
+            mask=mask
         )
