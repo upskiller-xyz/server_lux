@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Optional
 
+from src.utils.extended_enum import ExtendedEnum
+
 
 class ModelStatus(Enum):
     LOADING = "loading"
@@ -97,10 +99,10 @@ class ResponseKey(Enum):
     SUCCESS = "success"
 
 
-class EndpointType(Enum):
+class EndpointType(ExtendedEnum):
     
     SIMULATE = "simulate"  # Renamed from GET_DF for clarity
-    
+    STATUS = "status"
     GET_STATS = "get_stats"
     GET_DF_RGB = "get_df_rgb"
     HORIZON_ANGLE = "horizon_angle"
@@ -110,6 +112,7 @@ class EndpointType(Enum):
     OBSTRUCTION_MULTI = "obstruction_multi"
     OBSTRUCTION_PARALLEL = "obstruction_parallel"
     ENCODE = "encode"
+    ENCODE_RAW = "encode_raw"
     RUN = "run"
     CALCULATE_DIRECTION = "calculate-direction"
     MERGE = "merge"
@@ -184,8 +187,7 @@ class RequestField(Enum):
     Z2 = "z2"
 
     # Obstruction fields
-    RAD_X = "rad_x"
-    RAD_Y = "rad_y"
+    
     MESH = "mesh"
     DIRECTION_ANGLE = "direction_angle"
     START_ANGLE = "start_angle"
@@ -213,6 +215,9 @@ class RequestField(Enum):
     IMAGE_BASE64 = "image_base64"
     IMAGE_ARRAY = "image_array"
     INVERT_CHANNELS = "invert_channels"
+
+    ROOF_HEIGHT = "height_roof_over_floor"
+    FLOOR_HEIGHT = "floor_height_above_terrain"
 
     # Optimization flags
     USE_EARLY_EXIT_OPTIMIZATION = "use_early_exit_optimization"

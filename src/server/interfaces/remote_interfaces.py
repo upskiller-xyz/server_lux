@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 import numpy as np
+
+from src.server.services.helpers.parameter_validator import ParameterValidator
 from ..enums import RequestField, ResponseKey
 
 
@@ -20,6 +22,31 @@ class WindowGeometry:
     direction_angle: Optional[float] = None
     obstruction_angle_horizon: Optional[List[float]] = None
     obstruction_angle_zenith: Optional[List[float]] = None
+
+    @classmethod
+    def from_dict(cls, content:Dict[str, Any])->'WindowGeometry':
+        prms = {f.value: content.get(f.value) for f in ParameterValidator.REQUIRED_WINDOW_FIELDS}
+        _opt_fields = [RequestField.DIRECTION_ANGLE, RequestField.OBSTRUCTION_ANGLE_HORIZON, RequestField.OBSTRUCTION_ANGLE_ZENITH]
+        opt_prms = {f.value: content.get(f.value, None) for f in _opt_fields}
+        prms.update(opt_prms)
+        return cls(**prms)
+    
+    @property
+    def to_dict(self)->Dict[str, Any]:
+        return {
+                RequestField.X1.value: self.x1,
+                RequestField.Y1.value: self.y1,
+                RequestField.Z1.value: self.z1,
+                RequestField.X2.value: self.x2,
+                RequestField.Y2.value: self.y2,
+                RequestField.Z2.value: self.z2,
+                RequestField.WINDOW_FRAME_RATIO.value: self.window_frame_ratio,
+                RequestField.DIRECTION_ANGLE.value: self.direction_angle,
+            
+            }
+    
+    def reference_point(self):
+        return 
 
 
 @dataclass
@@ -107,18 +134,69 @@ class RemoteServiceResponse(ABC):
 
 # Request types
 
+# @dataclass
+# class ColorManageRequest(RemoteServiceRequest):
+#     """Request for color management operations"""
+#     data: list
+#     colorscale: str = "df"
+
+#     @property
+#     def to_dict(self) -> Dict[str, Any]:
+#         return {
+#             RequestField.DATA.value: self.data,
+#             RequestField.COLORSCALE.value: self.colorscale
+#         }
+
 @dataclass
-class ColorManageRequest(RemoteServiceRequest):
-    """Request for color management operations"""
-    data: list
-    colorscale: str = "df"
+class Parameters(RemoteServiceRequest):
+    """Request for obstruction angle calculations"""
+    window: WindowGeometry
+    room: RoomPolygon
+    height_roof_over_floor: float=0
+    floor_height_above_terrain: float=0
+    simulation: Simulation|None = None
+    result: Any = None
 
     @property
     def to_dict(self) -> Dict[str, Any]:
         return {
-            RequestField.DATA.value: self.data,
-            RequestField.COLORSCALE.value: self.colorscale
+            RequestField.WINDOWS.value: self.window.to_dict,
+            RequestField.FLOOR_HEIGHT.value: self.floor_height_above_terrain,
+            RequestField.ROOF_HEIGHT.value: self.height_roof_over_floor,
+            RequestField.ROOM_POLYGON.value: self.room.points
         }
+    
+    @classmethod
+    def parse(cls, content:Dict[str, Any])->List['Parameters']:
+        room = content.get(RequestField.ROOM_POLYGON.value, [])
+        windows = content.get(RequestField.WINDOWS.value, {})
+        wws = [WindowGeometry.from_dict(w) for w in windows]
+        prms = [RequestField.ROOF_HEIGHT, RequestField.FLOOR_HEIGHT]
+        opt_params = {p.value: content.get(p.value, None) for p in prms}
+        return [cls(window=w, room=room, **opt_params) for w in wws]
+
+@dataclass
+class MainRequest(RemoteServiceRequest):
+    """Request for obstruction angle calculations"""
+    model_type: str
+    params: Parameters
+    mesh: list
+    result: Any = None
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        return {RequestField.MODEL_TYPE.value: self.model_type,
+            RequestField.PARAMETERS.value: self.params,
+            RequestField.MESH.value: self.mesh
+        }
+    
+    @classmethod
+    def parse(cls, content:Dict[str, Any])->List['MainRequest']:
+        model_type = content.get(RequestField.MODEL_TYPE.value, "df_default")
+        params = content.get(RequestField.PARAMETERS.value, {})
+        prms = Parameters.parse(params)
+        mesh = content.get(RequestField.MESH.value, [])
+        return [cls(model_type, p, mesh) for p in prms]
 
 
 @dataclass
@@ -127,9 +205,13 @@ class ObstructionRequest(RemoteServiceRequest):
     x: float
     y: float
     z: float
-    rad_x: float
-    rad_y: float
+    direction_angle: float
     mesh: list
+
+    @classmethod
+    def from_main(cls, main:MainRequest)->ObstructionRequest:
+        center = main.window.reference_point
+        return cls( , main.direction_angle, main.mesh)
 
     @property
     def to_dict(self) -> Dict[str, Any]:
@@ -137,47 +219,26 @@ class ObstructionRequest(RemoteServiceRequest):
             RequestField.X.value: self.x,
             RequestField.Y.value: self.y,
             RequestField.Z.value: self.z,
-            RequestField.RAD_X.value: self.rad_x,
-            RequestField.RAD_Y.value: self.rad_y,
+            RequestField.DIRECTION_ANGLE.value: self.direction_angle,
             RequestField.MESH.value: self.mesh
         }
 
 
+
+    
+
 @dataclass
-class EncoderRequest(RemoteServiceRequest):
+class ModelRequest(RemoteServiceRequest):
     """Request for encoding operations"""
     model_type: str
-    parameters: EncoderParameters
+    parameters: Dict[Any, Any]
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        windows_dict = {}
-        for window_name, window_geom in self.parameters.windows.items():
-            window_dict = {
-                RequestField.X1.value: window_geom.x1,
-                RequestField.Y1.value: window_geom.y1,
-                RequestField.Z1.value: window_geom.z1,
-                RequestField.X2.value: window_geom.x2,
-                RequestField.Y2.value: window_geom.y2,
-                RequestField.Z2.value: window_geom.z2,
-                RequestField.WINDOW_FRAME_RATIO.value: window_geom.window_frame_ratio
-            }
-            if window_geom.direction_angle is not None:
-                window_dict[RequestField.DIRECTION_ANGLE.value] = window_geom.direction_angle
-            if window_geom.obstruction_angle_horizon is not None:
-                window_dict[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = window_geom.obstruction_angle_horizon
-            if window_geom.obstruction_angle_zenith is not None:
-                window_dict[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = window_geom.obstruction_angle_zenith
-            windows_dict[window_name] = window_dict
-
-        params_dict = {
-            RequestField.ROOM_POLYGON.value: self.parameters.room_polygon,
-            RequestField.WINDOWS.value: windows_dict
-        }
 
         return {
             RequestField.MODEL_TYPE.value: self.model_type,
-            RequestField.PARAMETERS.value: params_dict
+            RequestField.PARAMETERS.value: self.parameters
         }
 
 
@@ -266,13 +327,13 @@ class BinaryResponse(RemoteServiceResponse):
         return self._binary_data
 
 
-class ColorManageResponse(StandardResponse):
-    """Response from color management operations"""
+# class ColorManageResponse(StandardResponse):
+#     """Response from color management operations"""
 
-    def parse(self) -> list:
-        if self.is_error:
-            raise ValueError(f"Color conversion error: {self.error}")
-        return self._get_optional(ResponseKey.DATA.value) or self._get_optional(ResponseKey.RESULT.value)
+#     def parse(self) -> list:
+#         if self.is_error:
+#             raise ValueError(f"Color conversion error: {self.error}")
+#         return self._get_optional(ResponseKey.DATA.value) or self._get_optional(ResponseKey.RESULT.value)
 
 
 class ObstructionResponse(StandardResponse):
@@ -317,61 +378,3 @@ class StatsResponse(StandardResponse):
             raise ValueError(f"Statistics calculation error: {self.error}")
         return self._raw
 
-
-@dataclass
-class DFEvalRequest(RemoteServiceRequest):
-    """Request for DF evaluation statistics"""
-    kwargs: Dict[str, Any]
-
-    @property
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return self.kwargs
-
-
-@dataclass
-class PostprocessRequest(RemoteServiceRequest):
-    """Request for postprocessing daylight simulation results"""
-    windows: Dict[str, WindowGeometry]
-    results: Dict[str, Any]
-    room_polygon: list
-
-    @property
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary using enums"""
-        windows_data = {}
-        for window_name, window in self.windows.items():
-            windows_data[window_name] = {
-                RequestField.X1.value: window.x1,
-                RequestField.Y1.value: window.y1,
-                RequestField.Z1.value: window.z1,
-                RequestField.X2.value: window.x2,
-                RequestField.Y2.value: window.y2,
-                RequestField.Z2.value: window.z2
-            }
-
-        return {
-            RequestField.WINDOWS.value: windows_data,
-            RequestField.RESULTS.value: self.results,
-            RequestField.ROOM_POLYGON.value: self.room_polygon
-        }
-
-
-@dataclass
-class DFEvalResponse(StandardResponse):
-    """Response from DF evaluation service"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"DF evaluation error: {self.error}")
-        return self._raw
-
-
-@dataclass
-class PostprocessResponse(StandardResponse):
-    """Response from postprocess service"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"Postprocess error: {self.error}")
-        return self._raw

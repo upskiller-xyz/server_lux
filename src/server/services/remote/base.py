@@ -3,23 +3,13 @@ import logging
 
 from src.server.config import SessionConfig
 from src.server.services.http_client import HTTPClient
+from src.server.services.remote.service_map import ServiceResponseMap
 from ...interfaces.remote_interfaces import RemoteServiceRequest, RemoteServiceResponse
 from ...enums import ServiceName, EndpointType
-from ...maps import EndpointServiceMap, PortMap
-from .service_map import EndpointServiceMap as ServiceClassMap
+from ...maps import  PortMap
+
 
 logger = logging.getLogger('logger')
-
-
-class RemoteServiceFactory:
-    """Factory for determining which service to call based on endpoint"""
-
-    @classmethod
-    def get_service_class(cls, endpoint: EndpointType) -> type['RemoteService']:
-        """Get service class for endpoint using map"""
-        service_name = EndpointServiceMap.get(endpoint)
-        
-        return ServiceClassMap.get(service_name)
 
 
 class RemoteService:
@@ -47,7 +37,6 @@ class RemoteService:
         cls,
         endpoint: EndpointType,
         request: RemoteServiceRequest,
-        response_class: type[RemoteServiceResponse],
         file:Any=None
     ) -> Any:
         """Template method for standard request/response flow
@@ -65,6 +54,7 @@ class RemoteService:
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
         response_dict = HTTPClient.post(url, request.to_dict)
+        response_class = ServiceResponseMap.get(cls.__class__)
         response = response_class(response_dict)
         return response.parse()
 

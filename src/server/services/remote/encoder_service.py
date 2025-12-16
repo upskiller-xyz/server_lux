@@ -27,7 +27,7 @@ class EncoderService(RemoteService):
         return _map.get(endpoint, BinaryResponse)
 
     @classmethod
-    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, response_class: RemoteServiceResponse, file:Any=None) -> Union[bytes, Dict[str, float]]:
+    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file:Any=None) -> Union[bytes, Dict[str, float]]:
         """Run encoder service operation"""
         _rq = cls._get_request(endpoint)
         _rsp = cls._get_response(endpoint)

@@ -27,18 +27,5 @@ class PortMap(StandardMap):
     }
     _default:ServicePort = ServicePort.MAIN_SERVER
 
-class EndpointServiceMap(StandardMap):
-    _content:Dict[EndpointType, ServiceName] = {
-        EndpointType.MERGE: ServiceName.MERGER,
-        EndpointType.ENCODE: ServiceName.ENCODER,
-        EndpointType.CALCULATE_DIRECTION: ServiceName.ENCODER,
-        EndpointType.OBSTRUCTION: ServiceName.OBSTRUCTION,
-        EndpointType.OBSTRUCTION_ALL: ServiceName.OBSTRUCTION,
-        EndpointType.OBSTRUCTION_MULTI: ServiceName.OBSTRUCTION,
-        EndpointType.OBSTRUCTION_PARALLEL: ServiceName.OBSTRUCTION,
-        EndpointType.SIMULATE: ServiceName.MODEL,
-        EndpointType.STATS_CALCULATE: ServiceName.STATS
-        
-    }
-    _default:Any = ServiceName.ENCODER
+
     
