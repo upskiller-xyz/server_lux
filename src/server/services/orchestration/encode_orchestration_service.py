@@ -3,14 +3,10 @@ import time
 import base64
 import os
 
-from src.server.interfaces.remote_interfaces import MergerRequest
+from src.server.interfaces.remote_interfaces import MainRequest, MergerRequest
 from src.server.services.helpers.parallel import ParallelRequest
 
 from ..remote import MergerService
-# from ..obstruction import ObstructionCalculationService
-# from ..helpers.direction_angle_resolver import DirectionAngleResolver
-# from ..helpers.parameter_validator import ParameterValidator
-# from ...exceptions import ServiceConnectionError, ServiceTimeoutError, ServiceResponseError, ServiceAuthorizationError
 from ...enums import EndpointType
 from ...services.remote.service_map import EndpointServiceMap, ServiceRequestMap
 
@@ -20,12 +16,13 @@ class Orchestrator:
     def run(cls, endpoint:EndpointType, request_data:dict, file:Any):
         services = EndpointServiceMap.get(endpoint)
         request = ServiceRequestMap.get(services[0])(**request_data, file=file)
+        _params = request_data.to_dict()
         response = {}
         for i, service in enumerate(services):
+            request = ServiceRequestMap.get(services[i])(**_params, file=file)
             response = service.run(request)
-            if i < len(services)-1:
-                rq = ServiceRequestMap.get(services[i+1])(**request_data, file=file)
-                request = rq.update(response)
+            _params.update(response)
+                
         return response
     
 class MultiOrchestrator:
@@ -40,10 +37,11 @@ class SimulationOrchestrator:
 
     @classmethod
     def run(cls, endpoint:EndpointType, request_data:dict, file:Any):
-        
-        results = ParallelRequest.run(Orchestrator.run, (endpoint, request_data, file))
-        request = MergerRequest(request_data)
+        request = MainRequest(request_data)
+        results = ParallelRequest.run(Orchestrator.run, (endpoint, request, file))
         request = request.update(results)
+        request = MergerRequest(request)
+        
         result = MergerService.run(endpoint, request, file)
         return result
 

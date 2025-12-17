@@ -99,53 +99,18 @@ class RemoteServiceRequest(ABC):
         return arr.tolist() if arr is not None else None
 
 
-class RemoteServiceResponse(ABC):
-    """Base class for all remote service responses
-
-    Parses response data into typed structures.
-    """
-
-    def __init__(self, raw_response: Dict[str, Any]):
-        self._raw = raw_response
-        self.status = raw_response.get(ResponseKey.STATUS.value)
-        self.error = raw_response.get(ResponseKey.ERROR.value)
-
-    @property
-    def is_success(self) -> bool:
-        return self.status == ResponseKey.SUCCESS.value
-
-    @property
-    def is_error(self) -> bool:
-        return self.status == ResponseKey.ERROR.value
-
-    @abstractmethod
-    def parse(self) -> Any:
-        """Parse response data into typed structure"""
-        pass
-
-    def _get_required(self, key: str, error_msg: str = None) -> Any:
-        if key not in self._raw:
-            raise ValueError(error_msg or f"Missing required field: {key}")
-        return self._raw[key]
-
-    def _get_optional(self, key: str, default: Any = None) -> Any:
-        return self._raw.get(key, default)
-
-
 # Request types
-
-# @dataclass
-# class ColorManageRequest(RemoteServiceRequest):
-#     """Request for color management operations"""
-#     data: list
-#     colorscale: str = "df"
-
-#     @property
-#     def to_dict(self) -> Dict[str, Any]:
-#         return {
-#             RequestField.DATA.value: self.data,
-#             RequestField.COLORSCALE.value: self.colorscale
-#         }
+#
+# Available request classes:
+# - MainRequest: Main external /simulate endpoint request
+# - Parameters: Shared parameter structure for room/window configuration
+# - ObstructionRequest: Single point obstruction calculation (/horizon_angle, /zenith_angle, /obstruction)
+# - ObstructionMultiRequest: Multi-direction obstruction calculation (/obstruction_multi)
+# - ObstructionParallelRequest: Parallel obstruction calculation (/obstruction_parallel)
+# - DirectionAngleRequest: Direction angle calculation (/calculate-direction)
+# - MergerRequest: Window simulation merging (/merge)
+# - StatsRequest: Statistics calculation (/get_stats, /calculate)
+# - ModelRequest: Encoding operations (/encode, /encode_raw)
 
 @dataclass
 class Parameters(RemoteServiceRequest):
@@ -201,17 +166,82 @@ class MainRequest(RemoteServiceRequest):
 
 @dataclass
 class ObstructionRequest(RemoteServiceRequest):
-    """Request for obstruction angle calculations"""
+    """Request for obstruction angle calculations (single point and direction)
+
+    Used for /horizon_angle, /zenith_angle, and /obstruction endpoints.
+    """
     x: float
     y: float
     z: float
     direction_angle: float
-    mesh: list
+    mesh: List[List[float]]
 
     @classmethod
-    def from_main(cls, main:MainRequest)->ObstructionRequest:
-        center = main.window.reference_point
-        return cls( , main.direction_angle, main.mesh)
+    def from_main(cls, main: MainRequest) -> 'ObstructionRequest':
+        center = (0,0,0) # main.params.window.reference_point()
+        return cls(
+            x=center[0],
+            y=center[1],
+            z=center[2],
+            direction_angle=main.params.window.direction_angle,
+            mesh=main.mesh
+        )
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            RequestField.X.value: self.x,
+            RequestField.Y.value: self.y,
+            RequestField.Z.value: self.z,
+            RequestField.DIRECTION_ANGLE.value: self.direction_angle,
+            RequestField.MESH.value: self.mesh
+        }
+
+
+@dataclass
+class ObstructionMultiRequest(RemoteServiceRequest):
+    """Request for multi-direction obstruction angle calculations
+
+    Used for /obstruction_multi endpoint to calculate multiple directions
+    across a half-circle centered on the window normal.
+    """
+    x: float
+    y: float
+    z: float
+    direction_angle: float
+    mesh: List[List[float]]
+    start_angle: Optional[float] = None
+    end_angle: Optional[float] = None
+    num_directions: Optional[int] = None
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        return self._build_dict(
+            **{
+                RequestField.X.value: self.x,
+                RequestField.Y.value: self.y,
+                RequestField.Z.value: self.z,
+                RequestField.DIRECTION_ANGLE.value: self.direction_angle,
+                RequestField.MESH.value: self.mesh,
+                RequestField.START_ANGLE.value: self.start_angle,
+                RequestField.END_ANGLE.value: self.end_angle,
+                RequestField.NUM_DIRECTIONS.value: self.num_directions
+            }
+        )
+
+
+@dataclass
+class ObstructionParallelRequest(RemoteServiceRequest):
+    """Request for parallel obstruction angle calculations
+
+    Used for /obstruction_parallel endpoint to calculate all directions
+    using optimized parallel processing.
+    """
+    x: float
+    y: float
+    z: float
+    direction_angle: float
+    mesh: List[List[float]]
 
     @property
     def to_dict(self) -> Dict[str, Any]:
@@ -244,12 +274,33 @@ class ModelRequest(RemoteServiceRequest):
 
 @dataclass
 class DirectionAngleRequest(RemoteServiceRequest):
-    """Request for direction angle calculation"""
-    parameters: Dict[str, Any]  # Contains room_polygon and windows
+    """Request for direction angle calculation
+
+    Used for /calculate-direction endpoint to calculate direction angles
+    for windows in a room based on room polygon and window positions.
+    """
+    room_polygon: List[List[float]]
+    windows: Dict[str, WindowGeometry]
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        return {RequestField.PARAMETERS.value: self.parameters}
+        windows_dict = {}
+        for window_name, window_geom in self.windows.items():
+            windows_dict[window_name] = {
+                RequestField.X1.value: window_geom.x1,
+                RequestField.Y1.value: window_geom.y1,
+                RequestField.Z1.value: window_geom.z1,
+                RequestField.X2.value: window_geom.x2,
+                RequestField.Y2.value: window_geom.y2,
+                RequestField.Z2.value: window_geom.z2
+            }
+
+        return {
+            RequestField.PARAMETERS.value: {
+                RequestField.ROOM_POLYGON.value: self.room_polygon,
+                RequestField.WINDOWS.value: windows_dict
+            }
+        }
 
 
 @dataclass
@@ -283,98 +334,26 @@ class MergerRequest(RemoteServiceRequest):
         return {
             RequestField.ROOM_POLYGON.value: self.room_polygon,
             RequestField.WINDOWS.value: windows_dict,
-            RequestField.SIMULATIONS.value: simulations_dict
+            RequestField.SIMULATION.value: simulations_dict
         }
 
 
 @dataclass
 class StatsRequest(RemoteServiceRequest):
-    """Request for statistics calculation"""
+    """Request for statistics calculation
+
+    Used for /get_stats and /calculate endpoints to compute daylight statistics
+    from simulation results with an optional mask.
+    """
     df_values: np.ndarray
-    mask: np.ndarray
+    mask: Optional[np.ndarray] = None
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            RequestField.DF_VALUES.value: self._array_to_list(self.df_values),
-            RequestField.MASK.value: self._array_to_list(self.mask)
-        }
-
-
-# Response types
-
-class StandardResponse(RemoteServiceResponse):
-    """Standard JSON response with status, data/error"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"Service error: {self.error}")
-        return self._raw
-
-
-class BinaryResponse(RemoteServiceResponse):
-    """Binary data response (e.g., PNG images)"""
-
-    def __init__(self, raw_data: bytes):
-        self._binary_data = raw_data
-        super().__init__({})
-
-    @property
-    def is_success(self) -> bool:
-        return self._binary_data is not None
-
-    def parse(self) -> bytes:
-        return self._binary_data
-
-
-# class ColorManageResponse(StandardResponse):
-#     """Response from color management operations"""
-
-#     def parse(self) -> list:
-#         if self.is_error:
-#             raise ValueError(f"Color conversion error: {self.error}")
-#         return self._get_optional(ResponseKey.DATA.value) or self._get_optional(ResponseKey.RESULT.value)
-
-
-class ObstructionResponse(StandardResponse):
-    """Response from obstruction calculations"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"Obstruction calculation error: {self.error}")
-        return self._get_required(ResponseKey.DATA.value)
-
-
-class DirectionAngleResponse(StandardResponse):
-    """Response from direction angle calculation"""
-
-    def parse(self) -> Dict[str, float]:
-        if self.is_error:
-            raise ValueError(f"Direction angle calculation error: {self.error}")
-        return self._get_required(ResponseKey.DIRECTION_ANGLES.value)
-
-
-class MergerResponse(StandardResponse):
-    """Response from merger service"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"Merger error: {self.error}")
-
-        df_matrix = self._get_optional(ResponseKey.RESULT.value) or self._get_optional(RequestField.DF_MATRIX.value)
-        room_mask = self._get_optional(RequestField.MASK.value) or self._get_optional(RequestField.ROOM_MASK.value)
-
-        return {
-            RequestField.DF_MATRIX.value: df_matrix,
-            RequestField.ROOM_MASK.value: room_mask
-        }
-
-
-class StatsResponse(StandardResponse):
-    """Response from statistics calculation"""
-
-    def parse(self) -> Dict[str, Any]:
-        if self.is_error:
-            raise ValueError(f"Statistics calculation error: {self.error}")
-        return self._raw
+        return self._build_dict(
+            **{
+                RequestField.DF_VALUES.value: self._array_to_list(self.df_values),
+                RequestField.MASK.value: self._array_to_list(self.mask)
+            }
+        )
 

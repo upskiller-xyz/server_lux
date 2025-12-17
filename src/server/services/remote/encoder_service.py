@@ -22,7 +22,8 @@ class EncoderService(RemoteService):
     def _get_response(cls, endpoint:EndpointType):
         _map = {
             EndpointType.ENCODE: BinaryResponse,
-            EndpointType.CALCULATE_DIRECTION: DirectionAngleResponse
+            EndpointType.CALCULATE_DIRECTION: DirectionAngleResponse,
+            EndpointType.REFERENCE_POINT: ReferencePointResponse
         }
         return _map.get(endpoint, BinaryResponse)
 

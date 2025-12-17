@@ -115,6 +115,7 @@ class EndpointType(ExtendedEnum):
     ENCODE_RAW = "encode_raw"
     RUN = "run"
     CALCULATE_DIRECTION = "calculate-direction"
+    REFERENCE_POINT = "get-reference-point"
     MERGE = "merge"
     STATS_CALCULATE = "calculate"
 
@@ -203,8 +204,8 @@ class RequestField(Enum):
     WINDOW_FRAME_RATIO = "window_frame_ratio"
 
     # Simulation fields
-    RESULTS = "results"
-    SIMULATIONS = "simulations"
+    RESULT = "result"
+    SIMULATION = "simulation"
     DF_VALUES = "df_values"
     DF_MATRIX = "df_matrix"
     ROOM_MASK = "room_mask"
