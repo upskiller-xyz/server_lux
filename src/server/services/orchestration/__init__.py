@@ -1,7 +1,13 @@
-from .run_orchestration_service import RunOrchestrationService
-from .encode_orchestration_service import EncodeOrchestrationService
+from .orchestrator import Orchestrator
+from .encode_orchestration_service import (
+    SimulationOrchestrator,
+    EncodeOrchestrator,
+    EndpointOrchestratorMap
+)
 
 __all__ = [
-    'RunOrchestrationService',
-    'EncodeOrchestrationService'
+    'Orchestrator',
+    'SimulationOrchestrator',
+    'EncodeOrchestrator',
+    'EndpointOrchestratorMap'
 ]

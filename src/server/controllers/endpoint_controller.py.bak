@@ -1,0 +1,46 @@
+from typing import Dict, Any
+import logging
+
+from src.server.controllers.field_map import EndpointOrchestratorMap, FieldMap
+from ..enums import EndpointType, RequestField, ResponseKey
+
+logger = logging.getLogger("logger")
+
+
+class EndpointController:
+    """Controller for handling endpoint requests"""
+
+    @classmethod
+    def _validate(cls, request_data, fields):
+        for field in fields:
+            if field.value not in request_data:
+                return field
+
+        # Only validate parameters if it's a required field
+        if RequestField.PARAMETERS in fields:
+            parameters = request_data.get(RequestField.PARAMETERS.value)
+            if not isinstance(parameters, dict):
+                return RequestField.PARAMETERS
+
+        # Only validate mesh if it's a required field
+        if RequestField.MESH in fields:
+            mesh = request_data.get(RequestField.MESH.value)
+            if not isinstance(mesh, list):
+                return RequestField.MESH
+        return ""
+    @classmethod
+    def run(cls, endpoint:EndpointType, request_data: Dict[str, Any], file:Any=None) -> Dict[str, Any]:
+        """Handle run endpoint (complete simulation: obstruction → encoding → daylight)"""
+        logger.info("Processing {} request".format(endpoint.value))
+
+
+        orchestrator_class = EndpointOrchestratorMap.get(endpoint)
+        orchestrator = orchestrator_class()
+        required_fields = FieldMap.get(endpoint)
+        missing_field = cls._validate(request_data, required_fields)
+        if missing_field:
+            return {ResponseKey.STATUS.value: ResponseKey.ERROR.value, ResponseKey.ERROR.value: f"Missing required field: {missing_field}"}
+
+        # Validate parameters structure
+
+        return orchestrator.run(endpoint, request_data, file)

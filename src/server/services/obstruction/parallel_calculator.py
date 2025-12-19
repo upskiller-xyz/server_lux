@@ -1,38 +1,21 @@
+import logging
 from typing import Dict, Any, List, Optional
 import time
 import math
 import aiohttp
 import asyncio
-from ...interfaces import ILogger
-from ...enums import ServiceURL, EndpointType, RequestField, ResponseKey, ServiceName, HTTPHeader, HTTPContentType
+from ...enums import EndpointType, RequestField, ResponseKey, ServiceName, HTTPHeader, HTTPContentType
 from ...exceptions import ServiceConnectionError, ServiceTimeoutError, ServiceResponseError, ServiceAuthorizationError
 from .config import WindowGeometry, ObstructionCalculationConfig, ObstructionResult
 from .calculator_interface import IObstructionCalculator
 
 
 class ParallelObstructionCalculator(IObstructionCalculator):
-    """Calculator that makes parallel requests to obstruction service (64 individual requests)
 
-    Uses asyncio to send multiple HTTP requests simultaneously.
-    Each direction calculated independently in parallel.
-    Follows Single Responsibility Principle - only handles parallel calculation.
-    """
-
-    def __init__(self, logger: ILogger, api_url: str = None, api_token: Optional[str] = None):
-        """Initialize calculator
-
-        Args:
-            logger: Logger instance
-            api_url: URL of obstruction endpoint (optional, uses ServiceURL.OBSTRUCTION if not provided)
-            api_token: Optional API token for authorization
-        """
-        self._logger = logger
+    def __init__(self, api_url: str = None, api_token: Optional[str] = None):
+        self._logger = logging.getLogger(self.__class__.__name__)
         self._api_token = api_token
-        # Use dynamic URL resolution from ServiceURL enum
-        if api_url is None:
-            self._api_url = f"{ServiceURL.OBSTRUCTION.value}/{EndpointType.OBSTRUCTION.value}"
-        else:
-            self._api_url = api_url
+        self._api_url = api_url
 
     async def calculate(
         self,
@@ -40,30 +23,9 @@ class ParallelObstructionCalculator(IObstructionCalculator):
         mesh: List[List[float]],
         config: ObstructionCalculationConfig
     ) -> List[ObstructionResult]:
-        """Calculate obstruction angles for all directions in parallel
-
-        Args:
-            window: Window geometry
-            mesh: Obstruction mesh data
-            config: Calculation configuration
-
-        Returns:
-            List of obstruction results
-
-        Raises:
-            ServiceAuthorizationError: If any request fails authorization
-            ServiceConnectionError: If connection to service fails
-            ServiceTimeoutError: If any request times out
-            ServiceResponseError: If service returns error response
-        """
         start_time = time.time()
-        self._logger.info(f"Starting parallel obstruction calculation for {config.num_directions} directions")
-
-        # Get all direction angles
         direction_angles = config.get_direction_angles(window.direction_angle)
-        self._logger.info(f"Direction angles range: {math.degrees(direction_angles[0]):.1f}° to {math.degrees(direction_angles[-1]):.1f}°")
 
-        # Create tasks for parallel execution
         async with aiohttp.ClientSession() as session:
             tasks = [
                 self._calculate_single_direction(
@@ -72,20 +34,8 @@ class ParallelObstructionCalculator(IObstructionCalculator):
                 )
                 for direction_angle in direction_angles
             ]
-
-            self._logger.info(f"Created {len(tasks)} async tasks, submitting all requests in parallel...")
-            task_submit_time = time.time()
-
-            # Execute all requests in parallel
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            gather_time = time.time() - task_submit_time
-            self._logger.info(f"asyncio.gather completed in {gather_time:.2f}s")
-
-        elapsed_requests = time.time() - start_time
-        self._logger.info(f"Parallel HTTP requests completed in {elapsed_requests:.2f}s")
-
-        # Process results
         obstruction_results = []
         for i, (direction_angle, result) in enumerate(zip(direction_angles, results)):
             if isinstance(result, Exception):
@@ -102,7 +52,7 @@ class ParallelObstructionCalculator(IObstructionCalculator):
             ))
 
         total_time = time.time() - start_time
-        self._logger.info(f"Completed {len(obstruction_results)} obstruction calculations in {total_time:.2f}s")
+        self._logger.info(f"Completed {len(obstruction_results)} calculations in {total_time:.2f}s")
         return obstruction_results
 
     async def _calculate_single_direction(
@@ -115,24 +65,6 @@ class ParallelObstructionCalculator(IObstructionCalculator):
         mesh: List[List[float]],
         timeout: int
     ) -> Dict[str, Any]:
-        """Calculate obstruction for a single direction
-
-        Args:
-            session: aiohttp session for making requests
-            x, y, z: Window position
-            direction_angle: Direction angle in radians
-            mesh: Obstruction mesh
-            timeout: Timeout in seconds
-
-        Returns:
-            Response from obstruction service
-
-        Raises:
-            ServiceAuthorizationError: If authorization fails (403)
-            ServiceConnectionError: If connection fails
-            ServiceTimeoutError: If request times out
-            ServiceResponseError: If service returns error
-        """
         direction_deg = math.degrees(direction_angle)
         payload = {
             RequestField.X.value: x,
@@ -140,31 +72,19 @@ class ParallelObstructionCalculator(IObstructionCalculator):
             RequestField.Z.value: z,
             RequestField.DIRECTION_ANGLE.value: direction_angle,
             RequestField.MESH.value: mesh,
-            # Optimization: Enable early-exit ray casting when no intersection found
-            # This checks if a horizontal ray hits anything before doing expensive calculations
             RequestField.USE_EARLY_EXIT_OPTIMIZATION.value: True
         }
 
-        # Add Authorization header if token is provided
         headers = {HTTPHeader.CONTENT_TYPE.value: HTTPContentType.JSON.value}
         if self._api_token:
             headers[HTTPHeader.AUTHORIZATION.value] = f"Bearer {self._api_token}"
 
         try:
-            send_time = time.time()
-            self._logger.info(f"[{send_time:.3f}] ↗ SENT request for direction {direction_deg:.1f}°")
-
             timeout_obj = aiohttp.ClientTimeout(total=timeout)
             async with session.post(self._api_url, json=payload, headers=headers, timeout=timeout_obj) as response:
                 response.raise_for_status()
-                result = await response.json()
-
-            receive_time = time.time()
-            request_duration = receive_time - send_time
-            self._logger.info(f"[{receive_time:.3f}] ↙ COLLECTED response for direction {direction_deg:.1f}° (took {request_duration:.2f}s)")
-            return result
+                return await response.json()
         except aiohttp.ClientResponseError as e:
-            # Special handling for 403 Forbidden (authorization errors)
             if e.status == 403:
                 error = ServiceAuthorizationError(
                     service_name=ServiceName.OBSTRUCTION.value,
@@ -183,7 +103,6 @@ class ParallelObstructionCalculator(IObstructionCalculator):
                 self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
                 raise error
         except aiohttp.ClientConnectorError as e:
-            # Connection failures - cannot connect to host
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
                 endpoint=f"/{EndpointType.OBSTRUCTION.value}",
@@ -193,7 +112,6 @@ class ParallelObstructionCalculator(IObstructionCalculator):
             self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
             raise error
         except aiohttp.ClientError as e:
-            # Other HTTP errors
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
                 endpoint=f"/{EndpointType.OBSTRUCTION.value}",

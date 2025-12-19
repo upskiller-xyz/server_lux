@@ -1,15 +1,19 @@
-from typing import Any
+from typing import Any, Dict
 import logging
 
 from src.server.config import SessionConfig
 from src.server.services.http_client import HTTPClient
-from src.server.services.remote.service_map import ServiceResponseMap
-from ...interfaces.remote_interfaces import RemoteServiceRequest, RemoteServiceResponse
+# from src.server.services.remote.service_map import ServiceResponseMap
+from .contracts import RemoteServiceRequest
+from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
 from ...enums import ServiceName, EndpointType
-from ...maps import  PortMap
+from ...maps import  PortMap, StandardMap
 
 
 logger = logging.getLogger('logger')
+
+
+
 
 
 class RemoteService:
@@ -19,6 +23,16 @@ class RemoteService:
     All parameters passed as inputs to run methods.
     """
     name: ServiceName = ServiceName.ENCODER
+    _http_client: HTTPClient = HTTPClient()
+
+    @classmethod
+    def _get_request(cls, endpoint: EndpointType) -> type[RemoteServiceRequest]:
+        """Get request class for endpoint
+
+        Override in subclasses if service supports multiple endpoints
+        with different request types.
+        """
+        return RemoteServiceRequest
 
     @classmethod
     def _get_url(cls, endpoint: EndpointType) -> str:
@@ -27,34 +41,41 @@ class RemoteService:
         return f"{SessionConfig.get_url()}:{port.value}/{endpoint.value}"
 
     @classmethod
-    def _log_request(cls, endpoint: EndpointType, url: str) -> None:
+    def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest = None) -> None:
         """Log request being made"""
         logger.info(f"Calling {cls.name.value} service: {url}")
-        
+
 
     @classmethod
     def run(
         cls,
         endpoint: EndpointType,
         request: RemoteServiceRequest,
-        file:Any=None
+        file:Any=None,
+        response_class: type[RemoteServiceResponse] = None
     ) -> Any:
         """Template method for standard request/response flow
 
         Args:
             endpoint: Endpoint to call
             request: Typed request object
-            response_class: Response class to parse with
-            http_client: HTTP client instance
-            base_url: Base URL for service
+            file: Optional file upload
+            response_class: Response class to parse with (optional, defaults to service's response class)
 
         Returns:
             Parsed response data
         """
         url = cls._get_url(endpoint)
-        cls._log_request(endpoint, url)
-        response_dict = HTTPClient.post(url, request.to_dict)
-        response_class = ServiceResponseMap.get(cls.__class__)
+        cls._log_request(endpoint, url, request)
+
+        request_dict = request.to_dict
+
+        response_dict = cls._http_client.post(url, request_dict)
+
+        # Use provided response_class or fall back to service's default
+        if response_class is None:
+            response_class = ServiceResponseMap.get(cls.__class__)
+
         response = response_class(response_dict)
         return response.parse()
 
@@ -80,6 +101,22 @@ class RemoteService:
         """
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
-        binary_data = HTTPClient.post_binary(url, request.to_dict)
+
+        # Convert request to dict and log it
+        request_dict = request.to_dict
+
+        binary_data = cls._http_client.post_binary(url, request_dict)
         response = response_class(binary_data)
         return response.parse()
+
+
+class ServiceResponseMap(StandardMap):
+    _content:Dict[ServiceName, type[RemoteServiceResponse]] = {
+        ServiceName.MERGER : MergerResponse,
+        ServiceName.ENCODER: EncoderResponse,
+        ServiceName.OBSTRUCTION: ObstructionResponse,
+        ServiceName.MODEL: ModelResponse,
+        ServiceName.STATS: StatsResponse
+        
+    }
+    _default:type[RemoteServiceResponse] = RemoteServiceResponse

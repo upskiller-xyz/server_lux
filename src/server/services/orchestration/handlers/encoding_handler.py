@@ -1,8 +1,9 @@
+import logging
 import time
 import io
 import numpy as np
 from PIL import Image
-from ....interfaces import ILogger
+from ...remote.contracts import EncoderResponse
 from ....enums import RequestField, ResponseKey, NPZKey
 from ...remote import EncoderService
 from ...helpers.npz_key_extractor import NPZKeyExtractor
@@ -16,8 +17,8 @@ class EncodingHandler(ProcessingHandler):
     Updates context with encoded_image_bytes and mask_array.
     """
 
-    def __init__(self, encoder_service: EncoderService, logger: ILogger):
-        super().__init__(logger)
+    def __init__(self, encoder_service: EncoderService):
+        super().__init__()
         self._encoder = encoder_service
 
     def _process(self, context: WindowContext) -> dict:
@@ -93,37 +94,25 @@ class EncodingHandler(ProcessingHandler):
         return data[:8] == b'\x89PNG\r\n\x1a\n'
 
     def _parse_npz_response(self, encoded_bytes: bytes, context: WindowContext) -> dict:
-        """Parse NPZ format response"""
+        """Parse NPZ format response and create EncoderResponse object"""
         self._logger.info(f"[{context.window_name}] 📦 Detected NPZ format from encoder")
 
-        npz_data = np.load(io.BytesIO(encoded_bytes))
-        keys = list(npz_data.keys())
-        self._logger.info(f"[{context.window_name}] NPZ keys: {keys}")
+        try:
+            # Parse NPZ using EncoderResponse
+            encoder_response = EncoderResponse.parse(encoded_bytes)
+            context.encoder_response = encoder_response
 
-        # Extract image and mask keys
-        image_key, mask_key = NPZKeyExtractor.extract_keys(context.window_name, keys)
+            self._logger.info(f"[{context.window_name}] Extracted image from NPZ: shape={encoder_response.image.shape}, dtype={encoder_response.image.dtype}")
+            self._logger.info(f"[{context.window_name}] Extracted mask from NPZ: shape={encoder_response.mask.shape}")
 
-        if not image_key:
-            return self._error(f"No image found in encoder NPZ response. Available keys: {keys}")
+            # Convert image array to PNG bytes for model service (legacy compatibility)
+            context.encoded_image_bytes = self._convert_array_to_png(encoder_response.image, context.window_name)
+            context.mask_array = encoder_response.mask
 
-        self._logger.info(f"[{context.window_name}] Using keys: image={image_key}, mask={mask_key}")
+            return self._success()
 
-        # Extract image array
-        image_array = npz_data[image_key]
-        self._logger.info(f"[{context.window_name}] Extracted image from NPZ: shape={image_array.shape}, dtype={image_array.dtype}")
-
-        # Extract mask if available
-        if mask_key and mask_key in npz_data:
-            context.mask_array = npz_data[mask_key]
-            self._logger.info(f"[{context.window_name}] Extracted mask from NPZ: shape={context.mask_array.shape}")
-        else:
-            context.mask_array = None
-            self._logger.warning(f"[{context.window_name}] No mask found in NPZ")
-
-        # Convert numpy array to PNG bytes
-        context.encoded_image_bytes = self._convert_array_to_png(image_array, context.window_name)
-
-        return self._success()
+        except Exception as e:
+            return self._error(f"Failed to parse NPZ response: {str(e)}")
 
     def _parse_png_response(self, encoded_bytes: bytes, context: WindowContext) -> dict:
         """Parse PNG format response"""

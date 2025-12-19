@@ -1,40 +1,31 @@
-from typing import Any, Dict, Union
+from typing import Any
 
-from src.server.interfaces.remote_interfaces import RemoteServiceRequest, RemoteServiceResponse
-from ...interfaces.remote_interfaces import EncoderRequest, DirectionAngleRequest, DirectionAngleResponse, BinaryResponse, EncoderParameters
+from .contracts import RemoteServiceRequest, MainRequest
+from .contracts import BinaryResponse
 from ...enums import ServiceName, EndpointType
 from .base import RemoteService
 
 
 class EncoderService(RemoteService):
-    """Service for encoding room data to images"""
+    """Service for encoding room data to images
+
+    Handles /encode endpoint only.
+    Follows Single Responsibility Principle - only handles image encoding.
+    """
     name: ServiceName = ServiceName.ENCODER
 
     @classmethod
-    def _get_request(cls, endpoint:EndpointType):
-        _map = {
-            EndpointType.ENCODE: EncoderRequest,
-            EndpointType.CALCULATE_DIRECTION: DirectionAngleRequest
-        }
-        return _map.get(endpoint, EncoderRequest)
-    
-    @classmethod
-    def _get_response(cls, endpoint:EndpointType):
-        _map = {
-            EndpointType.ENCODE: BinaryResponse,
-            EndpointType.CALCULATE_DIRECTION: DirectionAngleResponse,
-            EndpointType.REFERENCE_POINT: ReferencePointResponse
-        }
-        return _map.get(endpoint, BinaryResponse)
+    def _get_request(cls, endpoint: EndpointType) -> type[RemoteServiceRequest]:
+        """Get request class for endpoint"""
+        return MainRequest
 
     @classmethod
-    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file:Any=None) -> Union[bytes, Dict[str, float]]:
-        """Run encoder service operation"""
-        _rq = cls._get_request(endpoint)
-        _rsp = cls._get_response(endpoint)
-        request = _rq(**request.to_dict)
+    def _get_response(cls, endpoint: EndpointType) -> type[BinaryResponse]:
+        """Get response class for endpoint"""
+        return BinaryResponse
 
-        if endpoint == EndpointType.ENCODE:
-            return super().run_binary(endpoint, request, _rsp)
-            
-        return super().run(endpoint, request, _rsp)
+    @classmethod
+    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None) -> bytes:
+        """Encode room parameters to image"""
+        response_class = cls._get_response(endpoint)
+        return super().run_binary(endpoint, request, response_class)

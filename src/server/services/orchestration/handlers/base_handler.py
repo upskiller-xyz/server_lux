@@ -1,7 +1,9 @@
+import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Any
-from ....interfaces import ILogger
+from ...remote.contracts import ObstructionRequest, ModelRequest
+from ...remote.contracts import ObstructionResponse, EncoderResponse, ModelResponse
 from ....enums import ResponseStatus, ResponseKey
 
 
@@ -9,9 +11,13 @@ from ....enums import ResponseStatus, ResponseKey
 class WindowContext:
     """Context passed through handler chain
 
-    Encapsulates all data needed for window processing.
-    Replaces Dict[str, Any] with typed interface.
+    Encapsulates all data needed for window processing using typed request/response classes.
+    Each handler enriches the context by:
+    1. Using data from previous responses
+    2. Creating new requests
+    3. Storing responses for next handler
     """
+    # Initial window parameters
     window_name: str
     x1: float
     y1: float
@@ -27,6 +33,14 @@ class WindowContext:
 
     # Processing results (populated by handlers)
     direction_angle: Optional[float] = None
+
+    # Typed request/response objects for sequential processing
+    obstruction_response: Optional[ObstructionResponse] = None
+    encoder_response: Optional[EncoderResponse] = None
+    model_request: Optional[ModelRequest] = None
+    model_response: Optional[ModelResponse] = None
+
+    # Legacy fields (for backward compatibility during transition)
     horizon_angles: Optional[list] = None
     zenith_angles: Optional[list] = None
     encoded_image_bytes: Optional[bytes] = None
@@ -53,8 +67,8 @@ class ProcessingHandler(ABC):
     Follows Open/Closed Principle - extend without modifying.
     """
 
-    def __init__(self, logger: ILogger):
-        self._logger = logger
+    def __init__(self, ):
+        self._logger = logging.getLogger(self.__class__.__name__)
         self._next_handler: Optional['ProcessingHandler'] = None
 
     def set_next(self, handler: 'ProcessingHandler') -> 'ProcessingHandler':

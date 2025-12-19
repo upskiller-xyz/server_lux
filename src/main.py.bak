@@ -1,0 +1,167 @@
+import os
+from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
+os.environ['OMP_NUM_THREADS'] = '1'
+
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
+
+from src.server.auth import TokenAuthenticator
+from src.server.response_builder import ErrorResponseBuilder
+from src.server.enums import EndpointType, ServiceName, HTTPStatus, Methods
+from src.server.controllers.base_controller import ServerController
+from src.server.services.remote import (
+    ObstructionService, EncoderService, ModelService, MergerService, StatsService
+)
+from src.server.controllers.endpoint_controller import EndpointController
+from src.__version__ import version
+
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("logger")
+logger.setLevel(logging.INFO)
+
+
+class ServerApplication:
+
+    def __init__(self, app_name: str = "Server Application"):
+        self._app = Flask(app_name)
+        CORS(self._app)
+
+        services = self._setup_dependencies()
+        self._controller = ServerController(services=services)
+        self._controller.initialize()
+
+        self._endpoint_controller = EndpointController()
+        self._authenticator = TokenAuthenticator()
+        self._error_builder = ErrorResponseBuilder()
+        self._setup_routes()
+
+    def _setup_dependencies(self) -> Dict[str, Any]:
+        services = {
+            ServiceName.OBSTRUCTION.value: ObstructionService,
+            ServiceName.ENCODER.value: EncoderService,
+            ServiceName.MODEL.value: ModelService,
+            ServiceName.MERGER.value: MergerService,
+            ServiceName.STATS.value: StatsService
+        }
+        return services
+
+    def _setup_routes(self) -> None:
+        major_version = f"v{version.split('.')[0]}"
+
+        routes = [
+            ("/", EndpointType.STATUS, [Methods.GET.value]),
+            (f"/{major_version}/simulate", EndpointType.SIMULATE, [Methods.POST.value]),
+            (f"/{major_version}/stats", EndpointType.GET_STATS, [Methods.POST.value]),
+            (f"/{major_version}/horizon_angle", EndpointType.HORIZON_ANGLE, [Methods.POST.value]),
+            (f"/{major_version}/zenith_angle", EndpointType.ZENITH_ANGLE, [Methods.POST.value]),
+            (f"/{major_version}/obstruction", EndpointType.OBSTRUCTION_ALL, [Methods.POST.value]),
+            (f"/{major_version}/obstruction_all", EndpointType.OBSTRUCTION_ALL, [Methods.POST.value]),
+            (f"/{major_version}/obstruction_multi", EndpointType.OBSTRUCTION_MULTI, [Methods.POST.value]),
+            (f"/{major_version}/obstruction_parallel", EndpointType.OBSTRUCTION_PARALLEL, [Methods.POST.value]),
+            (f"/{major_version}/encode_raw", EndpointType.ENCODE_RAW, [Methods.POST.value]),
+            (f"/{major_version}/encode", EndpointType.ENCODE, [Methods.POST.value]),
+            (f"/{major_version}/calculate-direction", EndpointType.CALCULATE_DIRECTION, [Methods.POST.value]),
+            (f"/{major_version}/get-reference-point", EndpointType.REFERENCE_POINT, [Methods.POST.value]),
+            (f"/{major_version}/run", EndpointType.RUN, [Methods.POST.value]),
+            (f"/{major_version}/merge", EndpointType.MERGE, [Methods.POST.value]),
+        ]
+
+        for path, endpoint, methods in routes:
+            handler = self._get_status if endpoint == EndpointType.STATUS else self._run
+            self._app.add_url_rule(path, endpoint.value, handler, methods=methods)
+
+    def _get_status(self) -> Response:
+        return jsonify(self._controller.get_status())
+
+    def _run(self) -> tuple[Response, int]:
+        try:
+            path_parts = request.path.strip('/').split('/', 1)
+            endpoint_str = path_parts[1] if len(path_parts) > 1 else path_parts[0]
+
+            endpoint: EndpointType = EndpointType.by_value(endpoint_str)
+            if not endpoint:
+                endpoint = EndpointType.STATUS
+            logger.info(f"Processing endpoint: {endpoint.value}")
+            file = None
+            if 'file' in request.files:
+                file = request.files['file']
+            try:
+                params = request.get_json()
+            except Exception:
+                params = request.form.to_dict()
+            result = self._endpoint_controller.run(endpoint, params, file)
+
+            if isinstance(result, bytes):
+                return Response(result, mimetype='image/png'), HTTPStatus.OK.value
+
+            if isinstance(result, dict) and result.get("status") == "error":
+                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
+
+            return jsonify(result), HTTPStatus.OK.value
+        except Exception as e:
+            import traceback
+            logger.error(f"{endpoint_str} failed: {str(e)}")
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+            return self._error_builder.build_from_exception(e)
+
+    @property
+    def app(self) -> Flask:
+        return self._app
+
+
+class ServerLauncher:
+
+    @staticmethod
+    def create_application() -> ServerApplication:
+        return ServerApplication()
+
+    @staticmethod
+    def run_server(
+        app: ServerApplication,
+        host: str = "0.0.0.0",
+        port: int = 8080,
+        debug: bool = True
+    ) -> None:
+        log_msg = (
+            f"Flask app '{app.app.name}' starting on "
+            f"host {host}, port {port}. Debug mode: {debug}"
+        )
+        app.app.logger.info(log_msg)
+        app.app.run(host=host, port=port, debug=debug, use_reloader=False)
+
+
+def main() -> None:
+    launcher = ServerLauncher()
+    application = launcher.create_application()
+    port = int(os.getenv("PORT", 8081))
+    launcher.run_server(application, port=port, debug=True)
+
+
+def create_app():
+    _application = ServerApplication()
+    return _application.app
+
+
+if __name__ != "__main__":
+    app = create_app()
+else:
+    main()

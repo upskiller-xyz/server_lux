@@ -1,8 +1,11 @@
 from enum import Enum
 from typing import Optional
 
-from src.utils.extended_enum import ExtendedEnum
+from src.utils.extended_enum import ExtendedEnum, ExtendedEnumMixin
 
+class Methods(Enum):
+    GET = "GET"
+    POST = "POST"
 
 class ModelStatus(Enum):
     LOADING = "loading"
@@ -43,7 +46,10 @@ class ContentType(Enum):
 class HTTPStatus(Enum):
     OK = 200
     BAD_REQUEST = 400
+    FORBIDDEN = 403
     INTERNAL_SERVER_ERROR = 500
+    SERVICE_UNAVAILABLE = 503
+    GATEWAY_TIMEOUT = 504
 
 
 class ResponseStatus(Enum):
@@ -87,11 +93,11 @@ class ResponseKey(Enum):
     ZENITH_ANGLE = "zenith_angle"
     DIRECTION_ANGLE = "direction_angle"
     DIRECTION_ANGLES = "direction_angles"
+    DIRECTION_ANGLES_DEGREES = "direction_angles_degrees"
     HORIZON = "horizon"
     ZENITH = "zenith"
     OBSTRUCTION_ANGLE_DEGREES = "obstruction_angle_degrees"
     HIGHEST_POINT = "highest_point"
-    PREDICTION = "prediction"
     AUTHORIZATION_ERROR = "authorization_error"
     CONNECTION_ERROR = "connection_error"
     TIMEOUT_ERROR = "timeout_error"
@@ -99,7 +105,7 @@ class ResponseKey(Enum):
     SUCCESS = "success"
 
 
-class EndpointType(ExtendedEnum):
+class EndpointType(ExtendedEnumMixin, Enum):
     
     SIMULATE = "simulate"  # Renamed from GET_DF for clarity
     STATUS = "status"
@@ -133,8 +139,8 @@ class ServicePort(Enum):
 
 class ServiceHost(Enum):
     """Service hostnames"""
-    LOCALHOST = "localhost"
-    PRODUCTION_SERVER = "51.15.197.220"
+    LOCALHOST = "http://localhost"
+    PRODUCTION_SERVER = "http://51.15.197.220"
 
 
 class ErrorType(Enum):
@@ -161,8 +167,8 @@ class NPZKey(Enum):
     """NPZ file key patterns for encoder responses"""
     IMAGE = "image"
     MASK = "mask"
-    IMAGE_SUFFIX = "_image"
-    MASK_SUFFIX = "_mask"
+    IMAGE_SUFFIX = "image"
+    MASK_SUFFIX = "mask"
 
 
 class RequestField(Enum):
@@ -205,17 +211,22 @@ class RequestField(Enum):
 
     # Simulation fields
     RESULT = "result"
+    IMAGE = "image"
     SIMULATION = "simulation"
     DF_VALUES = "df_values"
     DF_MATRIX = "df_matrix"
     ROOM_MASK = "room_mask"
     MASK = "mask"
+    SHAPE = "shape"
 
     # Image fields
     FILE = "file"
     IMAGE_BASE64 = "image_base64"
     IMAGE_ARRAY = "image_array"
     INVERT_CHANNELS = "invert_channels"
+
+    # Reference point
+    REFERENCE_POINT = "reference_point"
 
     ROOF_HEIGHT = "height_roof_over_floor"
     FLOOR_HEIGHT = "floor_height_above_terrain"

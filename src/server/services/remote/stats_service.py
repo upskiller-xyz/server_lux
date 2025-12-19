@@ -1,6 +1,9 @@
 from typing import Dict, Any
 import numpy as np
-from ...interfaces.remote_interfaces import StatsRequest, StatsResponse
+
+# from .contracts import StatsRequest
+# from .contracts import StatsResponse
+
 from ...enums import ServiceName, EndpointType
 from .base import RemoteService
 

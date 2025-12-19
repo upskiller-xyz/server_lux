@@ -2,7 +2,6 @@ from .config import ObstructionCalculationConfig, WindowGeometry, ObstructionRes
 from .calculator_interface import IObstructionCalculator
 from .single_request_calculator import SingleRequestObstructionCalculator
 from .parallel_calculator import ParallelObstructionCalculator
-from .service import ObstructionCalculationService
 
 __all__ = [
     'ObstructionCalculationConfig',
@@ -10,6 +9,5 @@ __all__ = [
     'ObstructionResult',
     'IObstructionCalculator',
     'SingleRequestObstructionCalculator',
-    'ParallelObstructionCalculator',
-    'ObstructionCalculationService'
+    'ParallelObstructionCalculator'
 ]

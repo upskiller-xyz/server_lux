@@ -3,7 +3,8 @@ import numpy as np
 import cv2
 from PIL import Image
 from io import BytesIO
-from ...interfaces import ILogger
+import zipfile
+
 from ...enums import ImageChannels
 import logging
 logger = logging.getLogger('logger')
@@ -17,7 +18,7 @@ class ImageDataConverter:
     """
 
     @staticmethod
-    def _from_numpy(data: np.ndarray, logger: ILogger) -> bytes:
+    def _from_numpy(data: np.ndarray) -> bytes:
         """Convert numpy array to PNG bytes
 
         Args:
@@ -42,7 +43,7 @@ class ImageDataConverter:
         return buffer.tobytes()
 
     @staticmethod
-    def _from_pil(data: Image.Image, logger: ILogger) -> bytes:
+    def _from_pil(data: Image.Image) -> bytes:
         """Convert PIL Image to PNG bytes
 
         Args:
@@ -57,7 +58,7 @@ class ImageDataConverter:
         return buffer.getvalue()
 
     @staticmethod
-    def _from_bytes(data: bytes, logger: ILogger) -> bytes:
+    def _from_bytes(data: bytes) -> bytes:
         """Return bytes as-is
 
         Args:
@@ -77,7 +78,7 @@ class ImageDataConverter:
     ]
 
     @classmethod
-    def to_bytes(cls, image_data: Any, logger: ILogger) -> bytes:
+    def to_bytes(cls, image_data: Any) -> bytes:
         """Convert image data to bytes using adapter-map pattern
 
         Args:
@@ -92,112 +93,57 @@ class ImageDataConverter:
         """
         for type_check, converter in cls.CONVERTER_MAP:
             if type_check(image_data):
-                return converter(image_data, logger)
+                return converter(image_data)
 
         raise ValueError(
             f"Unsupported image_data type: {type(image_data)}. "
             f"Expected numpy.ndarray, PIL.Image, or bytes."
         )
 
+class EncoderOutputConverter:
+    """Converts encoder service output (ZIP with NPY) to PNG bytes
 
-class ImageChannelInverter:
-    """Handles image channel inversion using numpy slicing
-
-    Uses numpy array slicing [:, :, ::-1] for efficient channel reversal.
-    Checks number of channels instead of image mode strings.
-    Follows Single Responsibility Principle - only inverts image channels.
+    The encoder service returns a ZIP file containing image.npy.
+    This converter extracts the numpy array and converts it to PNG.
+    Follows Single Responsibility Principle - only converts encoder output format.
     """
 
     @staticmethod
-    def _invert_3_channels(img: np.ndarray) -> np.ndarray:
-        """Invert 3-channel image (RGB -> BGR) using numpy slicing
+    def convert_to_png(zip_bytes: bytes) -> bytes:
+        """Convert ZIP/NPY encoder output to PNG bytes
 
         Args:
-            img: 3-channel image array
+            zip_bytes: ZIP file bytes containing image.npy
 
         Returns:
-            Channel-inverted image
+            PNG image as bytes
+
+        Raises:
+            ValueError: If conversion fails
         """
-        return img[:, :, ::-1]
+        try:
+            # Extract numpy array from ZIP
+            zip_buffer = BytesIO(zip_bytes)
+            with zipfile.ZipFile(zip_buffer, 'r') as zip_file:
+                with zip_file.open('image.npy') as npy_file:
+                    image_array = np.load(npy_file)
+                    logger.info(f"Loaded encoder output: shape={image_array.shape}, dtype={image_array.dtype}")
 
-    @staticmethod
-    def _invert_4_channels(img: np.ndarray) -> np.ndarray:
-        """Invert 4-channel image (RGBA -> BGRA) using numpy slicing
+                    # Normalize if needed (convert to 0-255 uint8 range)
+                    if image_array.max() <= 1.0:
+                        image_array = (image_array * 255).astype(np.uint8)
+                    else:
+                        image_array = image_array.astype(np.uint8)
 
-        Reverses first 3 channels (RGB), keeps alpha channel in place.
+                    # Convert to PNG using cv2
+                    success, buffer = cv2.imencode('.png', image_array)
+                    if not success:
+                        raise ValueError("Failed to encode array to PNG")
 
-        Args:
-            img: 4-channel image array
+                    png_bytes = buffer.tobytes()
+                    logger.info(f"Converted encoder output to PNG: {len(png_bytes)} bytes")
+                    return png_bytes
 
-        Returns:
-            Channel-inverted image
-        """
-        result = img.copy()
-        result[:, :, :3] = img[:, :, 2::-1]  # Reverse RGB channels
-        return result
-
-    @staticmethod
-    def _no_inversion(img: np.ndarray) -> np.ndarray:
-        """No inversion for 1, 2, or unsupported channel counts
-
-        Args:
-            img: Image array
-
-        Returns:
-            Unchanged image array
-        """
-        return img
-
-    # Map: Channel count -> Inversion function
-    INVERSION_MAP: Dict[int, Callable[[np.ndarray], np.ndarray]] = {
-        ImageChannels.RGB.value: _invert_3_channels,
-        ImageChannels.RGBA.value: _invert_4_channels,
-    }
-
-    @classmethod
-    def invert(cls, image_bytes: bytes, logger: ILogger, invert: bool = True) -> bytes:
-        """Invert image channels if requested using adapter-map pattern
-
-        Args:
-            image_bytes: Image data as bytes
-            logger: Logger instance
-            invert: If True, invert channels (default: True)
-
-        Returns:
-            Image bytes (inverted if requested)
-        """
-        if not invert:
-            return image_bytes
-
-        # Decode image using cv2
-        img_array = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_UNCHANGED)
-        if img_array is None:
-            logger.error("Failed to decode image bytes")
-            return image_bytes
-
-        # Get number of channels
-        if len(img_array.shape) == 2:
-            channels = 1  # Grayscale
-        else:
-            channels = img_array.shape[2]
-
-        logger.info(f"Image has {channels} channel(s)")
-
-        # Get inverter function from map
-        inverter = cls.INVERSION_MAP.get(channels, cls._no_inversion)
-
-        if inverter == cls._no_inversion:
-            logger.warning(f"Image has {channels} channel(s), only 3 (RGB) and 4 (RGBA) are invertible. Skipping inversion.")
-            return image_bytes
-
-        # Invert channels
-        img_inverted = inverter(img_array)
-        logger.info(f"Inverted {channels}-channel image")
-
-        # Encode back to PNG
-        success, buffer = cv2.imencode('.png', img_inverted)
-        if not success:
-            logger.error("Failed to encode inverted image")
-            return image_bytes
-
-        return buffer.tobytes()
+        except Exception as e:
+            logger.error(f"Failed to convert encoder output to PNG: {e}")
+            raise ValueError(f"Failed to convert encoder output: {e}")

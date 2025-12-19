@@ -2,11 +2,11 @@ from typing import Dict, Any, Optional
 import logging
 logger = logging.getLogger("logger")
 
-from src.server.interfaces import IServerController, ILogger
-from src.server.enums import ServerStatus
+# from src.server.interfaces import IServerController
+from src.server.enums import ResponseKey, ServerStatus
 
 
-class ServerController(IServerController):
+class ServerController:
     """Generic server controller implementing IServerController interface"""
 
     def __init__(
@@ -55,6 +55,6 @@ class ServerController(IServerController):
                 components[service_name] = "ready"
 
         return {
-            "status": self._status.value,
+            ResponseKey.STATUS.value: self._status.value,
             "services": components
         }

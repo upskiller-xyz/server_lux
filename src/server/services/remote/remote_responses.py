@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 import numpy as np
 import base64
+import io
 
-from ..enums import RequestField, ResponseKey, NPZKey
+from ...enums import RequestField, ResponseKey, NPZKey
 
 
 # Base classes
@@ -35,6 +36,13 @@ class RemoteServiceResponse(ABC):
 
     def _get_optional(self, key: str, default: Any = None) -> Any:
         return self._raw.get(key, default)
+
+    def parse(self) -> Dict[str, Any]:
+        """Default parse method - return raw response
+
+        Override in subclasses for custom parsing logic.
+        """
+        return self._raw
 
 
 # Response types
@@ -117,48 +125,62 @@ class DirectionAngleResponse(StandardResponse):
 
     Used for /calculate-direction endpoint.
     """
-    direction_angle: float
+    direction_angle: Dict[str, float] = None
 
-    @classmethod
-    def parse(cls, content: Dict[str, Any]) -> 'DirectionAngleResponse':
+    def __init__(self, raw_response: Dict[str, Any]):
+        """Initialize from raw response"""
+        super().__init__(raw_response)
+        self.direction_angles = raw_response.get(ResponseKey.DIRECTION_ANGLE.value, {})
+        self.direction_angles_degrees = raw_response.get(ResponseKey.DIRECTION_ANGLE.value, {})
+
+    def parse(self) -> Dict[str, Any]:
         """Parse response data from direction angle service"""
-        direction_angle = content.get(RequestField.DIRECTION_ANGLE.value, {})
-        return cls(direction_angle=direction_angle)
-
-    @property
-    def to_dict(self) -> Dict[str, Any]:
-        return {RequestField.DIRECTION_ANGLE.value: self.direction_angle}
-
-
-@dataclass
-class ReferencePointResponse:
-    """Response from reference point calculation
-
-    Returns the center point coordinates of a window.
-    """
-    x: float
-    y: float
-    z: float
-
-    @classmethod
-    def parse(cls, content: Dict[str, Any]) -> 'ReferencePointResponse':
-        """Parse response data from reference point calculation"""
-        x = content.get(RequestField.X.value, 0)
-        y = content.get(RequestField.Y.value, 0)
-        z = content.get(RequestField.Z.value, 0)
-        return cls(x, y, z)
+        return {
+            ResponseKey.DIRECTION_ANGLE.value: self.direction_angles
+        }
 
     @property
     def to_dict(self) -> Dict[str, Any]:
         return {
-            RequestField.X.value: self.x,
-            RequestField.Y.value: self.y,
-            RequestField.Z.value: self.z,
+            ResponseKey.DIRECTION_ANGLE.value: self.direction_angle
         }
 
 
 @dataclass
-class EncoderResponse:
+class ReferencePointResponse(StandardResponse):
+    """Response from reference point calculation
+
+    Returns the center point coordinates for each window.
+
+    Expected format:
+    {
+        "reference_point": {
+            "window_id": {"x": 0.0, "y": 0.0, "z": 1.75}
+        }
+    }
+    """
+    reference_point: Dict[str, Dict[str, float]]
+
+    def __init__(self, raw_response: Dict[str, Any]):
+        """Initialize from raw response"""
+        super().__init__(raw_response)
+        self.reference_point = raw_response.get(RequestField.REFERENCE_POINT.value, {})
+
+    def parse(self) -> Dict[str, Any]:
+        """Parse response and return reference points"""
+        return {
+            RequestField.REFERENCE_POINT.value: self.reference_point
+        }
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            RequestField.REFERENCE_POINT.value: self.reference_point
+        }
+
+
+@dataclass
+class EncoderResponse(StandardResponse):
     """Response from encoder service
 
     Used for /encode endpoint. Returns encoded image and mask as numpy arrays.
@@ -180,7 +202,7 @@ class EncoderResponse:
         Returns:
             EncoderResponse with image and mask arrays
         """
-        import io
+        
 
         npz_data = np.load(io.BytesIO(response_content))
         keys = list(npz_data.keys())
@@ -219,35 +241,60 @@ class ModelResponse(StandardResponse):
     """
     content: np.ndarray
     shape: Optional[List[int]] = None
+    mask: Optional[np.ndarray] = None
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> 'ModelResponse':
-        """Parse response data from model service"""
+    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse response data from model service
 
-        # Get content (may be base64 encoded or already numpy)
+        Returns dict with 'simulation', 'shape', and 'mask' keys for orchestration.
+        """
         raw_content = content.get(ResponseKey.RESULT.value)
-        shape = content.get("shape")
+        shape = content.get(RequestField.SHAPE.value)
+        raw_mask = content.get(RequestField.MASK.value)
+        
+        result_array = cls._parse_simulation(raw_content, shape)
+        mask_array = cls._parse_mask(raw_mask)
 
+        return {
+            RequestField.SIMULATION.value: result_array.tolist(),
+            RequestField.MASK.value: mask_array.tolist() if mask_array is not None else None,
+            ResponseKey.STATUS.value: content.get(ResponseKey.STATUS.value, ResponseKey.SUCCESS.value)
+        }
+    @classmethod
+    def _parse_simulation(cls, raw_content:Any, shape:list[int] | None=None):
         if isinstance(raw_content, str):
-            # Decode base64 to numpy array
             content_bytes = base64.b64decode(raw_content)
             result_array = np.frombuffer(content_bytes, dtype=np.float32)
             if shape:
-                result_array = result_array.reshape(shape)
+                return result_array.reshape(shape)
         elif isinstance(raw_content, (list, np.ndarray)):
-            result_array = np.array(raw_content, dtype=np.float32)
-            if shape is None:
-                shape = list(result_array.shape)
+            return np.array(raw_content, dtype=np.float32)
         else:
-            result_array = np.array([])
+            return np.array([])
+        
+    @classmethod
+    def _parse_mask(cls, raw_mask:Any, shape:list[int] | None=None):
+        mask_array = None
+        if raw_mask is not None:
+            if isinstance(raw_mask, str):
+                mask_bytes = base64.b64decode(raw_mask)
+                mask_array = np.frombuffer(mask_bytes, dtype=np.float32)
+                if shape:
+                    mask_array = mask_array.reshape(shape)
+                return mask_array
+            elif isinstance(raw_mask, (list, np.ndarray)):
+                return np.array(raw_mask, dtype=np.float32)
 
-        return cls(content=result_array, shape=shape)
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             ResponseKey.RESULT.value: self.content.tolist()
         }
+        if self.mask is not None:
+            result[RequestField.MASK.value] = self.mask.tolist()
+        return result
 
 
 @dataclass
@@ -260,15 +307,19 @@ class MergerResponse(StandardResponse):
     mask: np.ndarray
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> 'MergerResponse':
-        """Parse response data from merger service"""
+    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse response data from merger service
+
+        Returns dict for consistency with orchestration flow.
+        """
         df_matrix = content.get(ResponseKey.RESULT.value) or content.get(RequestField.DF_MATRIX.value, [])
         room_mask = content.get(RequestField.MASK.value) or content.get(RequestField.ROOM_MASK.value, [])
 
-        return cls(
-            result=np.array(df_matrix, dtype=np.float32),
-            mask=np.array(room_mask, dtype=np.float32)
-        )
+        # Return dict (not MergerResponse object) for orchestration
+        return {
+            RequestField.RESULT.value: df_matrix,
+            RequestField.MASK.value: room_mask
+        }
 
     @property
     def to_dict(self) -> Dict[str, Any]:
