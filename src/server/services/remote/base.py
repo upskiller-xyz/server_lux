@@ -1,14 +1,15 @@
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
 import logging
 
 from src.server.config import SessionConfig
 from src.server.services.http_client import HTTPClient
-# from src.server.services.remote.service_map import ServiceResponseMap
 from .contracts import RemoteServiceRequest
 from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
 from ...enums import ServiceName, EndpointType
 from ...maps import  PortMap, StandardMap
 
+if TYPE_CHECKING:
+    from .service_map import ServiceRequestMap
 
 logger = logging.getLogger('logger')
 
@@ -27,12 +28,12 @@ class RemoteService:
 
     @classmethod
     def _get_request(cls, endpoint: EndpointType) -> type[RemoteServiceRequest]:
-        """Get request class for endpoint
+        """Get request class for endpoint using ServiceRequestMap
 
-        Override in subclasses if service supports multiple endpoints
-        with different request types.
+        Uses Strategy Pattern - maps service name to request class.
         """
-        return RemoteServiceRequest
+        from .service_map import ServiceRequestMap
+        return ServiceRequestMap.get(cls.name)
 
     @classmethod
     def _get_url(cls, endpoint: EndpointType) -> str:
@@ -68,9 +69,14 @@ class RemoteService:
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url, request)
 
+        logger.info(f"[{cls.name.value}] Calling remote endpoint: {url}")
+        logger.info(f"[{cls.name.value}] Request data: {request.to_dict}")
+
         request_dict = request.to_dict
 
         response_dict = cls._http_client.post(url, request_dict)
+
+        logger.info(f"[{cls.name.value}] Response received: {response_dict}")
 
         # Use provided response_class or fall back to service's default
         if response_class is None:

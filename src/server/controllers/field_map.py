@@ -18,7 +18,7 @@ class FieldMap(StandardMap):
         EndpointType.HORIZON_ANGLE: [],
         EndpointType.ZENITH_ANGLE: [],
         EndpointType.MERGE: [RequestField.SIMULATION, RequestField.ROOM_POLYGON, RequestField.WINDOWS],
-        EndpointType.STATS_CALCULATE: [RequestField.DF_VALUES, RequestField.MASK],
+        EndpointType.STATS_CALCULATE: [RequestField.RESULT, RequestField.MASK],
         EndpointType.STATUS: []
     }
     _default = []
