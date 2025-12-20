@@ -175,25 +175,21 @@ Calculate comprehensive statistics for daylight factor data.
 {
   "status": "success",
   "metrics": {
+    "max": float,
     "mean": float,
     "median": float,
-    "mae": float,
-    "range_polygon": [[int, ...]],
-    "quantized_iou": float,
-    "threshold_accuracy": float,
-    "compliance_analysis": float
+    "min": float,
+    "valid_area": float
   }
 }
 ```
 
 **Metrics Description:**
+- `max`: Maximum daylight factor value
 - `mean`: Average daylight factor across valid cells
 - `median`: Median daylight factor value
-- `mae`: Mean absolute error for validation
-- `range_polygon`: Binary classification of cells meeting thresholds
-- `quantized_iou`: Intersection over Union score
-- `threshold_accuracy`: Percentage meeting threshold criteria
-- `compliance_analysis`: Overall compliance score (0-100%)
+- `min`: Minimum daylight factor value
+- `valid_area`: Percentage of valid area based on mask
 
 ## Service Workflow
 

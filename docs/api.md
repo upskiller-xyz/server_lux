@@ -283,13 +283,11 @@ Calculate statistical metrics and compliance analysis for daylight simulation re
 {
   "status": "success",
   "metrics": {
-    "mean": 4.93,
-    "median": 4.2,
-    "mae": 0.0,
-    "range_polygon": [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],
-    "quantized_iou": 1.0,
-    "threshold_accuracy": 100.0,
-    "compliance_analysis": 100.0
+    "max": 9.2,
+    "mean": 3.39,
+    "median": 1.5,
+    "min": 0.1,
+    "valid_area": 50.0
   }
 }
 ```
@@ -299,13 +297,11 @@ Calculate statistical metrics and compliance analysis for daylight simulation re
 - `mask`: Optional 2D boolean array marking valid room area (1 = valid, 0 = invalid)
 
 **Response Metrics:**
+- `max`: Maximum daylight factor value
 - `mean`: Average daylight factor across all valid cells
 - `median`: Median daylight factor value
-- `mae`: Mean absolute error (for validation)
-- `range_polygon`: Binary classification of cells meeting daylight thresholds
-- `quantized_iou`: Intersection over Union score for quantized predictions
-- `threshold_accuracy`: Percentage of cells meeting threshold criteria
-- `compliance_analysis`: Overall compliance score (0-100%)
+- `min`: Minimum daylight factor value
+- `valid_area`: Percentage of valid area (based on mask)
 
 #### `POST /v1/merge`
 
