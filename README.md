@@ -74,6 +74,8 @@ The Daylight Server is a gateway service that orchestrates requests to remote mi
 - **Daylight Factor Analysis** - Process building images to estimate daylight distribution
 - **Color Management** - Convert between numeric values and RGB color representations
 - **Dataframe Evaluation** - Statistical analysis of daylight data
+- **Room Encoding** - Convert room parameters to encoded PNG images for model input
+- **Obstruction Analysis** - Calculate horizon and zenith obstruction angles
 
 The server acts as a unified interface, handling multipart file uploads, forwarding requests to specialized remote services, and managing response orchestration.
 
@@ -204,24 +206,172 @@ response = requests.post(
 values = response.json()["data"]
 ```
 
+#### encode - Encode Room Parameters (Protected)
+Convert room and window parameters to encoded PNG image:
+
+```python
+import requests
+
+url = "http://localhost:8081/encode"
+token = "your_api_token_here"  # Set via API_TOKEN env variable
+
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "model_type": "df_default",
+    "parameters": {
+        "height_roof_over_floor": 2.7,
+        "floor_height_above_terrain": 3.0,
+        "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
+        "windows": {
+            "main_window": {
+                "x1": -0.6, "y1": 0.0, "z1": 0.9,
+                "x2": 0.6, "y2": 0.0, "z2": 2.4,
+                "window_sill_height": 0.9,
+                "window_frame_ratio": 0.15,
+                "window_height": 1.5,
+                "obstruction_angle_horizon": 15.0,
+                "obstruction_angle_zenith": 10.0
+            }
+        }
+    }
+}
+
+response = requests.post(url, headers=headers, json=payload)
+
+if response.status_code == 200:
+    with open("encoded_room.png", "wb") as f:
+        f.write(response.content)
+    print("Image saved successfully!")
+```
+
+**Note:** This endpoint requires token authentication. Set the `API_TOKEN` environment variable on the server.
+
 ### Deployment
 
-#### Environment Configuration
-Configure the server port:
-```sh
-export PORT=8081  # Default port
-```
+#### Local Development
 
-#### Docker Deployment
-Build and run using Docker:
-```sh
-docker build -t daylight-server .
-docker run -p 8081:8081 daylight-server
-```
+Set up the server for local development and testing:
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/upskiller-xyz/server_lux.git
+   cd server_lux
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Set Environment Variables**
+   ```bash
+   export PORT=8081
+   export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
+   export DEPLOYMENT_MODE=production  # Uses production GCP services
+   ```
+
+4. **Run the Server**
+   ```bash
+   python src/main.py
+   ```
+   The server will start on `http://localhost:8081` and connect to production microservices.
+
+#### Docker Compose - Local Microservices Stack
+
+Run the complete microservices stack locally with Docker Compose:
+
+1. **Prerequisites**
+   - [Docker](https://docs.docker.com/get-docker/)
+   - [Docker Compose](https://docs.docker.com/compose/install/)
+
+2. **Setup Environment**
+   ```bash
+   # Copy environment template
+   cp .env.example .env
+
+   # Edit .env and set your API token
+   # DEPLOYMENT_MODE=local is already configured
+   ```
+
+3. **Authenticate with GCP**
+   ```bash
+   gcloud auth configure-docker europe-north2-docker.pkg.dev
+   ```
+
+4. **Pull Service Images**
+   ```bash
+   # Pull all microservice images from GCP Artifact Registry
+   docker-compose pull
+   ```
+
+4. **Start All Services**
+   ```bash
+   docker-compose up -d
+   ```
+
+5. **Check Service Health**
+   ```bash
+   docker-compose ps
+   ```
+
+6. **View Logs**
+   ```bash
+   # All services
+   docker-compose logs -f
+
+   # Specific service
+   docker-compose logs -f main
+   ```
+
+7. **Stop Services**
+   ```bash
+   docker-compose down
+   ```
+
+**Service Ports (Local):**
+- Main Server: `http://localhost:8080`
+- Color Management: `http://localhost:8001`
+- Daylight Simulation: `http://localhost:8002`
+- Metrics/Evaluation: `http://localhost:8003`
+- Obstruction Calculation: `http://localhost:8004`
+- Encoder: `http://localhost:8005`
+- Postprocessing: `http://localhost:8006`
+
+**Architecture:**
+The Docker Compose setup creates an internal network where all services communicate using service names (e.g., `http://colormanage:8080`). The main server automatically detects `DEPLOYMENT_MODE=local` and routes requests to local services instead of GCP Cloud Run.
+
+See [docs/deployment.md](docs/deployment.md) for detailed deployment documentation.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-#### Locally
+#### Production Deployment (GCP Cloud Run)
+
+For production deployment to Google Cloud Platform:
+
+1. **Build and Push Docker Image**
+   ```bash
+   docker build -t gcr.io/YOUR_PROJECT/server-lux .
+   docker push gcr.io/YOUR_PROJECT/server-lux
+   ```
+
+2. **Deploy to Cloud Run**
+   ```bash
+   gcloud run deploy server-lux \
+     --image gcr.io/YOUR_PROJECT/server-lux \
+     --platform managed \
+     --region europe-north2 \
+     --set-env-vars DEPLOYMENT_MODE=production,API_TOKEN=your_token
+   ```
+
+The server will automatically use production GCP service URLs when `DEPLOYMENT_MODE=production`.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+#### Locally (Legacy)
 
 Set up the Daylight Server locally for development and testing:
 
@@ -239,6 +389,7 @@ Set up the Daylight Server locally for development and testing:
 3. **Set Environment Variables (Optional)**
    ```bash
    export PORT=8081
+   export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
    ```
 
 4. **Run the Server**
@@ -262,8 +413,11 @@ ServerApplication
 ├── Remote Services
 │   ├── ColorManageService
 │   ├── DaylightService
-│   └── DFEvalService
+│   ├── DFEvalService
+│   ├── ObstructionService
+│   └── EncoderService
 ├── OrchestrationService (multi-service workflows)
+├── TokenAuthenticator (bearer token authentication)
 └── EndpointController (request handling)
 ```
 

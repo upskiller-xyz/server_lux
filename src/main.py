@@ -1,7 +1,9 @@
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
 
-# Disable GPU/CUDA to prevent bus errors on WSL2
+load_dotenv()
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
@@ -10,258 +12,87 @@ os.environ['OMP_NUM_THREADS'] = '1'
 import sys
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from flask import Flask, request, jsonify
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-from werkzeug.exceptions import BadRequest
 
-from src.server.enums import ContentType, HTTPStatus
+from src.server.auth import TokenAuthenticator
+from src.server.enums import ServiceName
+from src.server.controllers.base_controller import ServerController
+from src.server.services.remote import (
+    ObstructionService, EncoderService, ModelService, MergerService, StatsService
+)
+from src.server.request_handler import EndpointRequestHandler
+from src.server.route_configurator import RouteBuilder, RouteConfigurator
+from src.__version__ import version
+
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("logger")
+logger.setLevel(logging.INFO)
 
 
+class ServiceRegistry:
+    """Registry for service dependencies"""
+
+    @staticmethod
+    def create_service_map() -> Dict[str, Any]:
+        """Create mapping of service names to service classes"""
+        return {
+            ServiceName.OBSTRUCTION.value: ObstructionService,
+            ServiceName.ENCODER.value: EncoderService,
+            ServiceName.MODEL.value: ModelService,
+            ServiceName.MERGER.value: MergerService,
+            ServiceName.STATS.value: StatsService
+        }
 
 
 class ServerApplication:
-    """Main application class implementing dependency injection and OOP principles"""
+    """Main server application encapsulating Flask app and dependencies"""
 
     def __init__(self, app_name: str = "Server Application"):
         self._app = Flask(app_name)
         CORS(self._app)
-        self._controller = None
-        self._endpoint_controller = None
-        self._logger = None
-        self._setup_dependencies()
+
+        self._initialize_components()
         self._setup_routes()
 
-    def _setup_dependencies(self) -> None:
-        """Setup all dependencies using dependency injection"""
-        from src.server.services.logging import StructuredLogger
-        from src.server.enums import LogLevel
-        from src.server.controllers.base_controller import ServerController
-        from src.server.services.http_client import HTTPClient
-        from src.server.services.remote_service import (
-            ColorManageService, DaylightService, DFEvalService, ObstructionService
-        )
-        from src.server.services.orchestration import OrchestrationService
-        from src.server.controllers.endpoint_controller import EndpointController
+    def _initialize_components(self) -> None:
+        """Initialize all application components"""
+        services = ServiceRegistry.create_service_map()
 
-        # Logger
-        self._logger = StructuredLogger("Server", LogLevel.INFO)
-
-        # HTTP Client
-        http_client = HTTPClient(self._logger)
-
-        # Remote Services
-        colormanage_service = ColorManageService(http_client, self._logger)
-        daylight_service = DaylightService(http_client, self._logger)
-        df_eval_service = DFEvalService(http_client, self._logger)
-        obstruction_service = ObstructionService(http_client, self._logger)
-
-        # Orchestration Service
-        orchestration_service = OrchestrationService(
-            colormanage_service, daylight_service, self._logger
-        )
-
-        # Endpoint Controller
-        self._endpoint_controller = EndpointController(
-            colormanage_service,
-            daylight_service,
-            df_eval_service,
-            obstruction_service,
-            orchestration_service,
-            self._logger
-        )
-
-        services = {
-            "http_client": http_client,
-            "colormanage_service": colormanage_service,
-            "daylight_service": daylight_service,
-            "df_eval_service": df_eval_service,
-            "obstruction_service": obstruction_service,
-            "orchestration_service": orchestration_service
-        }
-
-        # Controller
-        self._controller = ServerController(
-            logger=self._logger,
-            services=services
-        )
-
-        # Initialize controller
+        self._controller = ServerController(services=services)
         self._controller.initialize()
 
+        self._authenticator = TokenAuthenticator()
+        self._request_handler = EndpointRequestHandler()
+
     def _setup_routes(self) -> None:
-        """Setup Flask routes using strategy pattern"""
-        routes = [
-            ("/", "get_status", self._get_status, ["GET"]),
-            ("/to_rgb", "to_rgb", self._to_rgb, ["POST"]),
-            ("/to_values", "to_values", self._to_values, ["POST"]),
-            ("/get_df", "get_df", self._get_df, ["POST"]),
-            ("/get_stats", "get_stats", self._get_stats, ["POST"]),
-            ("/get_df_rgb", "get_df_rgb", self._get_df_rgb, ["POST"]),
-            ("/horizon_angle", "horizon_angle", self._horizon_angle, ["POST"]),
-            ("/zenith_angle", "zenith_angle", self._zenith_angle, ["POST"]),
-            ("/obstruction", "obstruction", self._obstruction, ["POST"])
-        ]
+        """Setup Flask routes using route configurator"""
+        route_builder = RouteBuilder(version)
+        route_configurator = RouteConfigurator(route_builder)
 
-        [self._app.add_url_rule(path, name, handler, methods=methods)
-         for path, name, handler, methods in routes]
+        route_configurator.configure(
+            self._app,
+            status_handler=self._get_status,
+            request_handler=self._handle_request
+        )
 
-    def _get_status(self) -> Dict[str, Any]:
-        """Get server status endpoint"""
+    def _get_status(self) -> Response:
+        """Handle status endpoint"""
         return jsonify(self._controller.get_status())
 
-    def _to_rgb(self) -> Dict[str, Any]:
-        """Convert values to RGB endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.to_rgb(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"to_rgb failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _to_values(self) -> Dict[str, Any]:
-        """Convert RGB to values endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.to_values(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"to_values failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _get_df(self) -> Dict[str, Any]:
-        """Get dataframe endpoint"""
-        try:
-            # Handle multipart form data with file upload
-            if 'file' not in request.files:
-                raise BadRequest("No file provided in request")
-
-            file = request.files['file']
-            form_data = request.form.to_dict()
-
-            result = self._endpoint_controller.get_df(file, form_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"get_df failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _get_stats(self) -> Dict[str, Any]:
-        """Get statistics endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.get_stats(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"get_stats failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _get_df_rgb(self) -> Dict[str, Any]:
-        """Get dataframe and convert to RGB endpoint"""
-        try:
-            # Handle multipart form data with file upload
-            if 'file' not in request.files:
-                raise BadRequest("No file provided in request")
-
-            file = request.files['file']
-            form_data = request.form.to_dict()
-
-            result = self._endpoint_controller.get_df_rgb(file, form_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"get_df_rgb failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _horizon_angle(self) -> Dict[str, Any]:
-        """Calculate horizon angle endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.horizon_angle(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"horizon_angle failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _zenith_angle(self) -> Dict[str, Any]:
-        """Calculate zenith angle endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.zenith_angle(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"zenith_angle failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-    def _obstruction(self) -> Dict[str, Any]:
-        """Calculate both horizon and zenith angles endpoint"""
-        try:
-            request_data = request.get_json()
-            if not request_data:
-                raise BadRequest("No JSON data provided")
-
-            result = self._endpoint_controller.obstruction(request_data)
-
-            if result.get("status") == "error":
-                return jsonify(result), HTTPStatus.INTERNAL_SERVER_ERROR.value
-
-            return jsonify(result)
-
-        except Exception as e:
-            self._logger.error(f"obstruction failed: {str(e)}")
-            return jsonify({"status": "error", "error": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR.value
+    def _handle_request(self) -> tuple[Response, int]:
+        """Handle all non-status endpoint requests"""
+        
+        return self._request_handler.handle(request)
 
     @property
     def app(self) -> Flask:
@@ -270,11 +101,11 @@ class ServerApplication:
 
 
 class ServerLauncher:
-    """Launcher class for the server application"""
+    """Launcher for creating and running the server"""
 
     @staticmethod
     def create_application() -> ServerApplication:
-        """Create and configure the application"""
+        """Create server application instance"""
         return ServerApplication()
 
     @staticmethod
@@ -284,36 +115,37 @@ class ServerLauncher:
         port: int = 8080,
         debug: bool = True
     ) -> None:
-        """Run the server"""
-        """Run the server"""
+        """Run the server with specified configuration
+
+        Args:
+            app: Server application instance
+            host: Host address to bind to
+            port: Port number to bind to
+            debug: Enable debug mode
+        """
         log_msg = (
             f"Flask app '{app.app.name}' starting on "
             f"host {host}, port {port}. Debug mode: {debug}"
         )
         app.app.logger.info(log_msg)
-        # Disable reloader to prevent bus errors/hangs on WSL2
         app.app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 
 def main() -> None:
-    """Main entry point"""
+    """Main entry point for running the server"""
     launcher = ServerLauncher()
     application = launcher.create_application()
-    port = int(os.getenv("PORT", 8081))
+    port = int(os.getenv("PORT", 8080))
     launcher.run_server(application, port=port, debug=True)
 
 
-# Create app instance for gunicorn only when needed
-# Don't create at module import time to avoid bus errors
 def create_app():
-    """Factory function for creating the Flask app (for gunicorn)"""
+    """Factory function for creating Flask app (used by WSGI servers)"""
     _application = ServerApplication()
     return _application.app
 
 
-# Only create app instance if not running as main (i.e., when imported by gunicorn)
 if __name__ != "__main__":
     app = create_app()
 else:
-    # Running as main script
     main()

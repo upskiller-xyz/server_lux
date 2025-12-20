@@ -1,18 +1,15 @@
 import os
 import requests
-from typing import Optional
 from ..interfaces import IDownloadStrategy, ILogger
 
 
 class HTTPDownloadStrategy(IDownloadStrategy):
-    """HTTP-based download strategy"""
 
     def __init__(self, logger: ILogger, chunk_size: int = 8192):
         self._logger = logger
         self._chunk_size = chunk_size
 
     def download(self, url: str, local_path: str) -> str:
-        """Download file from HTTP URL to local path"""
         if os.path.exists(local_path):
             self._logger.info(f"File already exists at {local_path}")
             return local_path

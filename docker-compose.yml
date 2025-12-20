@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  # Main orchestration server
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server_lux_main
+    ports:
+      - "8080:8080"
+    environment:
+      - DEPLOYMENT_MODE=local
+      - PORT=8080
+      - API_TOKEN=${API_TOKEN:-your_token_here}
+    depends_on:
+      colormanage:
+        condition: service_healthy
+      daylight:
+        condition: service_healthy
+      metrics:
+        condition: service_healthy
+      obstruction:
+        condition: service_healthy
+      encoder:
+        condition: service_healthy
+      postprocess:
+        condition: service_healthy
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Color management service
+  colormanage:
+    image: ${COLORMANAGE_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-colormanage-img:latest}
+    container_name: server_colormanage
+    ports:
+      - "8001:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Daylight simulation service
+  daylight:
+    image: ${DAYLIGHT_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-model-img:latest}
+    container_name: server_daylight
+    ports:
+      - "8002:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Metrics/evaluation service
+  metrics:
+    image: ${METRICS_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-metrics-img:latest}
+    container_name: server_metrics
+    ports:
+      - "8003:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Obstruction calculation service
+  obstruction:
+    image: ${OBSTRUCTION_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-obstruction-img:latest}
+    container_name: server_obstruction
+    ports:
+      - "8004:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Encoder service
+  encoder:
+    image: ${ENCODER_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-encoder-img:latest}
+    container_name: server_encoder
+    ports:
+      - "8005:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Postprocessing service
+  postprocess:
+    image: ${POSTPROCESS_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-postprocess-img:latest}
+    container_name: server_postprocess
+    ports:
+      - "8006:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  microservices:
+    driver: bridge
