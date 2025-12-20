@@ -1,0 +1,109 @@
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+import numpy as np
+import base64
+
+from .base_contracts import RemoteServiceRequest, StandardResponse
+from ....enums import RequestField, ResponseKey
+
+
+@dataclass
+class ModelRequest(RemoteServiceRequest):
+    """Request for model inference (simulation)
+
+    Expects image data from encoder service in the image field.
+    """
+    image: bytes  # Binary image data from encoder
+    filename: str = "image.png"
+    invert_channels: bool = False
+
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> List['ModelRequest']:
+        """Parse dictionary into ModelRequest
+
+        Args:
+            content: Dictionary with 'image' field containing binary image data
+
+        Returns:
+            List with single ModelRequest instance
+        """
+        image_data = content.get(RequestField.IMAGE.value)
+        if not image_data:
+            raise ValueError("Missing 'image' field in request data for ModelService")
+
+        return [cls(
+            image=image_data,
+            filename=content.get('filename', 'image.png')
+        )]
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        # Model service doesn't use to_dict, it uploads multipart
+        return {
+            RequestField.IMAGE.value: self.image,
+            'filename': self.filename
+        }
+
+
+@dataclass
+class ModelResponse(StandardResponse):
+    """Response from model/simulation service
+
+    Used for /simulate, /get_df, and related endpoints.
+    """
+    content: np.ndarray
+    shape: Optional[List[int]] = None
+    mask: Optional[np.ndarray] = None
+
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse response data from model service
+
+        Returns dict with 'simulation', 'shape', and 'mask' keys for orchestration.
+        """
+        raw_content = content.get(ResponseKey.RESULT.value)
+        shape = content.get(RequestField.SHAPE.value)
+        raw_mask = content.get(RequestField.MASK.value)
+
+        result_array = cls._parse_simulation(raw_content, shape)
+        mask_array = cls._parse_mask(raw_mask)
+
+        return {
+            RequestField.SIMULATION.value: result_array.tolist(),
+            RequestField.MASK.value: mask_array.tolist() if mask_array is not None else None,
+            ResponseKey.STATUS.value: content.get(ResponseKey.STATUS.value, ResponseKey.SUCCESS.value)
+        }
+
+    @classmethod
+    def _parse_simulation(cls, raw_content: Any, shape: list[int] | None = None):
+        if isinstance(raw_content, str):
+            content_bytes = base64.b64decode(raw_content)
+            result_array = np.frombuffer(content_bytes, dtype=np.float32)
+            if shape:
+                return result_array.reshape(shape)
+        elif isinstance(raw_content, (list, np.ndarray)):
+            return np.array(raw_content, dtype=np.float32)
+        else:
+            return np.array([])
+
+    @classmethod
+    def _parse_mask(cls, raw_mask: Any, shape: list[int] | None = None):
+        mask_array = None
+        if raw_mask is not None:
+            if isinstance(raw_mask, str):
+                mask_bytes = base64.b64decode(raw_mask)
+                mask_array = np.frombuffer(mask_bytes, dtype=np.float32)
+                if shape:
+                    mask_array = mask_array.reshape(shape)
+                return mask_array
+            elif isinstance(raw_mask, (list, np.ndarray)):
+                return np.array(raw_mask, dtype=np.float32)
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        result = {
+            ResponseKey.RESULT.value: self.content.tolist()
+        }
+        if self.mask is not None:
+            result[RequestField.MASK.value] = self.mask.tolist()
+        return result

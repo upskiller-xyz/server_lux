@@ -1,16 +1,9 @@
+FROM python:3.12-slim
 
-FROM python:3.12
+# Set working directory
+WORKDIR /app
 
-# Use .dockerignore to exclude unnecessary files (e.g. .git, tests, docs, assets, etc.)
-
-# Copy only requirements.txt and main files to root
-COPY requirements.txt ./
-
-# Copy only necessary source files to /src
-COPY src/ /src/
-
-WORKDIR /src
-
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -20,16 +13,26 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6
-RUN pip install --no-cache-dir -r /requirements.txt
+# Copy requirements.txt
+COPY requirements.txt .
 
-RUN chmod 444 main.py
-RUN chmod 444 /requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-ENV PORT 8080
+# Copy application source
+COPY src/ ./src/
 
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 900 main:app
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+ENV DEPLOYMENT_MODE=production
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:${PORT}/', timeout=5)" || exit 1
 
-# Run the application
-# CMD ["python", "main.py"]
+# Expose port
+EXPOSE 8080
+
+# Run with gunicorn
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 900 --chdir src main:app
