@@ -2,15 +2,16 @@
 
 ## Overview
 
-The `/run` endpoint executes a complete daylight simulation workflow that:
+The `/v1/run` endpoint executes a complete daylight simulation workflow that:
 1. Calculates obstruction angles (horizon and zenith) from the provided mesh
-2. Encodes room parameters with obstruction data into a PNG image
-3. Runs daylight simulation on the encoded image
-4. Returns the simulation results
+2. Encodes room parameters with obstruction data
+3. Runs daylight simulation on the encoded data
+4. Merges results from multiple windows
+5. Returns the final simulation results
 
 ## Request Format
 
-**Endpoint:** `POST /run`
+**Endpoint:** `POST /v1/run`
 
 **Content-Type:** `application/json`
 
@@ -31,11 +32,8 @@ The `/run` endpoint executes a complete daylight simulation workflow that:
         "x2": "float (required)",
         "y2": "float (required)",
         "z2": "float (required)",
-        "window_sill_height": "float (required)",
         "window_frame_ratio": "float (required, 0-1)",
-        "window_height": "float (required)",
-        "rad_x": "float (optional, default: 0.5)",
-        "rad_y": "float (optional, default: 0.5)"
+        "direction_angle": "float (optional, radians, auto-calculated if not provided)"
       }
     }
   },
@@ -68,13 +66,10 @@ Each window in the `windows` dictionary contains:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `x1`, `y1`, `z1` | float | Yes | First corner coordinates of window |
-| `x2`, `y2`, `z2` | float | Yes | Second corner coordinates of window |
-| `window_sill_height` | float | Yes | Height of window sill from floor |
+| `x1`, `y1`, `z1` | float | Yes | First corner coordinates (absolute, same coordinate system as room) |
+| `x2`, `y2`, `z2` | float | Yes | Second corner coordinates (absolute, same coordinate system as room) |
 | `window_frame_ratio` | float | Yes | Frame ratio (0-1), portion of window occupied by frame |
-| `window_height` | float | Yes | Total height of window |
-| `rad_x` | float | No | X-axis radius for obstruction calculation (default: 0.5) |
-| `rad_y` | float | No | Y-axis radius for obstruction calculation (default: 0.5) |
+| `direction_angle` | float | No | Window direction angle in radians (auto-calculated if not provided) |
 
 **Note:** The `obstruction_angle_horizon` and `obstruction_angle_zenith` fields are automatically calculated from the mesh for each window and do not need to be provided in the request. Each window is processed through the complete workflow: obstruction calculation → encoding → simulation.
 
@@ -82,7 +77,6 @@ Each window in the `windows` dictionary contains:
 
 3D mesh representing obstructing geometry:
 - Each element is an [x, y, z] coordinate
-- Minimum 3 points required
 - Represents buildings, terrain, or other obstructions
 
 **Note:** Translation and rotation parameters are currently set to default values (translation: {x: 0, y: 0}, rotation: [0]) and will be integrated in a future update.
@@ -104,11 +98,7 @@ Each window in the `windows` dictionary contains:
         "x2": 0.6,
         "y2": 0.0,
         "z2": 2.4,
-        "window_sill_height": 0.9,
-        "window_frame_ratio": 0.15,
-        "window_height": 1.5,
-        "rad_x": 0.5,
-        "rad_y": 0.5
+        "window_frame_ratio": 0.15
       }
     }
   },
@@ -125,23 +115,12 @@ Each window in the `windows` dictionary contains:
 
 ### Success Response (200 OK)
 
-Returns the final postprocessed result matrix:
+Returns the final merged result as an RGB image array:
 
 ```json
 {
   "status": "success",
-  "content": "base64_encoded_numpy_array",
-  "shape": [height, width]
-}
-```
-
-Or depending on the postprocessing service configuration:
-
-```json
-{
-  "status": "success",
-  "data": [[...], [...], ...],
-  "metadata": {...}
+  "result": [[[r, g, b], ...], ...]  // 2D array of RGB triplets
 }
 ```
 
@@ -179,30 +158,6 @@ Or depending on the postprocessing service configuration:
 }
 ```
 
-## Workflow Details
-
-The `/run` endpoint processes each window through four sequential steps:
-
-1. **Obstruction Service** (`/obstruction_all`)
-   - Input: Window center position (calculated from x1,y1,z1,x2,y2,z2), rad_x, rad_y, mesh
-   - Output: Two vectors of 64 floats each (horizon_angles, zenith_angles)
-
-2. **Encoder Service** (`/encode`)
-   - Input: model_type, parameters with single window (enhanced with obstruction angles)
-   - Output: PNG image bytes (encoded room representation)
-
-3. **Daylight Service** (`/simulate`)
-   - Input: Encoded PNG image, translation: {x: 0, y: 0}, rotation: [0]
-   - Output: Daylight factor simulation results per window
-   - Note: Translation and rotation are currently fixed at default values
-
-4. **Postprocess Service** (`/postprocess`)
-   - Input: All window results (including locations), room_polygon
-   - Output: Final combined result matrix
-   - Note: Dimensions can vary based on room geometry
-
-**Note:** Each window is processed independently through steps 1-3. Step 4 combines all window results into a single output matrix.
-
 ## Validation Rules
 
 1. **Required Fields:**
@@ -212,14 +167,14 @@ The `/run` endpoint processes each window through four sequential steps:
    - `mesh` must be an array with at least 3 points
 
 2. **Window Validation:**
-   - All required window fields must be present for each window (x1, y1, z1, x2, y2, z2, window_sill_height, window_frame_ratio, window_height)
+   - All required window fields must be present for each window (x1, y1, z1, x2, y2, z2, window_frame_ratio)
+   - Window coordinates must be in absolute coordinates (same system as room_polygon)
    - All numeric fields must be valid floats
    - `window_frame_ratio` must be between 0 and 1
 
 3. **Mesh Validation:**
    - Must be an array of arrays
    - Each point must have [x, y, z] coordinates
-   - Minimum 3 points required
 
 ## Python Example
 
@@ -227,7 +182,7 @@ The `/run` endpoint processes each window through four sequential steps:
 import requests
 import json
 
-url = "http://localhost:8081/run"
+url = "http://localhost:8080/v1/run"
 
 payload = {
     "model_type": "df_default",
@@ -239,9 +194,7 @@ payload = {
             "main_window": {
                 "x1": -0.6, "y1": 0.0, "z1": 0.9,
                 "x2": 0.6, "y2": 0.0, "z2": 2.4,
-                "window_sill_height": 0.9,
-                "window_frame_ratio": 0.15,
-                "window_height": 1.5
+                "window_frame_ratio": 0.15
             }
         }
     },
@@ -265,7 +218,7 @@ else:
 ## TypeScript Example
 
 ```typescript
-const url = "http://localhost:8081/run";
+const url = "http://localhost:8080/v1/run";
 
 const payload = {
   model_type: "df_default",
@@ -277,9 +230,7 @@ const payload = {
       main_window: {
         x1: -0.6, y1: 0.0, z1: 0.9,
         x2: 0.6, y2: 0.0, z2: 2.4,
-        window_sill_height: 0.9,
-        window_frame_ratio: 0.15,
-        window_height: 1.5
+        window_frame_ratio: 0.15
       }
     }
   },
@@ -309,9 +260,5 @@ fetch(url, {
 ## Notes
 
 - The window center position for obstruction calculation is automatically computed as the midpoint between (x1, y1, z1) and (x2, y2, z2)
-- Each window is processed independently through obstruction → encoding → simulation
-- All window results are then combined in the postprocessing step along with room_polygon
-- The calculated obstruction angles (64 floats each for horizon and zenith) are automatically added to each window before encoding
-- Translation and rotation are currently fixed at default values (translation: {x: 0, y: 0}, rotation: [0]) and will be integrated as request parameters in a future update
 - You can include multiple windows in a single request - each will be processed independently and combined in the final result
 - The final output matrix dimensions can vary based on room geometry and window configurations

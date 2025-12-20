@@ -20,6 +20,9 @@
   <p align="center">
     Gateway server for daylight analysis, color management, and dataframe evaluation services
     <br />
+    <a href="https://docs.upskiller.xyz/docs/code/overview"><strong>Explore the docs »</strong></a>
+    <br />
+    <br />
     <a href="https://github.com/upskiller-xyz/server_lux">View Demo</a>
     ·
     <a href="https://github.com/upskiller-xyz/server_lux/issues">Report Bug</a>
@@ -70,14 +73,9 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-The Daylight Server is a gateway service that orchestrates requests to remote microservices for:
-- **Daylight Factor Analysis** - Process building images to estimate daylight distribution
-- **Color Management** - Convert between numeric values and RGB color representations
-- **Dataframe Evaluation** - Statistical analysis of daylight data
-- **Room Encoding** - Convert room parameters to encoded PNG images for model input
-- **Obstruction Analysis** - Calculate horizon and zenith obstruction angles
+Server Lux is a gateway service that orchestrates daylight simulation workflows across specialized microservices.
 
-The server acts as a unified interface, handling multipart file uploads, forwarding requests to specialized remote services, and managing response orchestration.
+The server provides a unified REST API at `/v1`, managing multi-service orchestration and returning complete simulation results in a single request.
 
 
 
@@ -87,9 +85,8 @@ The server acts as a unified interface, handling multipart file uploads, forward
 
 ### Built With
 
-* [Python](https://www.python.org/)
+* [Python 3.10+](https://www.python.org/)
 * [Flask](https://flask.palletsprojects.com/)
-* [Requests](https://requests.readthedocs.io/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -120,7 +117,7 @@ To get a local copy up and running follow these simple steps.
    python src/main.py
    ```
 
-   The server will start on `http://localhost:8081` by default.
+   The server will start on `http://localhost:8080` by default.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -136,89 +133,16 @@ To get a local copy up and running follow these simple steps.
 jupyter notebook example/demo.ipynb
 ```
 
-### 🔧 API Endpoints
+### 🔧 API Example
 
-The server provides REST API endpoints for daylight analysis and color management:
+#### End-to-End Simulation (`/v1/run`)
 
-#### Health Check
-Check server status:
-
-```python
-import requests
-
-response = requests.get("http://localhost:8081/")
-print(response.json())
-# Output: {"status": "running", "services": {...}}
-```
-
-#### get_df - Daylight Factor Analysis
-Process building images with transformation parameters:
-
-```python
-import requests
-import json
-
-with open("building.png", "rb") as f:
-    files = {"file": ("building.png", f)}
-    response = requests.post(
-        "http://localhost:8081/get_df",
-        files=files,
-        data={
-            "translation": json.dumps({"x": 750, "y": 0}),
-            "rotation": json.dumps([0])
-        }
-    )
-
-result = response.json()
-# Returns base64-encoded numpy array with daylight factor values
-```
-
-#### to_rgb - Convert Values to RGB
-Convert numeric values to color representation:
-
-```python
-import requests
-import numpy as np
-
-values = np.random.rand(100, 100)  # Your numeric data
-response = requests.post(
-    "http://localhost:8081/to_rgb",
-    json={"data": values.tolist(), "colorscale": "df"}
-)
-
-rgb_image = response.json()["data"]
-```
-
-#### to_values - Convert RGB to Values
-Convert RGB colors back to numeric values:
-
-```python
-import requests
-from PIL import Image
-import numpy as np
-
-img = np.array(Image.open("colored_result.png"))
-response = requests.post(
-    "http://localhost:8081/to_values",
-    json={"data": img.tolist(), "colorscale": "df"}
-)
-
-values = response.json()["data"]
-```
-
-#### encode - Encode Room Parameters (Protected)
-Convert room and window parameters to encoded PNG image:
+Run a complete daylight simulation including obstruction calculation, encoding, and prediction:
 
 ```python
 import requests
 
-url = "http://localhost:8081/encode"
-token = "your_api_token_here"  # Set via API_TOKEN env variable
-
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json"
-}
+url = "http://localhost:8080/v1/run"
 
 payload = {
     "model_type": "df_default",
@@ -230,25 +154,35 @@ payload = {
             "main_window": {
                 "x1": -0.6, "y1": 0.0, "z1": 0.9,
                 "x2": 0.6, "y2": 0.0, "z2": 2.4,
-                "window_sill_height": 0.9,
-                "window_frame_ratio": 0.15,
-                "window_height": 1.5,
-                "obstruction_angle_horizon": 15.0,
-                "obstruction_angle_zenith": 10.0
+                "window_frame_ratio": 0.15
             }
         }
-    }
+    },
+    "mesh": [
+        [10, 0, 0], [10, 0, 5],
+        [10, 10, 5], [10, 10, 0]
+    ]
 }
 
-response = requests.post(url, headers=headers, json=payload)
+response = requests.post(url, json=payload)
 
 if response.status_code == 200:
-    with open("encoded_room.png", "wb") as f:
-        f.write(response.content)
-    print("Image saved successfully!")
+    result = response.json()
+    # result["result"] contains RGB image array
+    print(f"Simulation successful! Result shape: {len(result['result'])}x{len(result['result'][0])}")
+else:
+    print(f"Error: {response.json().get('error')}")
 ```
 
-**Note:** This endpoint requires token authentication. Set the `API_TOKEN` environment variable on the server.
+**Response:**
+```json
+{
+  "status": "success",
+  "result": [[[r, g, b], ...], ...]
+}
+```
+
+For complete API documentation, see [docs/api.md](docs/api.md).
 
 ### Deployment
 
@@ -269,7 +203,7 @@ Set up the server for local development and testing:
 
 3. **Set Environment Variables**
    ```bash
-   export PORT=8081
+   export PORT=8080
    export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
    export DEPLOYMENT_MODE=production  # Uses production GCP services
    ```
@@ -278,7 +212,7 @@ Set up the server for local development and testing:
    ```bash
    python src/main.py
    ```
-   The server will start on `http://localhost:8081` and connect to production microservices.
+   The server will start on `http://localhost:8080` and connect to production microservices.
 
 #### Docker Compose - Local Microservices Stack
 
@@ -334,12 +268,11 @@ Run the complete microservices stack locally with Docker Compose:
 
 **Service Ports (Local):**
 - Main Server: `http://localhost:8080`
-- Color Management: `http://localhost:8001`
-- Daylight Simulation: `http://localhost:8002`
-- Metrics/Evaluation: `http://localhost:8003`
-- Obstruction Calculation: `http://localhost:8004`
-- Encoder: `http://localhost:8005`
-- Postprocessing: `http://localhost:8006`
+- Stats: `http://localhost:8085`
+- Merger: `http://localhost:8084`
+- Metrics/Evaluation: `http://localhost:8085`
+- Obstruction Calculation: `http://localhost:8081`
+- Encoder: `http://localhost:8082`
 
 **Architecture:**
 The Docker Compose setup creates an internal network where all services communicate using service names (e.g., `http://colormanage:8080`). The main server automatically detects `DEPLOYMENT_MODE=local` and routes requests to local services instead of GCP Cloud Run.
@@ -388,40 +321,15 @@ Set up the Daylight Server locally for development and testing:
 
 3. **Set Environment Variables (Optional)**
    ```bash
-   export PORT=8081
-   export API_TOKEN=your_secure_token_here  # Required for /encode endpoint
+   export PORT=8080
+   export API_TOKEN=your_secure_token_here  # Optional for most endpoints
    ```
 
 4. **Run the Server**
    ```bash
    python src/main.py
    ```
-   The server will start on `http://localhost:8081` by default.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- DESIGN -->
-## Design
-
-### Architecture
-
-The Daylight Server follows object-oriented design principles with clean separation of concerns:
-
-```
-ServerApplication
-├── HTTPClient (connection pooling, retries)
-├── Remote Services
-│   ├── ColorManageService
-│   ├── DaylightService
-│   ├── DFEvalService
-│   ├── ObstructionService
-│   └── EncoderService
-├── OrchestrationService (multi-service workflows)
-├── TokenAuthenticator (bearer token authentication)
-└── EndpointController (request handling)
-```
-
-
+   The server will start on `http://localhost:8080` by default.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -499,7 +407,8 @@ Stanislava Fedorova - [e-mail](mailto:stasya.fedorova@gmail.com)
 * [README template](https://github.com/othneildrew/Best-README-Template)
 * [Flask](https://flask.palletsprojects.com/) - Web framework
 * [Requests](https://requests.readthedocs.io/) - HTTP library
-* Alberto Floris - [e-mail](mailto:alberto.floris@arkion.co)
+* [Belysningsstiftelsen](https://belysningsstiftelsen.se)
+* [Almi](https://almi.se)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
