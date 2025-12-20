@@ -258,13 +258,23 @@ Encode room parameters with pre-calculated obstruction angles.
 
 #### `POST /v1/stats`
 
-Calculate statistical metrics for daylight simulation results.
+Calculate statistical metrics and compliance analysis for daylight simulation results.
 
 **Request:**
 ```json
 {
-  "df_matrix": [/* 2D array of daylight factor values */],
-  "room_mask": [/* 2D boolean array marking room area */]
+  "result": [
+    [0.5, 0.3, 0.7, 0.1],
+    [0.2, 0.8, 0.1, 0.9],
+    [7.9, 8.4, 9.2, 3.5],
+    [2.1, 5.5, 6.8, 7.3]
+  ],
+  "mask": [
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1]
+  ]
 }
 ```
 
@@ -272,13 +282,30 @@ Calculate statistical metrics for daylight simulation results.
 ```json
 {
   "status": "success",
-  "mean": 2.5,
-  "median": 2.3,
-  "min": 0.1,
-  "max": 5.8,
-  "std": 1.2
+  "metrics": {
+    "mean": 4.93,
+    "median": 4.2,
+    "mae": 0.0,
+    "range_polygon": [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],
+    "quantized_iou": 1.0,
+    "threshold_accuracy": 100.0,
+    "compliance_analysis": 100.0
+  }
 }
 ```
+
+**Fields:**
+- `result`: 2D array of daylight factor values
+- `mask`: Optional 2D boolean array marking valid room area (1 = valid, 0 = invalid)
+
+**Response Metrics:**
+- `mean`: Average daylight factor across all valid cells
+- `median`: Median daylight factor value
+- `mae`: Mean absolute error (for validation)
+- `range_polygon`: Binary classification of cells meeting daylight thresholds
+- `quantized_iou`: Intersection over Union score for quantized predictions
+- `threshold_accuracy`: Percentage of cells meeting threshold criteria
+- `compliance_analysis`: Overall compliance score (0-100%)
 
 #### `POST /v1/merge`
 

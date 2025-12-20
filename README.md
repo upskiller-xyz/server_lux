@@ -269,10 +269,10 @@ Run the complete microservices stack locally with Docker Compose:
 **Service Ports (Local):**
 - Main Server: `http://localhost:8080`
 - Stats: `http://localhost:8085`
+- Model: `http://localhost:8083`
 - Merger: `http://localhost:8084`
-- Metrics/Evaluation: `http://localhost:8085`
-- Obstruction Calculation: `http://localhost:8081`
 - Encoder: `http://localhost:8082`
+- Obstruction Calculation: `http://localhost:8081`
 
 **Architecture:**
 The Docker Compose setup creates an internal network where all services communicate using service names (e.g., `http://colormanage:8080`). The main server automatically detects `DEPLOYMENT_MODE=local` and routes requests to local services instead of GCP Cloud Run.

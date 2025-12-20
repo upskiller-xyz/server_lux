@@ -157,16 +157,16 @@ Combine multiple window results.
 **Port:** 8085
 **URL:** `http://localhost:8085`
 
-Calculates statistical metrics and converts to RGB visualization.
+Calculates statistical metrics and compliance analysis for daylight simulation results.
 
 #### `/calculate`
-Calculate statistics and convert to RGB.
+Calculate comprehensive statistics for daylight factor data.
 
 **Input:**
 ```json
 {
-  "df_matrix": [[float, ...]],
-  "room_mask": [[bool, ...]]
+  "result": [[float, ...]],
+  "mask": [[bool, ...]]  // optional
 }
 ```
 
@@ -174,15 +174,26 @@ Calculate statistics and convert to RGB.
 ```json
 {
   "status": "success",
-  "result": [[[r, g, b], ...]],
-  "stats": {
+  "metrics": {
     "mean": float,
     "median": float,
-    "min": float,
-    "max": float
+    "mae": float,
+    "range_polygon": [[int, ...]],
+    "quantized_iou": float,
+    "threshold_accuracy": float,
+    "compliance_analysis": float
   }
 }
 ```
+
+**Metrics Description:**
+- `mean`: Average daylight factor across valid cells
+- `median`: Median daylight factor value
+- `mae`: Mean absolute error for validation
+- `range_polygon`: Binary classification of cells meeting thresholds
+- `quantized_iou`: Intersection over Union score
+- `threshold_accuracy`: Percentage meeting threshold criteria
+- `compliance_analysis`: Overall compliance score (0-100%)
 
 ## Service Workflow
 
