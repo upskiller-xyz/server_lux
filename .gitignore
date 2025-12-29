@@ -10,6 +10,7 @@ __pycache__/
 *.pot
 *.mo
 
+deployment/services
 
 saved_model
 *.keras
