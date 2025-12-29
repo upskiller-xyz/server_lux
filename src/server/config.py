@@ -35,6 +35,7 @@ class ServiceConfig:
 
     def __init__(self):
         self._mode = self._get_deployment_mode()
+        SessionConfig._mode = self._mode  # Sync SessionConfig with deployment mode
         self._config_maps = ServiceConfigMaps()
         self._adapters = self._build_url_adapters()
 

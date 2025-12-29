@@ -16,9 +16,13 @@ class RequestParser:
 
     @staticmethod
     def extract_endpoint(request: Request) -> EndpointType:
-        """Extract endpoint from request path"""
-        path_parts = request.path.strip('/').split('/', 1)
-        endpoint_str = path_parts[1] if len(path_parts) > 1 else path_parts[0]
+        """Extract endpoint from Flask's route matching"""
+        # Flask's request.endpoint contains the endpoint name registered via add_url_rule
+        # which is route.endpoint.value from RouteConfigurator
+        endpoint_str = request.endpoint
+
+        if not endpoint_str:
+            return EndpointType.STATUS
 
         endpoint = EndpointType.by_value(endpoint_str)
         if not endpoint:
