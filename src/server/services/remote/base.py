@@ -1,7 +1,7 @@
 from typing import Any, Dict, TYPE_CHECKING
 import logging
 
-from src.server.config import SessionConfig
+from src.server.config import SessionConfig, get_service_config
 from src.server.services.http_client import HTTPClient
 from .contracts import RemoteServiceRequest
 from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
@@ -38,8 +38,9 @@ class RemoteService:
     @classmethod
     def _get_url(cls, endpoint: EndpointType) -> str:
         """Get full URL for endpoint"""
-        port = PortMap.get(cls.name)
-        return f"{SessionConfig.get_url()}:{port.value}/{endpoint.value}"
+        config = get_service_config()
+        base_url = config.get_service_url(cls.name.value)
+        return f"{base_url}/{endpoint.value}"
 
     @classmethod
     def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest = None) -> None:

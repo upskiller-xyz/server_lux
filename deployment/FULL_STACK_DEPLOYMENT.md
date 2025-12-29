@@ -10,6 +10,7 @@ This deployment sets up the complete system:
 - **Encoder Service** (port 8082) - Encodes room parameters
 - **Model Service** (port 8083) - Runs daylight simulation
 - **Merger Service** (port 8084) - Merges window results
+- **Stats Service** (port 8085) - calculates stats
 
 All services run in isolated Docker containers on a shared network.
 
@@ -107,6 +108,12 @@ bash deploy-full-stack.sh --debug
 - **Health Check:** `http://localhost:8084/`
 - **Function:** Merges results from multiple windows
 
+### Stats Service
+- **Port:** 8085
+- **Repository:** https://github.com/upskiller-xyz/server_stats
+- **Health Check:** `http://localhost:8085/`
+- **Function:** Calculates the stats of the daylight factor in the apartment.
+
 ## Configuration
 
 ### Environment Variables
@@ -138,6 +145,7 @@ All services communicate on the `lux-network` Docker bridge network. Services ca
 - `http://encoder-service:8082`
 - `http://model-service:8083`
 - `http://merger-service:8084`
+- `http://stats-service:8085`
 
 ## Management Commands
 
