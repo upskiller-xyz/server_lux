@@ -38,6 +38,11 @@ class Orchestrator(IOrchestrator):
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value
 
+        # Remove mask and result from final response for stats endpoint
+        if endpoint == EndpointType.STATS_CALCULATE:
+            params.pop(RequestField.MASK.value, None)
+            params.pop(RequestField.RESULT.value, None)
+
         return params
 
     def _execute_service(self, service: type, endpoint: EndpointType,

@@ -1,0 +1,157 @@
+services:
+  # Main Gateway Server (port 8080)
+  server-lux:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: server-lux
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DEPLOYMENT_MODE=local
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False
+      - ENCODER_SERVICE_URL=http://encoder-service:8082
+      - MODEL_SERVICE_URL=http://model-service:8083
+      - MERGER_SERVICE_URL=http://merger-service:8084
+      - OBSTRUCTION_SERVICE_URL=http://obstruction-service:8081
+      - STATS_SERVICE_URL=http://stats-service:8085
+    env_file:
+      - .env.full-stack
+    depends_on:
+      - obstruction-service
+      - encoder-service
+      - model-service
+      - merger-service
+      - stats-service
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Obstruction Service (port 8081)
+  obstruction-service:
+    build:
+      context: ./services/server_obstruction
+      dockerfile: Dockerfile
+    container_name: obstruction-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Encoder Service (port 8082)
+  encoder-service:
+    build:
+      context: ./services/server_encoder
+      dockerfile: Dockerfile
+    container_name: encoder-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Model Service (port 8083)
+  model-service:
+    build:
+      context: ./services/server_model
+      dockerfile: Dockerfile
+    container_name: model-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Merger Service (port 8084)
+  merger-service:
+    build:
+      context: ./services/server_merger
+      dockerfile: Dockerfile
+    container_name: merger-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Stats Service (port 8085)
+  stats-service:
+    build:
+      context: ./services/server_stats
+      dockerfile: Dockerfile
+    container_name: stats-service
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      - PORT=8085
+      - WORKERS=${WORKERS:-1}
+      - THREADS=${THREADS:-8}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  lux-network:
+    driver: bridge

@@ -612,7 +612,7 @@ class StatsRequest(RemoteServiceRequest):
     def to_dict(self) -> Dict[str, Any]:
         return self._build_dict(
             **{
-                RequestField.DF_VALUES.value: self._array_to_list(self.df_values),
+                RequestField.RESULT.value: self._array_to_list(self.df_values),
                 RequestField.MASK.value: self._array_to_list(self.mask)
             }
         )

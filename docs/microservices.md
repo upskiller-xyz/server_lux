@@ -1,188 +1,34 @@
 # Microservices Documentation
 
-This document provides a comprehensive overview of all external microservices called by the server.
+Server Lux orchestrates requests across multiple specialized microservices. This document describes each service and its endpoints.
 
 ---
 
-## 1. Color Management Service
+## Service Architecture
 
-**URL:** `https://colormanage-server-182483330095.europe-north2.run.app`
+Server Lux acts as a gateway that:
+- Receives client requests via REST API
+- Orchestrates calls to specialized microservices
+- Combines results from multiple services
+- Returns unified responses to clients
 
-### Endpoints
-
-#### `/to_rgb`
-Converts numerical values to RGB representation using a specified colorscale.
-
-**Input:**
-```json
-{
-  "data": [[float, ...], ...],  // 2D array of numerical values
-  "colorscale": "df"             // Colorscale identifier
-}
-```
-
-**Output:**
-```json
-{
-  "status": "success",
-  "data": [[[r, g, b], ...], ...]  // 2D array of RGB triplets
-}
-```
-
-#### `/to_values`
-Converts RGB representation back to numerical values using a specified colorscale.
-
-**Input:**
-```json
-{
-  "data": [[[r, g, b], ...], ...],  // 2D array of RGB triplets
-  "colorscale": "df"                 // Colorscale identifier
-}
-```
-
-**Output:**
-```json
-{
-  "status": "success",
-  "data": [[float, ...], ...]  // 2D array of numerical values
-}
-```
+**Default Port:** 8080
+**API Version:** v1
+**Base Path:** `/v1`
 
 ---
 
-## 2. Daylight Simulation Service
+## Microservices
 
-**URL:** `https://daylight-factor-182483330095.europe-north2.run.app`
+### 1. Obstruction Service
 
-### Endpoints
+**Port:** 8081
+**URL:** `http://localhost:8081`
 
-#### `/simulate` (alias: `/get_df`)
-Performs daylight factor simulation on an encoded room representation.
-
-**Input:**
-- **Content-Type:** `multipart/form-data`
-- **file:** encoded room representation
-- **translation:** JSON string `{"x": float, "y": float}`
-- **rotation:** JSON string `[float]`
-
-**Output:**
-```json
-{
-  "status": "success",
-  "content": "base64_encoded_numpy_array",
-  "shape": [height, width]
-}
-```
-
-Or:
-```json
-{
-  "status": "success",
-  "data": [[float, ...], ...],
-  "metadata": {...}
-}
-```
-
----
-
-## 3. DF Evaluation Service
-
-**URL:** `https://df-eval-server-182483330095.europe-north2.run.app`
-
-### Endpoints
-
-#### `/get_stats`
-Calculates statistics from daylight factor data.
-
-**Input:**
-```json
-{
-  "data": [[float, ...], ...]  // 2D array of daylight factor values
-}
-```
-
-**Output:**
-```json
-{
-  "status": "success",
-  "mean": float,
-  "median": float,
-  "min": float,
-  "max": float,
-  "std": float
-}
-```
-
----
-
-## 4. Obstruction Service
-
-**URL:** `https://obstruction-server-182483330095.europe-north2.run.app`
-
-### Endpoints
-
-#### `/horizon_angle`
-Calculates horizon obstruction angles from a 3D mesh.
-
-**Input:**
-```json
-{
-  "x": float,           // Position x-coordinate
-  "y": float,           // Position y-coordinate
-  "z": float,           // Position z-coordinate
-  "rad_x": float,       // X-radius for sampling
-  "rad_y": float,       // Y-radius for sampling
-  "mesh": [[x, y, z], ...]  // 3D mesh points
-}
-```
-
-**Output:**
-```json
-{
-  "status": "success",
-  "angles": [float, float, ...]  // 64 horizon angle values
-}
-```
-
-#### `/zenith_angle`
-Calculates zenith obstruction angles from a 3D mesh.
-
-**Input:**
-```json
-{
-  "x": float,
-  "y": float,
-  "z": float,
-  "rad_x": float,
-  "rad_y": float,
-  "mesh": [[x, y, z], ...]
-}
-```
-
-**Output:**
-```json
-{
-  "status": "success",
-  "angles": [float, float, ...]  // 64 zenith angle values
-}
-```
-
-#### `/obstruction`
-Calculates both horizon and zenith obstruction angles (legacy endpoint).
-
-**Input:** Same as `/horizon_angle`
-
-**Output:**
-```json
-{
-  "status": "success",
-  "horizon_angles": [float, ...],  // 64 values
-  "zenith_angles": [float, ...]    // 64 values
-}
-```
+Calculates horizon and zenith obstruction angles from 3D mesh data.
 
 #### `/obstruction_all`
-Calculates both horizon and zenith obstruction angles (current endpoint).
+Calculate both horizon and zenith angles for all 64 directions.
 
 **Input:**
 ```json
@@ -205,16 +51,23 @@ Calculates both horizon and zenith obstruction angles (current endpoint).
 }
 ```
 
+#### `/horizon_angle`
+Calculate single horizon angle for specific direction.
+
+#### `/zenith_angle`
+Calculate single zenith angle for specific direction.
+
 ---
 
-## 5. Encoder Service
+### 2. Encoder Service
 
-**URL:** `https://encoder-server-182483330095.europe-north2.run.app`
+**Port:** 8082
+**URL:** `http://localhost:8082`
 
-### Endpoints
+Encodes room parameters and obstruction data into model input format.
 
 #### `/encode`
-Encodes room parameters into a matrix representation.
+Encode room geometry with obstruction angles.
 
 **Input:**
 ```json
@@ -228,49 +81,61 @@ Encodes room parameters into a matrix representation.
       "window_name": {
         "x1": float, "y1": float, "z1": float,
         "x2": float, "y2": float, "z2": float,
-        "window_sill_height": float,
         "window_frame_ratio": float,
-        "window_height": float,
-        "obstruction_angle_horizon": [float, ...],  // 64 values
-        "obstruction_angle_zenith": [float, ...]    // 64 values
+        "obstruction_angle_horizon": [float, ...],
+        "obstruction_angle_zenith": [float, ...]
       }
     }
   }
 }
 ```
 
-**Output:**
-- **Content-Type:** `image/png`
-- **Body:** Binary matrix data
+**Output:** Binary NPZ file containing encoded image arrays
 
 ---
 
-## 6. Postprocessing Service
+### 3. Model Service
 
-**URL:** `https://daylight-processing-182483330095.europe-north2.run.app`
+**Port:** 8083
+**URL:** `http://localhost:8083`
 
-### Endpoints
+Runs daylight simulation model on encoded room data.
 
-#### `/postprocess`
-Combines multiple window simulation results into a single output matrix.
+#### `/simulate`
+Perform daylight factor simulation.
+
+**Input:** NPZ file (multipart/form-data)
+
+**Output:**
+```json
+{
+  "status": "success",
+  "df_matrix": [[float, ...]],
+  "room_mask": [[bool, ...]]
+}
+```
+
+---
+
+### 4. Merger Service
+
+**Port:** 8084
+**URL:** `http://localhost:8084`
+
+Merges simulation results from multiple windows.
+
+#### `/merge`
+Combine multiple window results.
 
 **Input:**
 ```json
 {
-  "windows": {
+  "window_results": {
     "window_name": {
-      "x1": float, "y1": float, "z1": float,
-      "x2": float, "y2": float, "z2": float
+      "df_matrix": [[float, ...]],
+      "room_mask": [[bool, ...]]
     }
-  },
-  "results": {
-    "window_name": {
-      "status": "success",
-      "content": "base64_encoded_numpy_array",
-      "shape": [height, width]
-    }
-  },
-  "room_polygon": [[x, y], ...]
+  }
 }
 ```
 
@@ -278,70 +143,115 @@ Combines multiple window simulation results into a single output matrix.
 ```json
 {
   "status": "success",
-  "content": "base64_encoded_numpy_array",
-  "shape": [height, width]
+  "merged_result": {
+    "df_matrix": [[float, ...]],
+    "room_mask": [[bool, ...]]
+  }
 }
 ```
-
-Or:
-```json
-{
-  "status": "success",
-  "data": [[float, ...], ...],
-  "metadata": {...}
-}
-```
-
-**Note:** Output dimensions can vary based on room_polygon and window configurations.
 
 ---
 
-## Service Workflow in `/run` Endpoint
+### 5. Stats Service
 
-The `/run` endpoint orchestrates calls to multiple services in the following sequence:
+**Port:** 8085
+**URL:** `http://localhost:8085`
+
+Calculates statistical metrics and compliance analysis for daylight simulation results.
+
+#### `/calculate`
+Calculate comprehensive statistics for daylight factor data.
+
+**Input:**
+```json
+{
+  "result": [[float, ...]],
+  "mask": [[bool, ...]]  // optional
+}
+```
+
+**Output:**
+```json
+{
+  "status": "success",
+  "metrics": {
+    "max": float,
+    "mean": float,
+    "median": float,
+    "min": float,
+    "valid_area": float
+  }
+}
+```
+
+**Metrics Description:**
+- `max`: Maximum daylight factor value
+- `mean`: Average daylight factor across valid cells
+- `median`: Median daylight factor value
+- `min`: Minimum daylight factor value
+- `valid_area`: Percentage of valid area based on mask
+
+## Service Workflow
+
+The `/v1/run` endpoint orchestrates these services in sequence:
 
 ```
 For each window:
-  1. Obstruction Service (/obstruction_all)
-     └─> Calculate horizon and zenith angles
+  1. Obstruction Service
+     └─> Calculate horizon and zenith angles from mesh
 
-  2. Encoder Service (/encode)
-     └─> Encode room with obstruction angles to PNG
+  2. Encoder Service
+     └─> Encode room + obstruction data to NPZ
 
-  3. Daylight Service (/simulate)
-     └─> Simulate daylight factor from encoded PNG
+  3. Model Service
+     └─> Simulate daylight factor from encoded data
 
-After all windows processed:
-  4. Postprocessing Service (/postprocess)
-     └─> Combine all window results into final matrix
+After all windows:
+  4. Merger Service
+     └─> Combine all window results
+
+  5. Stats Service (separate)
+     └─> Calculate statistics and convert to RGB
 ```
 
-### Data Flow
+---
+
+## Data Flow
 
 ```
-Request
+Client Request
+  │
   ├─> model_type, parameters, mesh
   │
-  └─> For each window in parameters.windows:
+  └─> For each window:
       │
-      ├─> [Obstruction] mesh + window center position
+      ├─> [Obstruction] mesh + window position
       │   └─> horizon_angles[64], zenith_angles[64]
       │
       ├─> [Encoder] parameters + obstruction angles
-      │   └─> encoded matrix representation
+      │   └─> NPZ file (encoded arrays)
       │
-      └─> [Daylight] matrix + translation/rotation
-          └─> daylight factor matrix
+      └─> [Model] NPZ file
+          └─> df_matrix, room_mask
+  │
+  ├─> [Merger] all window results
+      └─> merged df_matrix, room_mask
+  ```
 
-  └─> [Postprocess] all window results + room_polygon
-      └─> Final combined matrix
-```
+---
+
+## Deployment Configuration
+
+Configure service endpoints via environment variable:
+
+- **`DEPLOYMENT_MODE=local`** - Uses `http://localhost:PORT` (development/testing)
+- **`DEPLOYMENT_MODE=production`** - Uses configured production endpoints (default)
 
 ---
 
 ## Error Handling
 
-All services return error responses in the following format:
+All services return errors in this format:
 
 ```json
 {
@@ -350,7 +260,7 @@ All services return error responses in the following format:
 }
 ```
 
-The orchestration service will:
-- Stop processing if a window fails at any step
-- Return the error with partial results if available
-- Skip postprocessing if any window simulation failed
+Server Lux orchestration behavior:
+- Stops processing if any service fails
+- Returns partial results when available
+- Includes error details in response

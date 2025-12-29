@@ -67,7 +67,7 @@ class ServiceEndpointMap(StandardMap):
         EncoderService: EndpointType.ENCODE,
         MergerService: EndpointType.MERGE,
         ModelService: EndpointType.RUN,
-        StatsService: EndpointType.STATS_CALCULATE
+        StatsService: EndpointType.RUN
     }
     _default: EndpointType = EndpointType.RUN
 

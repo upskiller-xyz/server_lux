@@ -28,7 +28,7 @@ class RouteBuilder:
         return [
             Route("/", EndpointType.STATUS, [Methods.GET.value]),
             Route(f"/{self._version}/simulate", EndpointType.SIMULATE, [Methods.POST.value]),
-            Route(f"/{self._version}/stats", EndpointType.GET_STATS, [Methods.POST.value]),
+            Route(f"/{self._version}/stats", EndpointType.STATS_CALCULATE, [Methods.POST.value]),
             Route(f"/{self._version}/horizon_angle", EndpointType.HORIZON_ANGLE, [Methods.POST.value]),
             Route(f"/{self._version}/zenith_angle", EndpointType.ZENITH_ANGLE, [Methods.POST.value]),
             Route(f"/{self._version}/obstruction", EndpointType.OBSTRUCTION_ALL, [Methods.POST.value]),

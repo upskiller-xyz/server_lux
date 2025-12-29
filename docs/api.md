@@ -1,483 +1,363 @@
 # API Documentation
 
-This document describes the main API endpoints for the Model Server.
-Example requests are provided in both **Python** (using `requests`) and **TypeScript** (using `fetch`). Use [the playground notebook](../playground.ipynb) for hands-on examples with the API.
+Server Lux provides a REST API for daylight simulation, obstruction analysis, and room encoding. All endpoints are prefixed with `/v1`.
 
----
+## Base URL
 
-## `/`
-**GET** `/`
-Health check endpoint that returns the current server status and information.
+- **Local**: `http://localhost:8080/v1`
+- **Production**: `https://api.upskiller.xyz/v1`
 
-### Request
-- **Content-Type:** Not required (GET request)
-- **Body:** None
+## Endpoints
 
-### Response
-- **200 OK**
-  ```json
-  {
-    "name": "Upskiller Model Server",
-    "version": "2.0.0",
-    "status": "running"
+### Health Check
+
+#### `GET /`
+
+Check server status and service availability.
+
+**Response:**
+```json
+{
+  "status": "running",
+  "services": {
+    "encoder": "ready",
+    "merger": "ready",
+    "model": "ready",
+    "obstruction": "ready",
+    "stats": "ready"
   }
-  ```
-
-### Python Example
-```python
-import requests
-
-response = requests.get("http://localhost:8000/")
-print(response.json())
-# Output: {"name": "Upskiller Model Server", "version": "2.0.0", "status": "running"}
-```
-
-### TypeScript Example
-```typescript
-fetch("http://localhost:8000/")
-  .then(res => res.json())
-  .then(data => console.log(data));
+}
 ```
 
 ---
 
-## `/run`
-**POST** `/run`
-Executes complete daylight simulation workflow: obstruction angle calculation → room encoding → daylight simulation → postprocessing.
+### Simulation & Analysis
 
-**For detailed schema documentation, see [run_schema.md](run_schema.md)**
+#### `POST /v1/run`
 
-### Request
-- **Content-Type:** `application/json`
-- **Body:** See [run_schema.md](run_schema.md) for complete schema
+End-to-end daylight simulation including obstruction calculation, encoding, and model prediction.
 
-### Quick Reference
+**Request:**
 ```json
 {
   "model_type": "df_default",
   "parameters": {
-    "height_roof_over_floor": 2.7,
-    "floor_height_above_terrain": 3.0,
-    "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
+    "height_roof_over_floor": 19.7,
+    "floor_height_above_terrain": 2.71,
+    "room_polygon": [[0, 0], [0, 7], [-3, 7], [-3, 0]],
     "windows": {
-      "window_name": { /* window definition */ }
-    }
-  },
-  "mesh": [[x, y, z], ...]  // Min 3 points
-}
-```
-
-**Note:** Translation and rotation are currently set to defaults ({x: 0, y: 0} and [0]) and will be configurable in a future update.
-
-### Response
-- **200 OK** (Success)
-  ```json
-  {
-    "status": "success",
-    "content": "base64_encoded_numpy_array",
-    "shape": [height, width]
-  }
-  ```
-- **400 Bad Request** (Invalid input)
-  ```json
-  {
-    "status": "error",
-    "error": "Missing required field: model_type"
-  }
-  ```
-- **500 Internal Server Error** (Processing error)
-  ```json
-  {
-    "status": "error",
-    "error": "Obstruction calculation failed: <details>"
-  }
-  ```
-
-### Python Example
-```python
-import requests
-
-url = "http://localhost:8081/run"
-
-payload = {
-    "model_type": "df_default",
-    "parameters": {
-        "height_roof_over_floor": 2.7,
-        "floor_height_above_terrain": 3.0,
-        "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
-        "windows": {
-            "main_window": {
-                "x1": -0.6, "y1": 0.0, "z1": 0.9,
-                "x2": 0.6, "y2": 0.0, "z2": 2.4,
-                "window_sill_height": 0.9,
-                "window_frame_ratio": 0.15,
-                "window_height": 1.5
-            }
-        }
-    },
-    "mesh": [
-        [10, 0, 0], [10, 0, 5],
-        [10, 10, 5], [10, 10, 0]
-    ]
-}
-
-response = requests.post(url, json=payload)
-
-if response.status_code == 200:
-    result = response.json()
-    print("Simulation successful!")
-else:
-    print(f"Error: {response.json().get('error')}")
-```
-
-### TypeScript Example
-```typescript
-const url = "http://localhost:8081/run";
-
-const payload = {
-  model_type: "df_default",
-  parameters: {
-    height_roof_over_floor: 2.7,
-    floor_height_above_terrain: 3.0,
-    room_polygon: [[0, 0], [5, 0], [5, 4], [0, 4]],
-    windows: {
-      main_window: {
-        x1: -0.6, y1: 0.0, z1: 0.9,
-        x2: 0.6, y2: 0.0, z2: 2.4,
-        window_sill_height: 0.9,
-        window_frame_ratio: 0.15,
-        window_height: 1.5
+      "main_window": {
+        "x1": -0.4, "y1": 7, "z1": 2.8,
+        "x2": -2, "y2": 7.3, "z2": 5.4,
+        "window_frame_ratio": 0.41
       }
     }
   },
-  mesh: [[10, 0, 0], [10, 0, 5], [10, 10, 5], [10, 10, 0]]
-};
-
-fetch(url, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(payload)
-})
-  .then(res => res.json())
-  .then(data => {
-    if (data.status === "success") {
-      console.log("Simulation successful!", data);
-    } else {
-      console.error("Error:", data.error);
-    }
-  });
-```
-
-
----
-
-## `/simulate`
-**POST** `/simulate`
-Runs daylight simulation on an uploaded encoded room image. This is the new name for the `/get_df` endpoint (which is kept for backwards compatibility).
-
-### Request
-- **Content-Type:** `multipart/form-data`
-- **Body:**
-  - `file`: Encoded room image (PNG/JPG)
-  - `translation`: JSON string with `{"x": float, "y": float}` (optional)
-  - `rotation`: JSON string with `[angle]` array (optional)
-
-### Response
-- **200 OK** (Success)
-  ```json
-  {
-    "status": "success",
-    "content": "base64_encoded_numpy_array",
-    "shape": [height, width]
-  }
-  ```
-- **400 Bad Request**
-  ```json
-  {
-    "status": "error",
-    "error": "No file provided in request"
-  }
-  ```
-- **500 Internal Server Error**
-  ```json
-  {
-    "status": "error",
-    "error": "<error message>"
-  }
-  ```
-
-### Python Example
-```python
-import requests
-import json
-
-with open("encoded_room.png", "rb") as f:
-    files = {"file": ("encoded_room.png", f)}
-    response = requests.post(
-        "http://localhost:8081/simulate",
-        files=files,
-        data={
-            "translation": json.dumps({"x": 750, "y": 0}),
-            "rotation": json.dumps([0])
-        }
-    )
-
-result = response.json()
-if result.get("status") == "success":
-    print(f"Simulation complete! Shape: {result['shape']}")
-```
-
-### TypeScript Example
-```typescript
-const formData = new FormData();
-const fileInput = document.getElementById('imageFile') as HTMLInputElement;
-if (fileInput.files?.[0]) {
-  formData.append('file', fileInput.files[0]);
-  formData.append('translation', JSON.stringify({x: 750, y: 0}));
-  formData.append('rotation', JSON.stringify([0]));
+  "mesh": [/* array of mesh triangles */]
 }
-
-fetch("http://localhost:8081/simulate", {
-  method: "POST",
-  body: formData
-})
-  .then(res => res.json())
-  .then(data => console.log(data));
 ```
 
----
-
-## Error Handling
-
-### Client Errors (4xx)
-- **400 Bad Request**: Missing file upload or invalid file format
-- **422 Unprocessable Entity**: File processing errors
-
-### Server Errors (5xx)
-- **500 Internal Server Error**: Model inference failures, memory issues, or server crashes
-
-### Error Response Format
+**Response:**
 ```json
 {
-  "error": "Descriptive error message",
-  "status": "error"  // May be present
+  "status": "success",
+  "result": [/* 128x128 RGB image array */]
 }
 ```
 
 ---
 
-## Usage Notes
+### Obstruction Analysis
 
-- **Server Port**: Default port is 8000 (configurable via `PORT` environment variable)
-- **File Upload**: Always use `multipart/form-data` for file uploads
-- **Content Types**: Server validates uploaded files are images
-- **Model Loading**: Model is loaded on first prediction request (may cause initial delay)
-- **Response Format**: All endpoints return JSON responses
-- **Logging**: Server provides structured logging for monitoring and debugging
+#### `POST /v1/obstruction_all`
+
+Calculate horizon and zenith obstruction angles for all 64 directions around a window.
+
+**Request:**
+```json
+{
+  "x": 39.98,
+  "y": 48.78,
+  "z": 18.65,
+  "mesh": [/* array of mesh triangles */]
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "horizon_angles": [/* 64 angles in degrees */],
+  "zenith_angles": [/* 64 angles in degrees */]
+}
+```
+
+#### `POST /v1/horizon_angle`
+
+Calculate single horizon obstruction angle for a specific direction.
+
+**Request:**
+```json
+{
+  "x": 39.98,
+  "y": 48.78,
+  "z": 18.65,
+  "direction_angle": 45.0,
+  "mesh": [/* array of mesh triangles */]
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "horizon_angle": 15.5
+}
+```
+
+#### `POST /v1/zenith_angle`
+
+Calculate single zenith obstruction angle for a specific direction.
+
+**Request:** Same as `/horizon_angle`
+
+**Response:**
+```json
+{
+  "status": "success",
+  "zenith_angle": 10.2
+}
+```
 
 ---
 
-## `/encode`
-**POST** `/encode`
-Encodes room data and parameters into a PNG image representation. **Protected by token authentication.**
+### Window Geometry
 
-### Authentication
-This endpoint requires Bearer token authentication:
-```
-Authorization: Bearer <your_token>
-```
+#### `POST /v1/get-reference-point`
 
-Configure the token by setting the `API_TOKEN` environment variable on the server.
+Get the reference point (center) of each window for obstruction calculations.
 
-### Request
-- **Content-Type:** `application/json`
-- **Headers:**
-  - `Authorization: Bearer <token>` (required)
-- **Body:**
-  - `model_type`: The model type to use for encoding (e.g., "df_default")
-  - `parameters`: Object containing room and window parameters
-    - `height_roof_over_floor`: Height from floor to roof (float)
-    - `floor_height_above_terrain`: Floor height above terrain (float)
-    - `room_polygon`: Array of [x, y] coordinates defining the room shape
-    - `windows`: Object containing window definitions
-      - Each window is keyed by name and contains:
-        - `x1`, `y1`, `z1`: First corner coordinates
-        - `x2`, `y2`, `z2`: Second corner coordinates
-        - `window_sill_height`: Height of window sill
-        - `window_frame_ratio`: Frame ratio (0-1)
-        - `window_height`: Height of window
-        - `obstruction_angle_horizon`: Horizon obstruction angle (degrees)
-        - `obstruction_angle_zenith`: Zenith obstruction angle (degrees)
-
-### Response
-- **200 OK** (Success)
-  - Returns PNG image binary data
-  - Content-Type: `image/png`
-- **400 Bad Request** (Invalid input or missing authentication)
-  ```json
-  {
-    "status": "error",
-    "error": "Missing Authorization header"
-  }
-  ```
-  ```json
-  {
-    "status": "error",
-    "error": "Invalid authentication token"
-  }
-  ```
-  ```json
-  {
-    "status": "error",
-    "error": "Missing required field: model_type"
-  }
-  ```
-- **500 Internal Server Error** (Processing error)
-  ```json
-  {
-    "status": "error",
-    "error": "<error message>"
-  }
-  ```
-
-### Python Example
-```python
-import requests
-
-url = "http://localhost:8081/encode"
-token = "your_api_token_here"
-
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json"
-}
-
-payload = {
-    "model_type": "df_default",
-    "parameters": {
-        "height_roof_over_floor": 2.7,
-        "floor_height_above_terrain": 3.0,
-        "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
-        "windows": {
-            "main_window": {
-                "x1": -0.6, "y1": 0.0, "z1": 0.9,
-                "x2": 0.6, "y2": 0.0, "z2": 2.4,
-                "window_sill_height": 0.9,
-                "window_frame_ratio": 0.15,
-                "window_height": 1.5,
-                "obstruction_angle_horizon": 15.0,
-                "obstruction_angle_zenith": 10.0
-            }
-        }
+**Request:**
+```json
+{
+  "room_polygon": [[0, 0], [0, 7], [-3, 7], [-3, 0]],
+  "windows": {
+    "test_window": {
+      "x1": -2, "y1": 7, "z1": 2.8,
+      "x2": -0.4, "y2": 7.2, "z2": 5.4
     }
+  }
 }
-
-response = requests.post(url, headers=headers, json=payload)
-
-if response.status_code == 200:
-    with open("encoded_room.png", "wb") as f:
-        f.write(response.content)
-    print("Image saved successfully!")
-else:
-    print(f"Error: {response.json()}")
 ```
 
-### TypeScript Example
-```typescript
-const url = "http://localhost:8081/encode";
-const token = "your_api_token_here";
+**Response:**
+```json
+{
+  "status": "success",
+  "windows": {
+    "test_window": {
+      "reference_point": {"x": -1.2, "y": 7.1, "z": 4.1}
+    }
+  }
+}
+```
 
-const payload = {
-  model_type: "df_default",
-  parameters: {
-    height_roof_over_floor: 2.7,
-    floor_height_above_terrain: 3.0,
-    room_polygon: [[0, 0], [5, 0], [5, 4], [0, 4]],
-    windows: {
-      main_window: {
-        x1: -0.6, y1: 0.0, z1: 0.9,
-        x2: 0.6, y2: 0.0, z2: 2.4,
-        window_sill_height: 0.9,
-        window_frame_ratio: 0.15,
-        window_height: 1.5,
-        obstruction_angle_horizon: 15.0,
-        obstruction_angle_zenith: 10.0
+#### `POST /v1/calculate-direction`
+
+Calculate the outward normal direction angle for each window.
+
+**Request:** Same as `/get-reference-point`
+
+**Response:**
+```json
+{
+  "status": "success",
+  "windows": {
+    "test_window": {
+      "direction_angle": 90.5
+    }
+  }
+}
+```
+
+---
+
+### Encoding
+
+#### `POST /v1/encode`
+
+Encode room and window parameters into model input format (ZIP file with NPY arrays).
+
+**Request:**
+```json
+{
+  "model_type": "df_default",
+  "parameters": {
+    "height_roof_over_floor": 19.7,
+    "floor_height_above_terrain": 2.71,
+    "room_polygon": [[0, 0], [0, 7], [-3, 7], [-3, 0]],
+    "windows": {
+      "main_window": {
+        "x1": -0.4, "y1": 7, "z1": 2.8,
+        "x2": -2, "y2": 7.3, "z2": 5.4,
+        "window_frame_ratio": 0.41
       }
     }
-  }
-};
-
-fetch(url, {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${token}`,
-    "Content-Type": "application/json"
   },
-  body: JSON.stringify(payload)
-})
-  .then(res => {
-    if (res.ok) {
-      return res.blob();
-    }
-    throw new Error(`HTTP error! status: ${res.status}`);
-  })
-  .then(blob => {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'encoded_room.png';
-    a.click();
-  })
-  .catch(err => console.error('Request failed:', err));
+  "mesh": [/* array of mesh triangles */]
+}
 ```
 
-### cURL Example
-```bash
-curl -X POST \
-  -H "Authorization: Bearer your_api_token_here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_type": "df_default",
-    "parameters": {
-      "height_roof_over_floor": 2.7,
-      "floor_height_above_terrain": 3.0,
-      "room_polygon": [[0, 0], [5, 0], [5, 4], [0, 4]],
-      "windows": {
-        "main_window": {
-          "x1": -0.6, "y1": 0.0, "z1": 0.9,
-          "x2": 0.6, "y2": 0.0, "z2": 2.4,
-          "window_sill_height": 0.9,
-          "window_frame_ratio": 0.15,
-          "window_height": 1.5,
-          "obstruction_angle_horizon": 15.0,
-          "obstruction_angle_zenith": 10.0
-        }
+**Response:** Binary ZIP file containing `image.npy` (128x128 encoded image array)
+
+**Python example:**
+```python
+import zipfile
+from io import BytesIO
+import numpy as np
+
+response = requests.post(f"{SERVER_URL}/encode", json=payload)
+zip_buffer = BytesIO(response.content)
+
+with zipfile.ZipFile(zip_buffer, 'r') as zip_file:
+    with zip_file.open('image.npy') as npy_file:
+        image_array = np.load(npy_file)
+```
+
+#### `POST /v1/encode_raw`
+
+Encode room parameters with pre-calculated obstruction angles.
+
+**Request:**
+```json
+{
+  "model_type": "df_default",
+  "parameters": {
+    "height_roof_over_floor": 19.7,
+    "floor_height_above_terrain": 2.71,
+    "room_polygon": [[0, 0], [0, 7], [-3, 7], [-3, 0]],
+    "windows": {
+      "main_window": {
+        "x1": -0.4, "y1": 7, "z1": 2.8,
+        "x2": -2, "y2": 7.3, "z2": 5.4,
+        "window_frame_ratio": 0.41,
+        "direction_angle": 90.0,
+        "obstruction_angle_horizon": [/* 64 angles */],
+        "obstruction_angle_zenith": [/* 64 angles */]
       }
     }
-  }' \
-  --output encoded_room.png \
-  http://localhost:8081/encode
+  }
+}
+```
+
+**Response:** Binary ZIP file (same format as `/encode`)
+
+---
+
+### Statistics
+
+#### `POST /v1/stats`
+
+Calculate statistical metrics and compliance analysis for daylight simulation results.
+
+**Request:**
+```json
+{
+  "result": [
+    [0.5, 0.3, 0.7, 0.1],
+    [0.2, 0.8, 0.1, 0.9],
+    [7.9, 8.4, 9.2, 3.5],
+    [2.1, 5.5, 6.8, 7.3]
+  ],
+  "mask": [
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1]
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "metrics": {
+    "max": 9.2,
+    "mean": 3.39,
+    "median": 1.5,
+    "min": 0.1,
+    "valid_area": 50.0
+  }
+}
+```
+
+**Fields:**
+- `result`: 2D array of daylight factor values
+- `mask`: Optional 2D boolean array marking valid room area (1 = valid, 0 = invalid)
+
+**Response Metrics:**
+- `max`: Maximum daylight factor value
+- `mean`: Average daylight factor across all valid cells
+- `median`: Median daylight factor value
+- `min`: Minimum daylight factor value
+- `valid_area`: Percentage of valid area (based on mask)
+
+#### `POST /v1/merge`
+
+Merge multiple window simulation results into a single combined image.
+
+**Request:**
+```json
+{
+  "window_results": {
+    "window_1": {
+      "df_matrix": [/* 2D array */],
+      "room_mask": [/* 2D array */]
+    },
+    "window_2": {
+      "df_matrix": [/* 2D array */],
+      "room_mask": [/* 2D array */]
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "merged_result": {
+    "df_matrix": [/* merged 2D array */],
+    "room_mask": [/* merged 2D array */]
+  }
+}
 ```
 
 ---
 
-## Development & Testing
+## Error Responses
 
-### Local Development
-```bash
-# Start the server
-python main.py
+All endpoints return errors in the following format:
 
-# Test health check
-curl http://localhost:8000/
-
-# Test prediction with sample image
-curl -X POST -F "file=@sample.jpg" http://localhost:8000/run
+```json
+{
+  "status": "error",
+  "error": "Description of what went wrong",
+  "error_type": "validation_error"
+}
 ```
 
-### Environment Variables
-- `MODEL`: Model checkpoint name (default: "df_default_2.0.0")
-- `PORT`: Server port (default: 8000)
-- `API_TOKEN`: Authentication token for protected endpoints (required for `/encode`)
+**Common HTTP Status Codes:**
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `403` - Forbidden (authentication required)
+- `500` - Internal Server Error
+- `503` - Service Unavailable
+- `504` - Gateway Timeout
 
 ---
+
+## Examples
+
+See [example/demo.ipynb](../example/demo.ipynb) for complete working examples of all endpoints.

@@ -1,0 +1,40 @@
+[Unit]
+Description=DF Merger Server - Aggregate daylight factor simulations
+After=network.target
+
+[Service]
+Type=simple
+User=dfmerger
+Group=dfmerger
+WorkingDirectory=/opt/df-merger-server
+Environment="PATH=/opt/df-merger-server/venv/bin"
+Environment="PORT=8084"
+EnvironmentFile=/opt/df-merger-server/.env
+ExecStart=/opt/df-merger-server/venv/bin/gunicorn \
+    --bind 0.0.0.0:${PORT} \
+    --workers ${WORKERS} \
+    --threads ${THREADS} \
+    --timeout ${TIMEOUT} \
+    --access-logfile /var/log/df-merger-server/access.log \
+    --error-logfile /var/log/df-merger-server/error.log \
+    --log-level ${GUNICORN_LOG_LEVEL} \
+    --chdir /opt/df-merger-server/src \
+    main:app
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/df-merger-server
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

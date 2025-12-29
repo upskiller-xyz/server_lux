@@ -213,9 +213,9 @@ class RequestField(Enum):
     RESULT = "result"
     IMAGE = "image"
     SIMULATION = "simulation"
-    DF_VALUES = "df_values"
     DF_MATRIX = "df_matrix"
     ROOM_MASK = "room_mask"
+    DF_VALUES = "df_values"
     MASK = "mask"
     SHAPE = "shape"
 

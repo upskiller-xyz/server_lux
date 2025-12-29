@@ -1,0 +1,40 @@
+[Unit]
+Description=Encoder Server - Encode room parameters into images
+After=network.target
+
+[Service]
+Type=simple
+User=encoder
+Group=encoder
+WorkingDirectory=/opt/encoder-server
+Environment="PATH=/opt/encoder-server/venv/bin"
+Environment="PORT=8082"
+EnvironmentFile=/opt/encoder-server/.env
+ExecStart=/opt/encoder-server/venv/bin/gunicorn \
+    --bind 0.0.0.0:${PORT} \
+    --workers ${WORKERS} \
+    --threads ${THREADS} \
+    --timeout ${TIMEOUT} \
+    --access-logfile /var/log/encoder-server/access.log \
+    --error-logfile /var/log/encoder-server/error.log \
+    --log-level ${GUNICORN_LOG_LEVEL} \
+    --chdir /opt/encoder-server/src \
+    main:app
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/encoder-server
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
