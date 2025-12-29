@@ -53,6 +53,7 @@ REPOS=(
     "server_encoder:https://github.com/upskiller-xyz/server_encoder.git"
     "server_model:https://github.com/upskiller-xyz/server_model.git"
     "server_merger:https://github.com/upskiller-xyz/server_merger.git"
+    "server_stats:https://github.com/upskiller-xyz/server_stats.git"
 )
 
 echo -e "${BLUE}Cloning/updating microservices...${NC}"
@@ -113,6 +114,7 @@ SERVICES=(
     "encoder-service:8082"
     "model-service:8083"
     "merger-service:8084"
+    "stats-service:8085"
 )
 
 ALL_HEALTHY=true
@@ -144,6 +146,7 @@ echo -e "  Obstruction:        ${GREEN}http://localhost:8081${NC}"
 echo -e "  Encoder:            ${GREEN}http://localhost:8082${NC}"
 echo -e "  Model:              ${GREEN}http://localhost:8083${NC}"
 echo -e "  Merger:             ${GREEN}http://localhost:8084${NC}"
+echo -e "  Stats:              ${GREEN}http://localhost:8085${NC}"
 echo ""
 
 if [ "$ALL_HEALTHY" = true ]; then
