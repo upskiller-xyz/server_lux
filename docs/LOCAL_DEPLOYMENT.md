@@ -10,6 +10,21 @@ Deploy the full stack (all microservices) locally using Docker Compose.
 
 ## Quick Start
 
+### Option 1: Automated Script (Recommended)
+
+```bash
+cd deployment
+bash deploy-full-stack.sh
+```
+
+The script will:
+- Clone all microservice repositories
+- Build all Docker images
+- Start all services
+- Verify health of all endpoints
+
+### Option 2: Manual Deployment
+
 1. **Navigate to deployment directory:**
    ```bash
    cd deployment
