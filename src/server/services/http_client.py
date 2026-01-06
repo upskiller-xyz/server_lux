@@ -51,6 +51,28 @@ class HTTPClient:
         parsed = urlparse(url)
         return parsed.path or "/"
 
+    @staticmethod
+    def _extract_error_message(response: requests.Response) -> str:
+        """Extract error message from service response.
+
+        Tries to parse JSON response first to get structured error message,
+        falls back to raw text if parsing fails.
+        """
+        try:
+            content_type = response.headers.get('Content-Type', '').lower()
+            if 'application/json' in content_type:
+                error_data = response.json()
+                if isinstance(error_data, dict):
+                    # Try to get error message from common keys
+                    error_msg = error_data.get('error') or error_data.get('message') or error_data.get('detail')
+                    if error_msg:
+                        return f"Service responded with a message: {error_msg}"
+        except (ValueError, KeyError):
+            pass
+
+        # Fallback to raw response text
+        return f"Service responded with a message: {response.text[:200]}"
+
     def _handle_request_error(self, e: Exception, url: str) -> None:
         service_name = self._parse_service_name(url)
         endpoint = self._parse_endpoint(url)
@@ -65,7 +87,7 @@ class HTTPClient:
             raise error
         elif isinstance(e, requests.exceptions.HTTPError):
             status_code = e.response.status_code if e.response else 0
-            error_msg = e.response.text[:200] if e.response else str(e)
+            error_msg = self._extract_error_message(e.response) if e.response else str(e)
 
             if status_code == 403:
                 error = ServiceAuthorizationError(service_name, endpoint, error_msg)
@@ -143,10 +165,11 @@ class HTTPClient:
                     error_data = response.json()
                     if error_data.get('status') == 'error':
                         error_msg = error_data.get('error', 'Unknown error from service')
-                        logger.error(f"Service returned error: {error_msg}")
                         service_name = self._parse_service_name(url)
                         endpoint = self._parse_endpoint(url)
-                        raise ServiceResponseError(service_name, endpoint, response.status_code, error_msg)
+                        full_error_msg = f"Service responded with a message: {error_msg}"
+                        logger.error(full_error_msg)
+                        raise ServiceResponseError(service_name, endpoint, response.status_code, full_error_msg)
                 except ValueError:
                     pass
 
