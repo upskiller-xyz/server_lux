@@ -157,22 +157,32 @@ class HTTPClient:
                 headers={"Content-Type": "application/json"},
                 timeout=(10, self._timeout)
             )
-            response.raise_for_status()
 
+            # Check for JSON error responses before raise_for_status
+            # This handles cases where services return JSON errors with 4xx/5xx status codes
             content_type = response.headers.get('Content-Type', '').lower()
-            if 'application/json' in content_type:
+            if not response.ok and 'application/json' in content_type:
                 try:
                     error_data = response.json()
-                    if error_data.get('status') == 'error':
-                        error_msg = error_data.get('error', 'Unknown error from service')
-                        service_name = self._parse_service_name(url)
-                        endpoint = self._parse_endpoint(url)
-                        logger.error(f"Service error: {error_msg}")
-                        raise ServiceResponseError(service_name, endpoint, response.status_code, str(error_msg))
-                except ValueError:
+                    error_msg = error_data.get('error') or error_data.get('message') or 'Unknown error from service'
+                    service_name = self._parse_service_name(url)
+                    endpoint = self._parse_endpoint(url)
+                    logger.error(f"Service error: {error_msg}")
+                    raise ServiceResponseError(service_name, endpoint, response.status_code, str(error_msg))
+                except (ValueError, KeyError):
+                    # JSON parsing failed, fall through to raise_for_status
                     pass
+                except ServiceResponseError:
+                    # Re-raise our custom error without catching it
+                    raise
+
+            # Raise for HTTP errors (if not already handled above)
+            response.raise_for_status()
 
             return response.content
 
+        except ServiceResponseError:
+            # Let our custom errors propagate without modification
+            raise
         except requests.exceptions.RequestException as e:
             self._handle_request_error(e, url)
