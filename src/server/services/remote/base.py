@@ -3,6 +3,7 @@ import logging
 
 from src.server.config import SessionConfig, get_service_config
 from src.server.services.http_client import HTTPClient
+from src.server.services.helpers.logging_utils import LoggingFormatter
 from .contracts import RemoteServiceRequest
 from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
 from ...enums import ServiceName, EndpointType
@@ -71,13 +72,15 @@ class RemoteService:
         cls._log_request(endpoint, url, request)
 
         logger.info(f"[{cls.name.value}] Calling remote endpoint: {url}")
-        logger.info(f"[{cls.name.value}] Request data: {request.to_dict}")
 
         request_dict = request.to_dict
+        formatted_request = LoggingFormatter.format_for_logging(request_dict)
+        logger.info(f"[{cls.name.value}] Request data: {formatted_request}")
 
         response_dict = cls._http_client.post(url, request_dict)
 
-        logger.info(f"[{cls.name.value}] Response received: {response_dict}")
+        formatted_response = LoggingFormatter.format_for_logging(response_dict)
+        logger.info(f"[{cls.name.value}] Response received: {formatted_response}")
 
         # Use provided response_class or fall back to service's default
         if response_class is None:
