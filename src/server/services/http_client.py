@@ -66,12 +66,12 @@ class HTTPClient:
                     # Try to get error message from common keys
                     error_msg = error_data.get('error') or error_data.get('message') or error_data.get('detail')
                     if error_msg:
-                        return f"Service responded with a message: {error_msg}"
+                        return str(error_msg)
         except (ValueError, KeyError):
             pass
 
         # Fallback to raw response text
-        return f"Service responded with a message: {response.text[:200]}"
+        return response.text[:200] if response.text else "Unknown error from service"
 
     def _handle_request_error(self, e: Exception, url: str) -> None:
         service_name = self._parse_service_name(url)
@@ -167,9 +167,8 @@ class HTTPClient:
                         error_msg = error_data.get('error', 'Unknown error from service')
                         service_name = self._parse_service_name(url)
                         endpoint = self._parse_endpoint(url)
-                        full_error_msg = f"Service responded with a message: {error_msg}"
-                        logger.error(full_error_msg)
-                        raise ServiceResponseError(service_name, endpoint, response.status_code, full_error_msg)
+                        logger.error(f"Service error: {error_msg}")
+                        raise ServiceResponseError(service_name, endpoint, response.status_code, str(error_msg))
                 except ValueError:
                     pass
 
