@@ -62,10 +62,17 @@ class ErrorResponseBuilder(IErrorResponseBuilder):
         default_status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
     ) -> Tuple[Any, int]:
         if isinstance(exception, ServiceResponseError):
+            # Determine error type based on status code
+            error_type = (
+                ErrorType.VALIDATION_ERROR
+                if exception.status_code == HTTPStatus.BAD_REQUEST.value
+                else ErrorType.INTERNAL_ERROR
+            )
+
             response_body = {
                 ResponseKey.STATUS.value: ResponseStatus.ERROR.value,
                 ResponseKey.ERROR.value: exception.error_message,
-                ResponseKey.ERROR_TYPE.value: ErrorType.INTERNAL_ERROR.value
+                ResponseKey.ERROR_TYPE.value: error_type.value
             }
             return jsonify(response_body), exception.status_code
 

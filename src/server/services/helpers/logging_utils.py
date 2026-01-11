@@ -41,6 +41,11 @@ class LengthReplacementStrategy:
         'results'
     }
 
+    # Keys whose list values should be trimmed to first item only
+    LIST_TRIM_KEYS: Set[str] = {
+        'results'
+    }
+
     # Keys that contain coordinate/mesh data that should have floats rounded
     COORDINATE_KEYS: Set[str] = {
         'mesh',
@@ -67,6 +72,11 @@ class LengthReplacementStrategy:
     def should_round_coordinates(cls, key: str) -> bool:
         """Check if key contains coordinate data that should be rounded"""
         return key in cls.COORDINATE_KEYS
+
+    @classmethod
+    def should_trim_list(cls, key: str) -> bool:
+        """Check if list value should be trimmed to first item only"""
+        return key in cls.LIST_TRIM_KEYS
 
     @classmethod
     def format_value(cls, value: Any) -> str:
@@ -205,7 +215,7 @@ class LoggingDictFormatter(ILoggingFormatter):
         """Format dictionary for logging
 
         Special handling:
-        - result/results keys: If value is a dict, recurse into it
+        - result/results keys: If value is a dict, recurse into it; if list, trim to first item
         - Coordinate keys (mesh, windows, x/y/z): Round floats to 2 decimal places
         - Trim keys: Format as summary with length info
         """
@@ -218,6 +228,12 @@ class LoggingDictFormatter(ILoggingFormatter):
                     formatted[key] = LengthReplacementStrategy.format_value(rounded_value)
                 else:
                     formatted[key] = LengthReplacementStrategy.format_value(value)
+            elif LengthReplacementStrategy.should_trim_list(key) and isinstance(value, (list, tuple)):
+                # Special keys like results - trim list to first item only
+                if len(value) > 0:
+                    formatted[key] = [self.format(value[0], max_depth, current_depth + 1)]
+                else:
+                    formatted[key] = value
             elif LengthReplacementStrategy.should_recurse_dict(key) and isinstance(value, dict):
                 # Special keys like result/results - recurse into dict
                 formatted[key] = self._format_dict(value, max_depth, current_depth + 1)
@@ -229,7 +245,7 @@ class LoggingDictFormatter(ILoggingFormatter):
                 formatted[key] = self.format(value, max_depth, current_depth + 1)
         return formatted
 
-    def _format_list(self, data: List[Any], max_depth: int, current_depth: int) -> Any:
+    def _format_list(self, data: List[Any], max_depth: int, current_depth: int, parent_key: str = None) -> Any:
         """Format list for logging
 
         For large lists (>10 items), shows summary with length and first element.
