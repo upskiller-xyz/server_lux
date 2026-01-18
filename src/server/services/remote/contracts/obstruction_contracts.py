@@ -136,23 +136,39 @@ class ObstructionResponse(StandardResponse):
 
     Standardized: only horizon_angle and zenith_angle (can be float or List[float]).
     """
-    horizon_angle: Optional[float | List[float]] = None
-    zenith_angle: Optional[float | List[float]] = None
+    def __init__(self, raw_response: Dict[str, Any]):
+        super().__init__(raw_response)
+        self.horizon_angle = None
+        self.zenith_angle = None
 
-    @classmethod
-    def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
+    def parse(self) -> Dict[str, Any]:
         """Parse response data from obstruction service
 
-        Handles both single values and arrays, normalizing to horizon_angle/zenith_angle.
+        Handles both query directly (old format) and nested in stats (new format).
+        Returns a dictionary as expected by ObstructionService.
         """
-        # Try single values first
+        content = self._raw
+        
+        # 1. Try direct keys first (Old/Flat Format)
         horizon_angle = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value)
         zenith_angle = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value)
 
-        return cls(
-            horizon_angle=horizon_angle,
-            zenith_angle=zenith_angle
-        )
+        # 2. If not found, look in 'stats' object (New Microservice Format)
+        if horizon_angle is None:
+            stats = content.get('stats', {})
+            horizon_angle = stats.get('horizon_angles')
+            # If still None, looking in 'result' is complex due to structure, 
+            # but stats.horizon_angles should be present based on our analysis.
+
+        if zenith_angle is None:
+            stats = content.get('stats', {})
+            zenith_angle = stats.get('zenith_angles')
+            
+        return {
+            RequestField.OBSTRUCTION_ANGLE_HORIZON.value: horizon_angle,
+            RequestField.OBSTRUCTION_ANGLE_ZENITH.value: zenith_angle,
+            ResponseKey.STATUS.value: self.status
+        }
 
     @property
     def to_dict(self) -> Dict[str, Any]:
