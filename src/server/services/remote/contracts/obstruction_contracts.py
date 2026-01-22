@@ -144,7 +144,11 @@ class ObstructionResponse(StandardResponse):
     def parse(self) -> Dict[str, Any]:
         """Parse response data from obstruction service
 
-        Handles both query directly (old format) and nested in stats (new format).
+        Handles multiple formats:
+        1. Direct keys at root level (old format)
+        2. Nested in 'stats' object
+        3. Nested in 'data.results' array (obstruction_parallel microservice format)
+        
         Returns a dictionary as expected by ObstructionService.
         """
         content = self._raw
@@ -153,16 +157,33 @@ class ObstructionResponse(StandardResponse):
         horizon_angle = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value)
         zenith_angle = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value)
 
-        # 2. If not found, look in 'stats' object (New Microservice Format)
+        # 2. If not found, look in 'stats' object
         if horizon_angle is None:
             stats = content.get('stats', {})
             horizon_angle = stats.get('horizon_angles')
-            # If still None, looking in 'result' is complex due to structure, 
-            # but stats.horizon_angles should be present based on our analysis.
 
         if zenith_angle is None:
             stats = content.get('stats', {})
             zenith_angle = stats.get('zenith_angles')
+        
+        # 3. If still not found, look in 'data.results' array (microservice format)
+        if horizon_angle is None or zenith_angle is None:
+            data = content.get('data', {})
+            results = data.get('results', [])
+            if results:
+                # Extract obstruction_angle_degrees from each result
+                horizon_angles_list = []
+                zenith_angles_list = []
+                for result in results:
+                    horizon_data = result.get('horizon', {})
+                    zenith_data = result.get('zenith', {})
+                    horizon_angles_list.append(horizon_data.get('obstruction_angle_degrees', 0.0))
+                    zenith_angles_list.append(zenith_data.get('obstruction_angle_degrees', 0.0))
+                
+                if horizon_angle is None:
+                    horizon_angle = horizon_angles_list
+                if zenith_angle is None:
+                    zenith_angle = zenith_angles_list
             
         return {
             RequestField.OBSTRUCTION_ANGLE_HORIZON.value: horizon_angle,
