@@ -144,47 +144,35 @@ class ObstructionResponse(StandardResponse):
     def parse(self) -> Dict[str, Any]:
         """Parse response data from obstruction service
 
-        Handles multiple formats:
-        1. Direct keys at root level (old format)
-        2. Nested in 'stats' object
-        3. Nested in 'data.results' array (obstruction_parallel microservice format)
-        
-        Returns a dictionary as expected by ObstructionService.
+        Parses the data.results array from the obstruction_parallel microservice.
+        Each result contains horizon/zenith with obstruction_angle_degrees.
+
+        Returns a dictionary as expected by the orchestration layer.
         """
         content = self._raw
-        
-        # 1. Try direct keys first (Old/Flat Format)
-        horizon_angle = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value)
-        zenith_angle = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value)
 
-        # 2. If not found, look in 'stats' object
-        if horizon_angle is None:
-            stats = content.get('stats', {})
-            horizon_angle = stats.get('horizon_angles')
+        # Extract from data.results array (obstruction_parallel microservice format)
+        data = content.get('data', {})
+        results = data.get('results', [])
 
-        if zenith_angle is None:
-            stats = content.get('stats', {})
-            zenith_angle = stats.get('zenith_angles')
-        
-        # 3. If still not found, look in 'data.results' array (microservice format)
-        if horizon_angle is None or zenith_angle is None:
-            data = content.get('data', {})
-            results = data.get('results', [])
-            if results:
-                # Extract obstruction_angle_degrees from each result
-                horizon_angles_list = []
-                zenith_angles_list = []
-                for result in results:
-                    horizon_data = result.get('horizon', {})
-                    zenith_data = result.get('zenith', {})
-                    horizon_angles_list.append(horizon_data.get('obstruction_angle_degrees', 0.0))
-                    zenith_angles_list.append(zenith_data.get('obstruction_angle_degrees', 0.0))
-                
-                if horizon_angle is None:
-                    horizon_angle = horizon_angles_list
-                if zenith_angle is None:
-                    zenith_angle = zenith_angles_list
-            
+        if not results:
+            # Fallback for single-direction endpoints that return direct values
+            horizon_angle = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value)
+            zenith_angle = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value)
+        else:
+            # Extract obstruction_angle_degrees from each result in the array
+            horizon_angles_list = []
+            zenith_angles_list = []
+
+            for result in results:
+                horizon_data = result.get('horizon', {})
+                zenith_data = result.get('zenith', {})
+                horizon_angles_list.append(horizon_data.get('obstruction_angle_degrees', 0.0))
+                zenith_angles_list.append(zenith_data.get('obstruction_angle_degrees', 0.0))
+
+            horizon_angle = horizon_angles_list
+            zenith_angle = zenith_angles_list
+
         return {
             RequestField.OBSTRUCTION_ANGLE_HORIZON.value: horizon_angle,
             RequestField.OBSTRUCTION_ANGLE_ZENITH.value: zenith_angle,
@@ -199,3 +187,5 @@ class ObstructionResponse(StandardResponse):
         if self.zenith_angle is not None:
             result[ResponseKey.ZENITH_ANGLE.value] = self.zenith_angle
         return result
+
+
