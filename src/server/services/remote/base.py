@@ -86,6 +86,12 @@ class RemoteService:
         if response_class is None:
             response_class = ServiceResponseMap.get(cls.name)
 
+        # Factory Pattern: Check for explicit marker
+        # Classes with IS_FACTORY_RESPONSE = True use classmethod parse(content) -> Object
+        if getattr(response_class, 'IS_FACTORY_RESPONSE', False):
+            return response_class.parse(response_dict)
+        
+        # Legacy: Instantiate then parse
         response = response_class(response_dict)
         return response.parse()
 
@@ -116,6 +122,11 @@ class RemoteService:
         request_dict = request.to_dict
 
         binary_data = cls._http_client.post_binary(url, request_dict)
+        
+        # Factory Pattern: Check for explicit marker
+        if getattr(response_class, 'IS_FACTORY_RESPONSE', False):
+            return response_class.parse(binary_data)
+
         response = response_class(binary_data)
         return response.parse()
 
