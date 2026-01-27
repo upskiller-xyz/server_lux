@@ -43,11 +43,11 @@ class WindowGeometry:
 
         if self.obstruction_angle_horizon is not None:
             result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = self.obstruction_angle_horizon
-        if not self.obstruction_angle_horizon:
+        if self.obstruction_angle_horizon is None:
             result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = [0]
         if self.obstruction_angle_zenith is not None:
             result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = self.obstruction_angle_zenith
-        if not self.obstruction_angle_horizon:
+        if self.obstruction_angle_zenith is None:
             result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = [0]
 
         return result

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, ClassVar
 
 from .base_contracts import RemoteServiceRequest, StandardResponse
 from .domain_models import WindowGeometry
@@ -128,37 +128,62 @@ class ObstructionParallelRequest(RemoteServiceRequest):
 
 
 @dataclass
-class ObstructionResponse(StandardResponse):
+class ObstructionResponse:
     """Response from obstruction calculations
-
-    Used for /horizon_angle, /zenith_angle, /obstruction, /obstruction_multi,
-    and /obstruction_parallel endpoints.
-
-    Standardized: only horizon_angle and zenith_angle (can be float or List[float]).
+    
+    Used for /obstruction_parallel endpoint.
+    Parses the standardized data.results format from the obstruction microservice.
     """
-    horizon_angle: Optional[float | List[float]] = None
-    zenith_angle: Optional[float | List[float]] = None
-
+    # Marker for base.py to use factory pattern
+    IS_FACTORY_RESPONSE: ClassVar[bool] = True
+    
+    # Core data fields
+    horizon_angle: Optional[List[float]] = None
+    zenith_angle: Optional[List[float]] = None
+    
+    # Response metadata (previously from StandardResponse)
+    status: Optional[str] = None
+    error: Optional[str] = None
+    
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
         """Parse response data from obstruction service
-
-        Handles both single values and arrays, normalizing to horizon_angle/zenith_angle.
+        
+        Expects the standardized data.results format from /obstruction_parallel.
+        Each result contains horizon/zenith with obstruction_angle_degrees.
         """
-        # Try single values first
-        horizon_angle = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value)
-        zenith_angle = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value)
-
+        data = content.get('data', {})
+        results = data.get('results', [])
+        
+        horizon_angles = [
+            r.get('horizon', {}).get('obstruction_angle_degrees', 0.0) 
+            for r in results
+        ]
+        zenith_angles = [
+            r.get('zenith', {}).get('obstruction_angle_degrees', 0.0) 
+            for r in results
+        ]
+        
         return cls(
-            horizon_angle=horizon_angle,
-            zenith_angle=zenith_angle
+            horizon_angle=horizon_angles,
+            zenith_angle=zenith_angles,
+            status=content.get(ResponseKey.STATUS.value),
+            error=content.get(ResponseKey.ERROR.value)
         )
-
+    
+    @property
+    def is_success(self) -> bool:
+        """Check if response indicates success"""
+        return self.status == ResponseKey.SUCCESS.value
+    
     @property
     def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
         result = {}
         if self.horizon_angle is not None:
-            result[ResponseKey.HORIZON_ANGLE.value] = self.horizon_angle
+            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = self.horizon_angle
         if self.zenith_angle is not None:
-            result[ResponseKey.ZENITH_ANGLE.value] = self.zenith_angle
+            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = self.zenith_angle
         return result
+
+

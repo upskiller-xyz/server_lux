@@ -28,12 +28,14 @@ class ObstructionService(RemoteService):
     @classmethod
     def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None, response_class: type = None) -> Dict[str, Any]:
         """Calculate obstruction angles and format response for orchestration"""
+        # response is now an ObstructionResponse object
         response = super().run(endpoint, request, file, response_class)
 
         window_name = request.window_name
 
-        horizon_angles = response.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value, [])
-        zenith_angles = response.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value, [])
+        # Access attributes directly from the dataclass/object
+        horizon_angles = response.horizon_angle if response.horizon_angle is not None else []
+        zenith_angles = response.zenith_angle if response.zenith_angle is not None else []
 
         return {
             RequestField.OBSTRUCTION_ANGLE_HORIZON.value: {window_name: horizon_angles},

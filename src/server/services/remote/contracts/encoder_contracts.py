@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Dict, Any, List, ClassVar
 import numpy as np
 import io
 
@@ -87,6 +87,9 @@ class EncoderResponse(StandardResponse):
     Used for /encode endpoint. Returns encoded image and mask as numpy arrays.
     For now, handles one window at a time.
     """
+    # Marker for base.py to use factory pattern
+    IS_FACTORY_RESPONSE: ClassVar[bool] = True
+    
     image: np.ndarray
     mask: np.ndarray
 
