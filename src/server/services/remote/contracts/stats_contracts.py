@@ -57,13 +57,14 @@ class StatsResponse(StandardResponse):
     Used for /get_stats and /calculate endpoints.
     """
 
-    def parse(self) -> Dict[str, Any]:
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
         """Parse response data from statistics service
 
         Returns all statistics data from the response, excluding mask.
         """
         # Remove status/error/mask keys to get just the statistics
-        stats = {k: v for k, v in self._raw.items()
+        stats = {k: v for k, v in content.items()
                 if k not in [ResponseKey.STATUS.value, ResponseKey.ERROR.value, RequestField.MASK.value]}
 
         return stats

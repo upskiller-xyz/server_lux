@@ -61,8 +61,8 @@ class ModelService(RemoteService):
 
         # Use provided response_class or fall back to service's default
         if response_class is None:
-            response_class = ServiceResponseMap.get(cls.__class__)
+            response_class = ServiceResponseMap.get(cls.name)
 
-        response = response_class(response_dict)
-        return response.parse()
+        # Factory Pattern: All response classes use classmethod parse(content) -> Object
+        return response_class.parse(response_dict)
     

@@ -72,16 +72,12 @@ class DirectionAngleResponse(StandardResponse):
     """
     direction_angle: Dict[str, float] = None
 
-    def __init__(self, raw_response: Dict[str, Any]):
-        """Initialize from raw response"""
-        super().__init__(raw_response)
-        self.direction_angles = raw_response.get(ResponseKey.DIRECTION_ANGLE.value, {})
-        self.direction_angles_degrees = raw_response.get(ResponseKey.DIRECTION_ANGLE.value, {})
-
-    def parse(self) -> Dict[str, Any]:
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
         """Parse response data from direction angle service"""
+        direction_angles = content.get(ResponseKey.DIRECTION_ANGLE.value, {})
         return {
-            ResponseKey.DIRECTION_ANGLE.value: self.direction_angles
+            ResponseKey.DIRECTION_ANGLE.value: direction_angles
         }
 
     @property

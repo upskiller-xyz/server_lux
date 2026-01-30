@@ -25,7 +25,9 @@ class EncoderService(RemoteService):
         return BinaryResponse
 
     @classmethod
-    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None) -> bytes:
+    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None, response_class: type = None) -> bytes:
         """Encode room parameters to image"""
-        response_class = cls._get_response(endpoint)
-        return super().run_binary(endpoint, request, response_class)
+        if response_class is None:
+            response_class = cls._get_response(endpoint)
+        binary_response = super().run_binary(endpoint, request, response_class, file)
+        return binary_response.binary_data

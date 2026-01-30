@@ -101,19 +101,18 @@ class MergerResponse(StandardResponse):
     mask: np.ndarray
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(cls, content: Dict[str, Any]) -> 'MergerResponse':
         """Parse response data from merger service
 
-        Returns dict for consistency with orchestration flow.
+        Returns MergerResponse instance.
         """
         df_matrix = content.get(ResponseKey.RESULT.value) or content.get(RequestField.DF_MATRIX.value, [])
         room_mask = content.get(RequestField.MASK.value) or content.get(RequestField.ROOM_MASK.value, [])
 
-        # Return dict (not MergerResponse object) for orchestration
-        return {
-            RequestField.RESULT.value: df_matrix,
-            RequestField.MASK.value: room_mask
-        }
+        return cls(
+            result=np.array(df_matrix) if isinstance(df_matrix, list) else df_matrix,
+            mask=np.array(room_mask) if isinstance(room_mask, list) else room_mask
+        )
 
     @property
     def to_dict(self) -> Dict[str, Any]:

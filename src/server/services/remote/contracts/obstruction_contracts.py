@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, ClassVar
+from typing import Dict, Any, List, Optional
 
-from .base_contracts import RemoteServiceRequest, StandardResponse
-from .domain_models import WindowGeometry
+from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
 from ....enums import RequestField, ResponseKey
 
 
@@ -34,10 +33,10 @@ class ObstructionRequest(RemoteServiceRequest):
         if RequestField.X.value in content:
             # Direct format with x, y, z
             return [cls(
-                x=content.get(RequestField.X.value),
-                y=content.get(RequestField.Y.value),
-                z=content.get(RequestField.Z.value),
-                direction_angle=content.get(RequestField.DIRECTION_ANGLE.value),
+                x=content.get(RequestField.X.value, 0.0),
+                y=content.get(RequestField.Y.value, 0.0),
+                z=content.get(RequestField.Z.value, 0.0),
+                direction_angle=content.get(RequestField.DIRECTION_ANGLE.value, 0.0),
                 mesh=content.get(RequestField.MESH.value, [])
             )]
 
@@ -128,47 +127,40 @@ class ObstructionParallelRequest(RemoteServiceRequest):
 
 
 @dataclass
-class ObstructionResponse:
+class ObstructionResponse(RemoteServiceResponse):
     """Response from obstruction calculations
-    
+
     Used for /obstruction_parallel endpoint.
     Parses the standardized data.results format from the obstruction microservice.
     """
-    # Marker for base.py to use factory pattern
-    IS_FACTORY_RESPONSE: ClassVar[bool] = True
-    
-    # Core data fields
+    status: Optional[str] = None
     horizon_angle: Optional[List[float]] = None
     zenith_angle: Optional[List[float]] = None
-    
-    # Response metadata (previously from StandardResponse)
-    status: Optional[str] = None
-    error: Optional[str] = None
-    
+
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
         """Parse response data from obstruction service
-        
+
         Expects the standardized data.results format from /obstruction_parallel.
         Each result contains horizon/zenith with obstruction_angle_degrees.
         """
         data = content.get('data', {})
         results = data.get('results', [])
-        
+        status = content.get('status', 'success')
+
         horizon_angles = [
-            r.get('horizon', {}).get('obstruction_angle_degrees', 0.0) 
+            r.get('horizon', {}).get('obstruction_angle_degrees', 0.0)
             for r in results
         ]
         zenith_angles = [
-            r.get('zenith', {}).get('obstruction_angle_degrees', 0.0) 
+            r.get('zenith', {}).get('obstruction_angle_degrees', 0.0)
             for r in results
         ]
-        
+
         return cls(
+            status=status,
             horizon_angle=horizon_angles,
-            zenith_angle=zenith_angles,
-            status=content.get(ResponseKey.STATUS.value),
-            error=content.get(ResponseKey.ERROR.value)
+            zenith_angle=zenith_angles
         )
     
     @property

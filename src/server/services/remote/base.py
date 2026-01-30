@@ -5,7 +5,7 @@ from src.server.config import SessionConfig, get_service_config
 from src.server.services.http_client import HTTPClient
 from src.server.services.helpers.logging_utils import LoggingFormatter
 from .contracts import RemoteServiceRequest
-from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
+from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse, BinaryResponse
 from ...enums import ServiceName, EndpointType
 from ...maps import  PortMap, StandardMap
 
@@ -86,23 +86,17 @@ class RemoteService:
         if response_class is None:
             response_class = ServiceResponseMap.get(cls.name)
 
-        # Factory Pattern: Check for explicit marker
-        # Classes with IS_FACTORY_RESPONSE = True use classmethod parse(content) -> Object
-        if getattr(response_class, 'IS_FACTORY_RESPONSE', False):
-            return response_class.parse(response_dict)
-        
-        # Legacy: Instantiate then parse
-        response = response_class(response_dict)
-        return response.parse()
+        # Factory Pattern: All response classes use classmethod parse(content) -> Object
+        return response_class.parse(response_dict)
 
     @classmethod
     def run_binary(
         cls,
         endpoint: EndpointType,
         request: RemoteServiceRequest,
-        response_class: type[RemoteServiceResponse],
+        response_class: type[BinaryResponse],
         file:Any=None
-    ) -> bytes:
+    ) -> BinaryResponse:
         """Template method for binary response flow
 
         Args:
@@ -124,11 +118,8 @@ class RemoteService:
         binary_data = cls._http_client.post_binary(url, request_dict)
         
         # Factory Pattern: Check for explicit marker
-        if getattr(response_class, 'IS_FACTORY_RESPONSE', False):
-            return response_class.parse(binary_data)
-
-        response = response_class(binary_data)
-        return response.parse()
+        
+        return response_class(binary_data)
 
 
 class ServiceResponseMap(StandardMap):

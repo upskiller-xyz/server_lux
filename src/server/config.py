@@ -64,7 +64,7 @@ class ServiceConfig:
     @staticmethod
     def _create_url_adapter(env_var: str, host: str, port: ServicePort) -> Callable[[], str]:
         def get_url() -> str:
-            return os.getenv(env_var, f"http://{host}:{port.value}")
+            return os.getenv(env_var, f"{host}:{port.value}")
         return get_url
 
     def get_service_url(self, service_name: str) -> str:

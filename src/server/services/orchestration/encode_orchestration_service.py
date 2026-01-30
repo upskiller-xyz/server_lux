@@ -53,7 +53,7 @@ class SimulationOrchestrator(IOrchestrator):
         merger = ResultMerger(request_data)
         return merger.merge_window_results(window_results)
 
-    def _call_merger_service(self, merged_data: Dict[str, Any], file: Any) -> Dict[str, Any]:
+    def _call_merger_service(self, merged_data: Dict[str, Any], file: Any) -> 'MergerResponse':
         """Call merger service with merged window data"""
         merger_requests = MergerRequest.parse(merged_data)
         merger_request = merger_requests[0] if merger_requests else None
@@ -65,12 +65,12 @@ class SimulationOrchestrator(IOrchestrator):
         merger_endpoint = ServiceEndpointMap.get(self._merger_service)
         return self._merger_service.run(merger_endpoint, merger_request, file)
 
-    def _build_final_response(self, merger_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_final_response(self, merger_result: 'MergerResponse') -> Dict[str, Any]:
         """Build final response from merger result"""
         return {
             ResponseKey.STATUS.value: ResponseKey.SUCCESS.value,
-            RequestField.RESULT.value: merger_result.get(RequestField.RESULT.value, []),
-            RequestField.MASK.value: merger_result.get(RequestField.MASK.value, [])
+            RequestField.RESULT.value: merger_result.result.tolist() if merger_result.result is not None else [],
+            RequestField.MASK.value: merger_result.mask.tolist() if merger_result.mask is not None else []
         }
 
 
