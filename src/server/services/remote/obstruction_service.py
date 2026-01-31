@@ -40,8 +40,8 @@ class ObstructionService(RemoteService):
         horizon_angles = response.horizon if response.horizon is not None else []
         zenith_angles = response.zenith if response.zenith is not None else []
 
-        logger.info(f"[ObstructionService] Parsed horizon_angles: {horizon_angles}")
-        logger.info(f"[ObstructionService] Parsed zenith_angles: {zenith_angles}")
+        logger.debug(f"[ObstructionService] Parsed horizon_angles: {horizon_angles}")
+        logger.debug(f"[ObstructionService] Parsed zenith_angles: {zenith_angles}")
 
         # For single-window requests (default window name), return flat structure
         # For multi-window orchestration, return nested structure
