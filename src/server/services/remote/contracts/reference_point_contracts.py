@@ -78,16 +78,11 @@ class ReferencePointResponse(StandardResponse):
     """
     reference_point: Dict[str, Dict[str, float]]
 
-    def __init__(self, raw_response: Dict[str, Any]):
-        """Initialize from raw response"""
-        super().__init__(raw_response)
-        self.reference_point = raw_response.get(RequestField.REFERENCE_POINT.value, {})
-
-    def parse(self) -> Dict[str, Any]:
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> 'ReferencePointResponse':
         """Parse response and return reference points"""
-        return {
-            RequestField.REFERENCE_POINT.value: self.reference_point
-        }
+        reference_point = content.get(RequestField.REFERENCE_POINT.value, {})
+        return cls(reference_point)
 
     @property
     def to_dict(self) -> Dict[str, Any]:

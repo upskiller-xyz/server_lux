@@ -55,15 +55,26 @@ class StatsResponse(StandardResponse):
     """Response from statistics calculation
 
     Used for /get_stats and /calculate endpoints.
+    Stores statistics data and provides as_dict() method to access it.
     """
+    stats: Dict[str, Any] = None
 
-    def parse(self) -> Dict[str, Any]:
+    @classmethod
+    def parse(cls, content: Dict[str, Any]) -> 'StatsResponse':
         """Parse response data from statistics service
 
-        Returns all statistics data from the response, excluding mask.
+        Returns StatsResponse instance with statistics data.
         """
         # Remove status/error/mask keys to get just the statistics
-        stats = {k: v for k, v in self._raw.items()
+        stats = {k: v for k, v in content.items()
                 if k not in [ResponseKey.STATUS.value, ResponseKey.ERROR.value, RequestField.MASK.value]}
+        return cls(stats=stats)
 
-        return stats
+    def as_dict(self) -> Dict[str, Any]:
+        """Get statistics as dictionary"""
+        return self.stats if self.stats is not None else {}
+
+    @property
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return self.as_dict()

@@ -27,6 +27,7 @@ class EndpointOrchestratorMap(StandardMap):
     _content = {
         EndpointType.SIMULATE: SimulationOrchestrator,
         EndpointType.RUN: SimulationOrchestrator,
-        EndpointType.ENCODE: EncodeOrchestrator
+        EndpointType.ENCODE: EncodeOrchestrator,
+        EndpointType.ENCODE_RAW: EncodeOrchestrator
     }
     _default = Orchestrator

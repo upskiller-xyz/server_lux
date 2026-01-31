@@ -72,6 +72,9 @@ class Orchestrator(IOrchestrator):
             params.update(response)
         elif isinstance(response, bytes):
             self._handle_binary_response(params, response)
+        elif hasattr(response, 'to_dict'):
+            # Handle response objects (dataclasses with to_dict property)
+            params.update(response.to_dict)
 
     def _handle_binary_response(self, params: Dict[str, Any], response: bytes) -> None:
         """Handle binary response (e.g., NPZ from encoder)"""
