@@ -13,6 +13,6 @@ class MergerService(RemoteService):
     name: ServiceName = ServiceName.MERGER
 
     @classmethod
-    def _get_request(cls, endpoint: EndpointType):
+    def _get_request(cls, endpoint: EndpointType) -> type[MergerRequest]:
         """Return the request class for this service"""
         return MergerRequest

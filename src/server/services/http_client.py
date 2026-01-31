@@ -102,7 +102,7 @@ class HTTPClient:
             logger.error(error.get_log_message())
             raise error
 
-    def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any] | None:
         try:
             if self._session is None:
                 self._session = self._create_session()
@@ -127,7 +127,7 @@ class HTTPClient:
         url: str,
         files: Dict[str, Any],
         data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, Any] | None:
         try:
             logger.info(f"POST multipart request to {url} (timeout: {self._timeout}s)")
 
@@ -147,7 +147,7 @@ class HTTPClient:
         except requests.exceptions.RequestException as e:
             self._handle_request_error(e, url)
 
-    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes:
+    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes | None:
         try:
             if self._session is None:
                 self._session = self._create_session()

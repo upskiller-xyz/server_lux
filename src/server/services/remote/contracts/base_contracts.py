@@ -49,7 +49,7 @@ class RemoteServiceResponse(ABC):
     def is_error(self) -> bool:
         return self.status == ResponseKey.ERROR.value
 
-    def _get_required(self, key: str, error_msg: str = None) -> Any:
+    def _get_required(self, key: str, error_msg: str = "") -> Any:
         if key not in self._raw:
             raise ValueError(error_msg or f"Missing required field: {key}")
         return self._raw[key]
@@ -57,12 +57,13 @@ class RemoteServiceResponse(ABC):
     def _get_optional(self, key: str, default: Any = None) -> Any:
         return self._raw.get(key, default)
 
-    def parse(self) -> Dict[str, Any]:
+    @classmethod
+    def parse(cls, content: Dict[Any, Any]) -> 'RemoteServiceResponse':
         """Default parse method - return raw response
 
         Override in subclasses for custom parsing logic.
         """
-        return self._raw
+        return cls(content)
 
 
 class StandardResponse(RemoteServiceResponse):
@@ -84,5 +85,15 @@ class BinaryResponse(RemoteServiceResponse):
     def is_success(self) -> bool:
         return self._binary_data is not None
 
-    def parse(self) -> bytes:
+    @property
+    def binary_data(self)->bytes:
         return self._binary_data
+    
+    @classmethod
+    def parse(cls, content: Any) -> 'RemoteServiceResponse':
+        """Default parse method - return raw response
+
+        Override in subclasses for custom parsing logic.
+        """
+        return cls(content)
+    

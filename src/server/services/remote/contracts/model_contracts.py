@@ -2,9 +2,12 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 import numpy as np
 import base64
+import logging
 
 from .base_contracts import RemoteServiceRequest, StandardResponse
 from ....enums import RequestField, ResponseKey
+
+logger = logging.getLogger('logger')
 
 
 @dataclass
@@ -56,23 +59,24 @@ class ModelResponse(StandardResponse):
     mask: Optional[np.ndarray] = None
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(cls, content: Dict[str, Any]) -> 'ModelResponse':
         """Parse response data from model service
 
-        Returns dict with 'simulation', 'shape', and 'mask' keys for orchestration.
+        Returns ModelResponse instance with parsed content.
         """
-        raw_content = content.get(ResponseKey.RESULT.value)
+        # Model service returns 'simulation' key
+        raw_content = content.get(RequestField.SIMULATION.value)
         shape = content.get(RequestField.SHAPE.value)
         raw_mask = content.get(RequestField.MASK.value)
 
         result_array = cls._parse_simulation(raw_content, shape)
         mask_array = cls._parse_mask(raw_mask)
 
-        return {
-            RequestField.SIMULATION.value: result_array.tolist(),
-            RequestField.MASK.value: mask_array.tolist() if mask_array is not None else None,
-            ResponseKey.STATUS.value: content.get(ResponseKey.STATUS.value, ResponseKey.SUCCESS.value)
-        }
+        return cls(
+            content=result_array if result_array is not None else np.array([]),
+            shape=list(result_array.shape) if result_array is not None else None,
+            mask=mask_array
+        )
 
     @classmethod
     def _parse_simulation(cls, raw_content: Any, shape: list[int] | None = None):
@@ -101,8 +105,10 @@ class ModelResponse(StandardResponse):
 
     @property
     def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for orchestration flow"""
         result = {
-            ResponseKey.RESULT.value: self.content.tolist()
+            RequestField.SIMULATION.value: self.content.tolist() if self.content is not None else [],
+            ResponseKey.STATUS.value: ResponseKey.SUCCESS.value
         }
         if self.mask is not None:
             result[RequestField.MASK.value] = self.mask.tolist()

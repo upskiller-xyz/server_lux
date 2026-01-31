@@ -31,10 +31,10 @@ class MainRequest(RemoteServiceRequest):
         params_dict = content.get(RequestField.PARAMETERS.value, {})
 
         # Merge accumulated orchestration data (from top-level) with parameters
-        # This allows Parameters.parse() to access reference_point, direction_angle, obstruction_angle_*, etc.
+        # This allows Parameters.parse() to access reference_point, direction_angle, horizon, zenith, etc.
         merged_params = params_dict.copy()
         for key in [RequestField.REFERENCE_POINT.value, RequestField.DIRECTION_ANGLE.value,
-                   RequestField.OBSTRUCTION_ANGLE_HORIZON.value, RequestField.OBSTRUCTION_ANGLE_ZENITH.value]:
+                   RequestField.HORIZON.value, RequestField.ZENITH.value]:
             if key in content:
                 merged_params[key] = content[key]
 

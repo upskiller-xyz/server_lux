@@ -48,7 +48,7 @@ class ParallelServiceExecutor(ServiceExecutor):
             tasks = [loop.run_in_executor(None, service.run, endpoint, req, file) for req in requests]
             return await asyncio.gather(*tasks)
 
-        results = ParallelRequest.run(process_all, ())
+        results = ParallelRequest.run(process_all, [])
 
         if results and isinstance(results[0], bytes):
             return results[0]

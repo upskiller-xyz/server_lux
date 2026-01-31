@@ -57,8 +57,8 @@ class EncodingHandler(ProcessingHandler):
             RequestField.Z2.value: context.z2,
             RequestField.WINDOW_FRAME_RATIO.value: context.window_frame_ratio,
             RequestField.DIRECTION_ANGLE.value: context.direction_angle,
-            RequestField.OBSTRUCTION_ANGLE_HORIZON.value: context.horizon_angles,
-            RequestField.OBSTRUCTION_ANGLE_ZENITH.value: context.zenith_angles
+            ResponseKey.HORIZON.value: context.horizon_angles,
+            ResponseKey.ZENITH.value: context.zenith_angles
         }
 
         return {

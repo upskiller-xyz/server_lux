@@ -5,7 +5,7 @@ import io
 
 from .base_contracts import RemoteServiceRequest, StandardResponse
 from .domain_models import WindowGeometry, RoomPolygon
-from ....enums import RequestField, NPZKey
+from ....enums import RequestField, ResponseKey, NPZKey
 
 
 @dataclass
@@ -39,8 +39,8 @@ class Parameters(RemoteServiceRequest):
         windows = content.get(RequestField.WINDOWS.value, {})
 
         # Get obstruction angles and other computed values from orchestration
-        obstruction_horizon_raw = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value, {})
-        obstruction_zenith_raw = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value, {})
+        obstruction_horizon_raw = content.get(ResponseKey.HORIZON.value, {})
+        obstruction_zenith_raw = content.get(ResponseKey.ZENITH.value, {})
         direction_angles_raw = content.get(RequestField.DIRECTION_ANGLE.value, {})
 
         wws = []
@@ -63,9 +63,9 @@ class Parameters(RemoteServiceRequest):
         for name, w in windows.items():
             window_geom = WindowGeometry.from_dict(w)
             if name in obstruction_horizon:
-                window_geom.obstruction_angle_horizon = obstruction_horizon[name]
+                window_geom.horizon = obstruction_horizon[name]
             if name in obstruction_zenith:
-                window_geom.obstruction_angle_zenith = obstruction_zenith[name]
+                window_geom.zenith = obstruction_zenith[name]
             if name in direction_angles_dict:
                 window_geom.direction_angle = direction_angles_dict[name]
             wws.append((name, window_geom))
@@ -91,7 +91,7 @@ class EncoderResponse(StandardResponse):
     mask: np.ndarray
 
     @classmethod
-    def parse(cls, response_content: bytes) -> 'EncoderResponse':
+    def parse(cls, content: bytes) -> 'EncoderResponse':
         """Parse NPZ response data from encoder service
 
         The encoder returns an NPZ file with keys like 'window_name_image' and 'window_name_mask'.
@@ -104,7 +104,7 @@ class EncoderResponse(StandardResponse):
             EncoderResponse with image and mask arrays
         """
 
-        npz_data = np.load(io.BytesIO(response_content))
+        npz_data = np.load(io.BytesIO(content))
         keys = list(npz_data.keys())
 
         # Find keys ending with 'image' and 'mask'

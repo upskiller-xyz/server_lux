@@ -71,4 +71,4 @@ class WindowProcessor:
             ]
             return await asyncio.gather(*tasks)
 
-        return ParallelRequest.run(process_all, ())
+        return ParallelRequest.run(process_all, [])

@@ -2,8 +2,8 @@ import logging
 import time
 import numpy as np
 from PIL import Image as PILImage
-from ...remote.contracts import ModelResponse
-from ....enums import ResponseStatus, ResponseKey, RequestField
+from ...remote.contracts import ModelResponse, ModelRequest
+from ....enums import ResponseStatus, ResponseKey, RequestField, EndpointType
 from ...remote import ModelService
 from .base_handler import ProcessingHandler, WindowContext
 
@@ -57,10 +57,17 @@ class SimulationHandler(ProcessingHandler):
 
     def _run_model(self, context: WindowContext) -> dict:
         """Execute model inference"""
-        return self._model.run(
-            image_bytes=context.encoded_image_bytes,
+        # Create ModelRequest with encoded image bytes
+        request = ModelRequest(
+            image=context.encoded_image_bytes,
             filename=f"encoded_{context.window_name}.png",
             invert_channels=context.invert_channels
+        )
+
+        # Call ModelService with proper interface
+        return self._model.run(
+            endpoint=EndpointType.RUN,
+            request=request
         )
 
     def _process_mask(self, context: WindowContext, model_result: dict) -> None:

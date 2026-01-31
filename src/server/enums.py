@@ -194,14 +194,14 @@ class RequestField(Enum):
     Z2 = "z2"
 
     # Obstruction fields
-    
+
     MESH = "mesh"
     DIRECTION_ANGLE = "direction_angle"
     START_ANGLE = "start_angle"
     END_ANGLE = "end_angle"
     NUM_DIRECTIONS = "num_directions"
-    OBSTRUCTION_ANGLE_HORIZON = "obstruction_angle_horizon"
-    OBSTRUCTION_ANGLE_ZENITH = "obstruction_angle_zenith"
+    HORIZON = "horizon"
+    ZENITH = "zenith"
 
     # Window and room fields
     WINDOWS = "windows"
