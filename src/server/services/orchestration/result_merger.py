@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Tuple
 
-from ...enums import RequestField
+from ...enums import RequestField, ResponseKey
 
 
 class ResultMerger:
@@ -9,8 +9,8 @@ class ResultMerger:
     MERGEABLE_KEYS = [
         RequestField.DIRECTION_ANGLE.value,
         RequestField.REFERENCE_POINT.value,
-        RequestField.OBSTRUCTION_ANGLE_HORIZON.value,
-        RequestField.OBSTRUCTION_ANGLE_ZENITH.value
+        ResponseKey.HORIZON.value,
+        ResponseKey.ZENITH.value
     ]
 
     def __init__(self, base_request: Dict[str, Any]):

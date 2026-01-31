@@ -20,13 +20,13 @@ class WindowGeometry:
     z2: float
     window_frame_ratio: float
     direction_angle: Optional[float] = None
-    obstruction_angle_horizon: Optional[List[float]] = None
-    obstruction_angle_zenith: Optional[List[float]] = None
+    horizon: Optional[List[float]] = None
+    zenith: Optional[List[float]] = None
 
     @classmethod
     def from_dict(cls, content:Dict[str, Any])->'WindowGeometry':
         prms = {f.value: content.get(f.value) for f in ParameterValidator.REQUIRED_WINDOW_FIELDS}
-        _opt_fields = [RequestField.DIRECTION_ANGLE, RequestField.OBSTRUCTION_ANGLE_HORIZON, RequestField.OBSTRUCTION_ANGLE_ZENITH]
+        _opt_fields = [RequestField.DIRECTION_ANGLE, RequestField.HORIZON, RequestField.ZENITH]
         opt_prms = {f.value: content.get(f.value, None) for f in _opt_fields}
         prms.update(opt_prms)
         return cls(**prms)
@@ -43,17 +43,16 @@ class WindowGeometry:
             RequestField.WINDOW_FRAME_RATIO.value: self.window_frame_ratio,
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
         }
-        opt_fields = [RequestField.OBSTRUCTION_ANGLE_HORIZON, RequestField.OBSTRUCTION_ANGLE_ZENITH]
 
+        if self.horizon is not None:
+            result[RequestField.HORIZON.value] = self.horizon
+        else:
+            result[RequestField.HORIZON.value] = [0]
 
-        if self.obstruction_angle_horizon is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = self.obstruction_angle_horizon
-        if not self.obstruction_angle_horizon:
-            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = [0]
-        if self.obstruction_angle_zenith is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = self.obstruction_angle_zenith
-        if not self.obstruction_angle_horizon:
-            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = [0]
+        if self.zenith is not None:
+            result[RequestField.ZENITH.value] = self.zenith
+        else:
+            result[RequestField.ZENITH.value] = [0]
 
         return result
     
@@ -152,8 +151,8 @@ class Parameters(RemoteServiceRequest):
         windows = content.get(RequestField.WINDOWS.value, {})
 
         # Get obstruction angles and other computed values from orchestration
-        obstruction_horizon_raw = content.get(RequestField.OBSTRUCTION_ANGLE_HORIZON.value, {})
-        obstruction_zenith_raw = content.get(RequestField.OBSTRUCTION_ANGLE_ZENITH.value, {})
+        obstruction_horizon_raw = content.get(RequestField.HORIZON.value, {})
+        obstruction_zenith_raw = content.get(RequestField.ZENITH.value, {})
         direction_angles_raw = content.get(RequestField.DIRECTION_ANGLE.value, {})
         
         wws = []
@@ -177,9 +176,9 @@ class Parameters(RemoteServiceRequest):
         for name, w in windows.items():
             window_geom = WindowGeometry.from_dict(w)
             if name in obstruction_horizon:
-                window_geom.obstruction_angle_horizon = obstruction_horizon[name]
+                window_geom.horizon = obstruction_horizon[name]
             if name in obstruction_zenith:
-                window_geom.obstruction_angle_zenith = obstruction_zenith[name]
+                window_geom.zenith = obstruction_zenith[name]
             if name in direction_angles_dict:
                 window_geom.direction_angle = direction_angles_dict[name]
             wws.append((name, window_geom))

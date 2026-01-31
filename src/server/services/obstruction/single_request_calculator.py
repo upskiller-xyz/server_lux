@@ -17,10 +17,10 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
         self._api_url = api_url
 
     def _parse_response_angles(self, result: Dict[str, Any]) -> tuple[List[float], List[float]]:
-        if ResponseKey.HORIZON_ANGLES.value in result and ResponseKey.ZENITH_ANGLES.value in result:
+        if ResponseKey.HORIZON.value in result and ResponseKey.ZENITH.value in result:
             return (
-                result.get(ResponseKey.HORIZON_ANGLES.value, []),
-                result.get(ResponseKey.ZENITH_ANGLES.value, [])
+                result.get(ResponseKey.HORIZON.value, []),
+                result.get(ResponseKey.ZENITH.value, [])
             )
 
         if ResponseKey.DATA.value in result and ResponseKey.RESULTS.value in result[ResponseKey.DATA.value]:

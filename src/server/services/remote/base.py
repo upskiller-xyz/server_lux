@@ -5,7 +5,7 @@ from src.server.config import SessionConfig, get_service_config
 from src.server.services.http_client import HTTPClient
 from src.server.services.helpers.logging_utils import LoggingFormatter
 from .contracts import RemoteServiceRequest
-from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse
+from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse, BinaryResponse
 from ...enums import ServiceName, EndpointType
 from ...maps import  PortMap, StandardMap
 
@@ -44,7 +44,7 @@ class RemoteService:
         return f"{base_url}/{endpoint.value}"
 
     @classmethod
-    def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest = None) -> None:
+    def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest | None = None) -> None:
         """Log request being made"""
         logger.info(f"Calling {cls.name.value} service: {url}")
 
@@ -55,7 +55,7 @@ class RemoteService:
         endpoint: EndpointType,
         request: RemoteServiceRequest,
         file:Any=None,
-        response_class: type[RemoteServiceResponse] = None
+        response_class: type[RemoteServiceResponse] | None = None
     ) -> Any:
         """Template method for standard request/response flow
 
@@ -82,21 +82,21 @@ class RemoteService:
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
         logger.info(f"[{cls.name.value}] Response received: {formatted_response}")
 
-        # Use provided response_class or fall back to service's default
-        if response_class is None:
-            response_class = ServiceResponseMap.get(cls.__class__)
 
-        response = response_class(response_dict)
-        return response.parse()
+        if response_class is None:
+            response_class = ServiceResponseMap.get(cls.name)
+        logger.info("[REMOTE SERVICE] : response class is {}".format(response_class))
+        # Factory Pattern: All response classes use classmethod parse(content) -> Object
+        return response_class.parse(response_dict)
 
     @classmethod
     def run_binary(
         cls,
         endpoint: EndpointType,
         request: RemoteServiceRequest,
-        response_class: type[RemoteServiceResponse],
+        response_class: type[BinaryResponse],
         file:Any=None
-    ) -> bytes:
+    ) -> BinaryResponse:
         """Template method for binary response flow
 
         Args:
@@ -116,8 +116,10 @@ class RemoteService:
         request_dict = request.to_dict
 
         binary_data = cls._http_client.post_binary(url, request_dict)
-        response = response_class(binary_data)
-        return response.parse()
+        
+        # Factory Pattern: Check for explicit marker
+        
+        return response_class(binary_data)
 
 
 class ServiceResponseMap(StandardMap):

@@ -12,7 +12,7 @@ from .calculator_interface import IObstructionCalculator
 
 class ParallelObstructionCalculator(IObstructionCalculator):
 
-    def __init__(self, api_url: str = None, api_token: Optional[str] = None):
+    def __init__(self, api_url: str = "", api_token: Optional[str] = ""):
         self._logger = logging.getLogger(self.__class__.__name__)
         self._api_token = api_token
         self._api_url = api_url
