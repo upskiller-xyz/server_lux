@@ -24,3 +24,4 @@ matplotlib>=3.7.0,<4.0.0
 
 # Production Server (optional for Docker deployment)
 gunicorn>=21.0.0,<23.0.0
+flasgger
