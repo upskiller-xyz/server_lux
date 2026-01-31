@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, List
 
 from .base_contracts import RemoteServiceRequest, StandardResponse
@@ -70,15 +70,13 @@ class DirectionAngleResponse(StandardResponse):
 
     Used for /calculate-direction endpoint.
     """
-    direction_angle: Dict[str, float] = None
+    direction_angle: Dict[str, float] = field(default_factory=dict)
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(cls, content: Dict[str, Any]) -> 'DirectionAngleResponse':
         """Parse response data from direction angle service"""
         direction_angles = content.get(ResponseKey.DIRECTION_ANGLE.value, {})
-        return {
-            ResponseKey.DIRECTION_ANGLE.value: direction_angles
-        }
+        return cls(direction_angles)
 
     @property
     def to_dict(self) -> Dict[str, Any]:

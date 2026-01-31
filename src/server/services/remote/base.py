@@ -44,7 +44,7 @@ class RemoteService:
         return f"{base_url}/{endpoint.value}"
 
     @classmethod
-    def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest = None) -> None:
+    def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest | None = None) -> None:
         """Log request being made"""
         logger.info(f"Calling {cls.name.value} service: {url}")
 
@@ -55,7 +55,7 @@ class RemoteService:
         endpoint: EndpointType,
         request: RemoteServiceRequest,
         file:Any=None,
-        response_class: type[RemoteServiceResponse] = None
+        response_class: type[RemoteServiceResponse] | None = None
     ) -> Any:
         """Template method for standard request/response flow
 
@@ -82,10 +82,10 @@ class RemoteService:
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
         logger.info(f"[{cls.name.value}] Response received: {formatted_response}")
 
-        # Use provided response_class or fall back to service's default
+
         if response_class is None:
             response_class = ServiceResponseMap.get(cls.name)
-
+        logger.info("[REMOTE SERVICE] : response class is {}".format(response_class))
         # Factory Pattern: All response classes use classmethod parse(content) -> Object
         return response_class.parse(response_dict)
 

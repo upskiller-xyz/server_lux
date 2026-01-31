@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
+import logging
 
 from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
 from ....enums import RequestField, ResponseKey
+
+logger = logging.getLogger('logger')
 
 
 @dataclass
@@ -173,9 +176,9 @@ class ObstructionResponse(RemoteServiceResponse):
         """Convert to dictionary for serialization"""
         result = {}
         if self.horizon_angle is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = self.horizon_angle
+            result[ResponseKey.HORIZON.value] = self.horizon_angle
         if self.zenith_angle is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = self.zenith_angle
+            result[ResponseKey.ZENITH.value] = self.zenith_angle
         return result
 
 

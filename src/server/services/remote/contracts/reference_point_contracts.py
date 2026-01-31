@@ -79,12 +79,10 @@ class ReferencePointResponse(StandardResponse):
     reference_point: Dict[str, Dict[str, float]]
 
     @classmethod
-    def parse(cls, content: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(cls, content: Dict[str, Any]) -> 'ReferencePointResponse':
         """Parse response and return reference points"""
         reference_point = content.get(RequestField.REFERENCE_POINT.value, {})
-        return {
-            RequestField.REFERENCE_POINT.value: reference_point
-        }
+        return cls(reference_point)
 
     @property
     def to_dict(self) -> Dict[str, Any]:

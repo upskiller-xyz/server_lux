@@ -2,6 +2,7 @@ from typing import Dict, Any
 import logging
 
 from src.server.services.remote.contracts import MergerRequest
+from src.server.services.remote.contracts.merger_contracts import MergerResponse
 from .orchestrator import Orchestrator
 from .window_processor import WindowProcessor
 from .result_merger import ResultMerger
@@ -67,6 +68,7 @@ class SimulationOrchestrator(IOrchestrator):
 
     def _build_final_response(self, merger_result: 'MergerResponse') -> Dict[str, Any]:
         """Build final response from merger result"""
+        
         return {
             ResponseKey.STATUS.value: ResponseKey.SUCCESS.value,
             RequestField.RESULT.value: merger_result.result.tolist() if merger_result.result is not None else [],
@@ -97,8 +99,8 @@ class EncodeOrchestrator(IOrchestrator):
         if RequestField.IMAGE.value in result:
             return result[RequestField.IMAGE.value]
 
-        # Fallback to full result dict if no image
-        return result
+        # No image data found - this is an error
+        raise ValueError(f"Encoder service did not return image data. Available keys: {list(result.keys())}")
 
 
 class EndpointOrchestratorMap(StandardMap):

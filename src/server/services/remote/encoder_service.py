@@ -1,5 +1,7 @@
 from typing import Any
 
+from src.server.services.remote.contracts.base_contracts import RemoteServiceResponse
+
 from .contracts import RemoteServiceRequest, MainRequest
 from .contracts import BinaryResponse
 from ...enums import ServiceName, EndpointType
@@ -25,7 +27,7 @@ class EncoderService(RemoteService):
         return BinaryResponse
 
     @classmethod
-    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None, response_class: type = None) -> bytes:
+    def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None, response_class: type[RemoteServiceResponse] | None = None) -> bytes:
         """Encode room parameters to image"""
         if response_class is None:
             response_class = cls._get_response(endpoint)

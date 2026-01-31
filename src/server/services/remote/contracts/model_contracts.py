@@ -64,21 +64,13 @@ class ModelResponse(StandardResponse):
 
         Returns ModelResponse instance with parsed content.
         """
-        logger.info(f"[ModelResponse.parse] Parsing content keys: {list(content.keys())}")
-
         # Model service returns 'simulation' key
         raw_content = content.get(RequestField.SIMULATION.value)
         shape = content.get(RequestField.SHAPE.value)
         raw_mask = content.get(RequestField.MASK.value)
 
-        logger.info(f"[ModelResponse.parse] raw_content type: {type(raw_content)}, shape: {shape}")
-        if isinstance(raw_content, list) and len(raw_content) > 0:
-            logger.info(f"[ModelResponse.parse] raw_content is list with {len(raw_content)} items, first item type: {type(raw_content[0])}")
-
         result_array = cls._parse_simulation(raw_content, shape)
         mask_array = cls._parse_mask(raw_mask)
-
-        logger.info(f"[ModelResponse.parse] result_array shape: {result_array.shape if result_array is not None else 'None'}")
 
         return cls(
             content=result_array if result_array is not None else np.array([]),

@@ -1,11 +1,10 @@
-from typing import Dict, Any
+from typing import Any
 import io
 import logging
 
 from .contracts import RemoteServiceRequest, ModelRequest, RemoteServiceResponse
 from .base import RemoteService, ServiceResponseMap
 from .image_converters import EncoderOutputConverter
-from src.server.services.http_client import HTTPClient
 from ...enums import ServiceName, EndpointType, RequestField
 
 logger = logging.getLogger('logger')
@@ -26,7 +25,7 @@ class ModelService(RemoteService):
         endpoint: EndpointType,
         request: ModelRequest,
         file: Any = None,
-        response_class: type[RemoteServiceResponse] = None
+        response_class: type[RemoteServiceResponse] | None = None
     ) -> Any:
         """Template method for standard request/response flow
 
@@ -62,7 +61,6 @@ class ModelService(RemoteService):
         # Use provided response_class or fall back to service's default
         if response_class is None:
             response_class = ServiceResponseMap.get(cls.name)
-
-        # Factory Pattern: All response classes use classmethod parse(content) -> Object
+            
         return response_class.parse(response_dict)
     

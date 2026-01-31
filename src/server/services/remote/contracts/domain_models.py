@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, List
 import numpy as np
 
 from src.server.services.helpers.parameter_validator import ParameterValidator
-from ....enums import RequestField
+from ....enums import RequestField, ResponseKey
 
 
 @dataclass
@@ -15,18 +15,60 @@ class WindowGeometry:
     x2: float
     y2: float
     z2: float
-    window_frame_ratio: float
+    window_frame_ratio: Optional[float] = None
     direction_angle: Optional[float] = None
-    obstruction_angle_horizon: Optional[List[float]] = None
-    obstruction_angle_zenith: Optional[List[float]] = None
+    horizon: Optional[List[float]] = None
+    zenith: Optional[List[float]] = None
 
     @classmethod
     def from_dict(cls, content: Dict[str, Any]) -> 'WindowGeometry':
-        prms = {f.value: content.get(f.value) for f in ParameterValidator.REQUIRED_WINDOW_FIELDS}
-        _opt_fields = [RequestField.DIRECTION_ANGLE, RequestField.OBSTRUCTION_ANGLE_HORIZON, RequestField.OBSTRUCTION_ANGLE_ZENITH]
-        opt_prms = {f.value: content.get(f.value, None) for f in _opt_fields}
-        prms.update(opt_prms)
-        return cls(**prms)
+        # Validate and extract required fields
+        validated_params = cls._validate_required_fields(content)
+
+        # Map standardized keys using enums
+        validated_params[RequestField.DIRECTION_ANGLE.value] = content.get(RequestField.DIRECTION_ANGLE.value)
+        validated_params[ResponseKey.HORIZON.value] = content.get(ResponseKey.HORIZON.value)
+        validated_params[ResponseKey.ZENITH.value] = content.get(ResponseKey.ZENITH.value)
+
+        return cls(**validated_params)
+
+    @staticmethod
+    def _validate_required_fields(content: Dict[str, Any]) -> Dict[str, float]:
+        """Validate and extract required float fields
+
+        Args:
+            content: Dictionary containing window parameters
+
+        Returns:
+            Dictionary with validated float values
+
+        Raises:
+            ValueError: If required fields are missing or invalid
+        """
+        # Core required fields (x1, y1, z1, x2, y2, z2)
+        core_required_fields = [
+            RequestField.X1, RequestField.Y1, RequestField.Z1,
+            RequestField.X2, RequestField.Y2, RequestField.Z2
+        ]
+
+        validated = {}
+        for field in core_required_fields:
+            value = content.get(field.value)
+            if value is None:
+                raise ValueError(f"Required field '{field.value}' is missing")
+            try:
+                validated[field.value] = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"Field '{field.value}' must be a valid number, got {type(value).__name__}")
+
+        # Optional window_frame_ratio field
+        if RequestField.WINDOW_FRAME_RATIO.value in content:
+            try:
+                validated[RequestField.WINDOW_FRAME_RATIO.value] = float(content[RequestField.WINDOW_FRAME_RATIO.value])
+            except (TypeError, ValueError):
+                raise ValueError(f"Field 'window_frame_ratio' must be a valid number")
+
+        return validated
 
     @property
     def to_dict(self) -> Dict[str, Any]:
@@ -41,14 +83,16 @@ class WindowGeometry:
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
         }
 
-        if self.obstruction_angle_horizon is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = self.obstruction_angle_horizon
-        if self.obstruction_angle_horizon is None:
-            result[RequestField.OBSTRUCTION_ANGLE_HORIZON.value] = [0]
-        if self.obstruction_angle_zenith is not None:
-            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = self.obstruction_angle_zenith
-        if self.obstruction_angle_zenith is None:
-            result[RequestField.OBSTRUCTION_ANGLE_ZENITH.value] = [0]
+        # Use standardized enum keys for obstruction angles
+        if self.horizon is not None:
+            result[ResponseKey.HORIZON.value] = self.horizon
+        else:
+            result[ResponseKey.HORIZON.value] = [0]
+
+        if self.zenith is not None:
+            result[ResponseKey.ZENITH.value] = self.zenith
+        else:
+            result[ResponseKey.ZENITH.value] = [0]
 
         return result
 
