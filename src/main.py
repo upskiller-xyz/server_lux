@@ -17,15 +17,18 @@ sys.path.insert(0, str(project_root))
 
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
+from flasgger import Swagger
 
 from src.server.auth import TokenAuthenticator
-from src.server.enums import ServiceName
+from src.server.enums import ServiceName, EndpointType
 from src.server.controllers.base_controller import ServerController
 from src.server.services.remote import (
     ObstructionService, EncoderService, ModelService, MergerService, StatsService
 )
 from src.server.request_handler import EndpointRequestHandler
+from src.server.endpoint_handlers import EndpointHandlers
 from src.server.route_configurator import RouteBuilder, RouteConfigurator
+from src.server.swagger_config import get_swagger_template, get_swagger_config
 from src.__version__ import version
 
 import logging
@@ -61,6 +64,9 @@ class ServerApplication:
         self._app = Flask(app_name)
         CORS(self._app)
 
+        # Initialize Swagger
+        Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
+
         self._initialize_components()
         self._setup_routes()
 
@@ -73,26 +79,52 @@ class ServerApplication:
 
         self._authenticator = TokenAuthenticator()
         self._request_handler = EndpointRequestHandler()
+        self._endpoint_handlers = EndpointHandlers(self._request_handler)
 
     def _setup_routes(self) -> None:
         """Setup Flask routes using route configurator"""
         route_builder = RouteBuilder(version)
         route_configurator = RouteConfigurator(route_builder)
 
-        route_configurator.configure(
-            self._app,
-            status_handler=self._get_status,
-            request_handler=self._handle_request
-        )
+        # Create handler mapping for all endpoints
+        handlers = {
+            EndpointType.STATUS: self._get_status,
+            EndpointType.SIMULATE: self._endpoint_handlers.handle_simulate,
+            EndpointType.STATS_CALCULATE: self._endpoint_handlers.handle_stats,
+            EndpointType.HORIZON: self._endpoint_handlers.handle_horizon,
+            EndpointType.ZENITH: self._endpoint_handlers.handle_zenith,
+            EndpointType.OBSTRUCTION: self._endpoint_handlers.handle_obstruction,
+            EndpointType.OBSTRUCTION_ALL: self._endpoint_handlers.handle_obstruction_all,
+            EndpointType.OBSTRUCTION_MULTI: self._endpoint_handlers.handle_obstruction_multi,
+            EndpointType.OBSTRUCTION_PARALLEL: self._endpoint_handlers.handle_obstruction_parallel,
+            EndpointType.ENCODE_RAW: self._endpoint_handlers.handle_encode_raw,
+            EndpointType.ENCODE: self._endpoint_handlers.handle_encode,
+            EndpointType.CALCULATE_DIRECTION: self._endpoint_handlers.handle_calculate_direction,
+            EndpointType.REFERENCE_POINT: self._endpoint_handlers.handle_reference_point,
+            EndpointType.RUN: self._endpoint_handlers.handle_run,
+            EndpointType.MERGE: self._endpoint_handlers.handle_merge,
+        }
+
+        route_configurator.configure(self._app, handlers)
 
     def _get_status(self) -> Response:
-        """Handle status endpoint"""
+        """Get server status
+        ---
+        tags:
+          - Health
+        responses:
+          200:
+            description: Server status information
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "ok"
+                services:
+                  type: object
+        """
         return jsonify(self._controller.get_status())
-
-    def _handle_request(self) -> tuple[Response, int]:
-        """Handle all non-status endpoint requests"""
-        
-        return self._request_handler.handle(request)
 
     @property
     def app(self) -> Flask:

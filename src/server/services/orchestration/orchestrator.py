@@ -49,10 +49,32 @@ class Orchestrator(IOrchestrator):
                         params: Dict[str, Any], file: Any) -> Any:
         """Execute a single service in the pipeline"""
         requests = self._parse_requests(service, endpoint, params)
-        service_endpoint = ServiceEndpointMap.get(service)
+
+        # Use the original endpoint for single-endpoint services like obstruction
+        # Otherwise use the mapped service endpoint
+        service_endpoint = self._get_service_endpoint(service, endpoint)
 
         executor = ExecutorFactory.create(len(requests))
         return executor.execute(service, service_endpoint, requests, file)
+
+    def _get_service_endpoint(self, service: type, endpoint: EndpointType) -> EndpointType:
+        """Get the endpoint to call for a service
+
+        For ObstructionService, use the original endpoint (zenith, horizon, etc.)
+        For other services, use the mapped endpoint
+        """
+        from ..remote import ObstructionService
+
+        # For obstruction endpoints, use the original endpoint
+        if service == ObstructionService and endpoint in [
+            EndpointType.ZENITH, EndpointType.HORIZON,
+            EndpointType.OBSTRUCTION, EndpointType.OBSTRUCTION_ALL,
+            EndpointType.OBSTRUCTION_MULTI, EndpointType.OBSTRUCTION_PARALLEL
+        ]:
+            return endpoint
+
+        # For other services, use the mapped endpoint
+        return ServiceEndpointMap.get(service)
 
     def _parse_requests(self, service: type, endpoint: EndpointType,
                        params: Dict[str, Any]) -> list:
