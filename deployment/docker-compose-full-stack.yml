@@ -3,7 +3,7 @@ services:
   server-lux:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: deployment/Dockerfile
     container_name: server-lux
     restart: unless-stopped
     ports:

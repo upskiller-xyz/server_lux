@@ -302,9 +302,10 @@ class EndpointHandlers:
         return self._request_handler.handle(request)
 
     def handle_obstruction_all(self) -> Tuple[Response, int]:
-        """Calculate obstruction angles for all 64 directions
+        """Calculate obstruction angles for all 64 directions from window geometry
 
-        Computes horizon and zenith angles for 64 directions around a window point.
+        Computes horizon and zenith angles for 64 directions around window points.
+        Automatically calculates reference points and direction angles from room polygon and window positions.
         ---
         tags:
           - Obstruction
@@ -315,32 +316,19 @@ class EndpointHandlers:
             schema:
               type: object
               required:
-                - x
-                - y
-                - z
+                - room_polygon
+                - windows
                 - mesh
               properties:
-                x:
-                  $ref: '#/definitions/CoordinateX'
-                y:
-                  $ref: '#/definitions/CoordinateY'
-                z:
-                  $ref: '#/definitions/CoordinateZ'
+                room_polygon:
+                  $ref: '#/definitions/RoomPolygon'
+                windows:
+                  $ref: '#/definitions/WindowConfig'
                 mesh:
                   $ref: '#/definitions/Mesh'
-                direction_angle:
-                  type: number
-                  description: Direction angle in degrees (optional, defaults to window normal)
-                  example: 90.0
-                start_angle:
-                  $ref: '#/definitions/StartAngle'
-                end_angle:
-                  $ref: '#/definitions/EndAngle'
-                num_directions:
-                  $ref: '#/definitions/NumDirections'
         responses:
           200:
-            description: Obstruction angles for all directions
+            description: Obstruction angles for all directions for each window
             schema:
               allOf:
                 - $ref: '#/definitions/SuccessResponse'
@@ -351,11 +339,13 @@ class EndpointHandlers:
                       description: Array of 64 horizon angles in degrees
                       items:
                         type: number
+                      example: [15.5, 16.2, 14.8, 17.1, 15.9, 16.5, 14.2, 18.3, 15.7, 16.8, 14.5, 17.9, 15.3, 16.1, 14.9, 17.5, 15.6, 16.3, 14.7, 17.2, 15.8, 16.4, 14.3, 18.1, 15.4, 16.9, 14.6, 17.8, 15.2, 16.0, 14.8, 17.4, 15.5, 16.2, 14.8, 17.1, 15.9, 16.5, 14.2, 18.3, 15.7, 16.8, 14.5, 17.9, 15.3, 16.1, 14.9, 17.5, 15.6, 16.3, 14.7, 17.2, 15.8, 16.4, 14.3, 18.1, 15.4, 16.9, 14.6, 17.8, 15.2, 16.0, 14.8, 17.4]
                     zenith:
                       type: array
                       description: Array of 64 zenith angles in degrees
                       items:
                         type: number
+                      example: [10.2, 11.1, 9.8, 12.3, 10.5, 11.4, 9.5, 13.1, 10.8, 11.7, 9.7, 12.9, 10.3, 11.2, 9.9, 12.5, 10.6, 11.5, 9.6, 12.4, 10.9, 11.8, 9.4, 13.2, 10.4, 12.0, 9.8, 12.8, 10.1, 11.0, 9.7, 12.2, 10.2, 11.1, 9.8, 12.3, 10.5, 11.4, 9.5, 13.1, 10.8, 11.7, 9.7, 12.9, 10.3, 11.2, 9.9, 12.5, 10.6, 11.5, 9.6, 12.4, 10.9, 11.8, 9.4, 13.2, 10.4, 12.0, 9.8, 12.8, 10.1, 11.0, 9.7, 12.2]
           400:
             description: Bad request
             schema:
