@@ -8,7 +8,7 @@ class FieldMap(StandardMap):
         EndpointType.SIMULATE: [],
         EndpointType.RUN: [RequestField.MODEL_TYPE, RequestField.MESH, RequestField.PARAMETERS],
         EndpointType.OBSTRUCTION: [RequestField.X, RequestField.Y, RequestField.Z, RequestField.DIRECTION_ANGLE],
-        EndpointType.OBSTRUCTION_ALL: [RequestField.X, RequestField.Y, RequestField.Z],
+        EndpointType.OBSTRUCTION_ALL: [RequestField.ROOM_POLYGON, RequestField.WINDOWS, RequestField.MESH],
         EndpointType.OBSTRUCTION_MULTI: [RequestField.X, RequestField.Y, RequestField.Z],
         EndpointType.OBSTRUCTION_PARALLEL: [RequestField.X, RequestField.Y, RequestField.Z],
         EndpointType.CALCULATE_DIRECTION: [RequestField.ROOM_POLYGON, RequestField.WINDOWS],

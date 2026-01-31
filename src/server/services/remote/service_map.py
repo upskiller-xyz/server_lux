@@ -31,7 +31,7 @@ class EndpointServiceMap(StandardMap):
         EndpointType.OBSTRUCTION: [ObstructionService],
         EndpointType.OBSTRUCTION_PARALLEL: [ObstructionService],
         EndpointType.OBSTRUCTION_MULTI: [ObstructionService],
-        EndpointType.OBSTRUCTION_ALL: [ObstructionService],
+        EndpointType.OBSTRUCTION_ALL: [ReferencePointService, DirectionAngleService, ObstructionService],
         EndpointType.HORIZON: [ObstructionService],
         EndpointType.ZENITH: [ObstructionService],
         EndpointType.SIMULATE: [ModelService],

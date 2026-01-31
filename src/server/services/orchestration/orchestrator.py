@@ -32,6 +32,11 @@ class Orchestrator(IOrchestrator):
         response = {}
 
         for service in services:
+            # Skip service if its output already exists in params
+            if self._should_skip_service(service, params):
+                logger.debug(f"Skipping {service.__name__} - output already exists in params")
+                continue
+
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
 
@@ -87,6 +92,26 @@ class Orchestrator(IOrchestrator):
             requests = [request_class(**params)]
 
         return requests if isinstance(requests, list) else [requests]
+
+    def _should_skip_service(self, service: type, params: Dict[str, Any]) -> bool:
+        """Determine if a service should be skipped based on existing data
+
+        Args:
+            service: The service class to check
+            params: Current request parameters
+
+        Returns:
+            True if service should be skipped, False otherwise
+        """
+        from ..remote import ObstructionService
+
+        # Skip ObstructionService if both horizon and zenith already exist
+        if service == ObstructionService:
+            has_horizon = ResponseKey.HORIZON.value in params
+            has_zenith = ResponseKey.ZENITH.value in params
+            return has_horizon and has_zenith
+
+        return False
 
     def _update_params(self, params: Dict[str, Any], response: Any) -> None:
         """Update parameters with service response"""
