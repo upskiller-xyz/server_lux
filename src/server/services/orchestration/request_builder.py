@@ -57,10 +57,15 @@ class WindowRequestBuilder:
 
     @staticmethod
     def from_request_data(request_data: Dict[str, Any], window_name: str, window_data: Any) -> Dict[str, Any]:
-        """Convenience method to build a window request from existing request data"""
+        """Convenience method to build a window request from existing request data
+
+        Extracts horizon and zenith from window_data if present and adds them at the top level
+        so the orchestrator can detect and skip obstruction calculation.
+        """
         params = request_data.get(RequestField.PARAMETERS.value, {})
 
-        return (WindowRequestBuilder()
+        # Build the base request
+        built_request = (WindowRequestBuilder()
                 .with_model_type(request_data.get(RequestField.MODEL_TYPE.value))
                 .with_mesh(request_data.get(RequestField.MESH.value))
                 .with_window(window_name, window_data)
@@ -68,3 +73,13 @@ class WindowRequestBuilder:
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
                 .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))
                 .build())
+
+        # Extract horizon and zenith from window_data if they exist
+        # This allows per-window obstruction data to skip the obstruction service
+        if isinstance(window_data, dict):
+            if 'horizon' in window_data:
+                built_request['horizon'] = window_data['horizon']
+            if 'zenith' in window_data:
+                built_request['zenith'] = window_data['zenith']
+
+        return built_request
