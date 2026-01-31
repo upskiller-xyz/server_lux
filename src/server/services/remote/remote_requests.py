@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, List
 import numpy as np
 
 from src.server.services.helpers.parameter_validator import ParameterValidator
-from ...enums import RequestField, ResponseKey
+from ...enums import RequestField
 
 
 # Domain models
@@ -115,7 +115,7 @@ class RemoteServiceRequest(ABC):
 # Available request classes:
 # - MainRequest: Main external /simulate endpoint request
 # - Parameters: Shared parameter structure for room/window configuration
-# - ObstructionRequest: Single point obstruction calculation (/horizon_angle, /zenith_angle, /obstruction)
+# - ObstructionRequest: Single point obstruction calculation (/horizon, /zenith, /obstruction)
 # - ObstructionMultiRequest: Multi-direction obstruction calculation (/obstruction_multi)
 # - ObstructionParallelRequest: Parallel obstruction calculation (/obstruction_parallel)
 # - DirectionAngleRequest: Direction angle calculation (/calculate-direction)
@@ -167,7 +167,7 @@ class Parameters(RemoteServiceRequest):
         return [cls(window=w, room=room, window_name=name, **opt_params) for name, w in wws]
     
     @classmethod
-    def _parse_window_dict(cls, windows:dict[Any:Any], obstruction_horizon_raw={}, obstruction_zenith_raw={}, direction_angles_raw={})->list[tuple[str, WindowGeometry]]:
+    def _parse_window_dict(cls, windows:dict[Any,Any], obstruction_horizon_raw={}, obstruction_zenith_raw={}, direction_angles_raw={})->list[tuple[str, WindowGeometry]]:
         wws = []
         obstruction_horizon = cls._normalize_to_dict(obstruction_horizon_raw)
         obstruction_zenith = cls._normalize_to_dict(obstruction_zenith_raw)
@@ -185,7 +185,7 @@ class Parameters(RemoteServiceRequest):
         return wws
     
     @classmethod
-    def _parse_window_list(cls, windows:list[dict[Any:Any]])->list[tuple[str, WindowGeometry]]:
+    def _parse_window_list(cls, windows:list[dict[Any,Any]])->list[tuple[str, WindowGeometry]]:
         return [(f"window_{i}", WindowGeometry.from_dict(w)) for i, w in enumerate(windows)]
     
     @classmethod
@@ -216,7 +216,7 @@ class MainRequest(RemoteServiceRequest):
         # This allows Parameters.parse() to access reference_point, direction_angle, obstruction_angle_*, etc.
         merged_params = params_dict.copy()
         for key in [RequestField.REFERENCE_POINT.value, RequestField.DIRECTION_ANGLE.value,
-                   RequestField.OBSTRUCTION_ANGLE_HORIZON.value, RequestField.OBSTRUCTION_ANGLE_ZENITH.value]:
+                   RequestField.HORIZON.value, RequestField.ZENITH.value]:
             if key in content:
                 merged_params[key] = content[key]
 
@@ -229,7 +229,7 @@ class MainRequest(RemoteServiceRequest):
 class ObstructionRequest(RemoteServiceRequest):
     """Request for obstruction angle calculations (single point and direction)
 
-    Used for /horizon_angle, /zenith_angle, and /obstruction endpoints.
+    Used for /horizon, /zenith, and /obstruction endpoints.
     """
     x: float
     y: float
@@ -252,11 +252,11 @@ class ObstructionRequest(RemoteServiceRequest):
         # Check if this is a simple single-window request
         if RequestField.X.value in content:
             # Direct format with x, y, z
-            return [cls(
-                x=content.get(RequestField.X.value),
-                y=content.get(RequestField.Y.value),
-                z=content.get(RequestField.Z.value),
-                direction_angle=content.get(RequestField.DIRECTION_ANGLE.value),
+            return [ObstructionRequest(
+                x=content.get(RequestField.X.value, 0),
+                y=content.get(RequestField.Y.value, 0),
+                z=content.get(RequestField.Z.value, 0),
+                direction_angle=content.get(RequestField.DIRECTION_ANGLE.value, 0),
                 mesh=content.get(RequestField.MESH.value, [])
             )]
 

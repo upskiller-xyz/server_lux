@@ -46,15 +46,15 @@ Calculate both horizon and zenith angles for all 64 directions.
 ```json
 {
   "status": "success",
-  "horizon_angles": [float, ...],  // 64 values
-  "zenith_angles": [float, ...]    // 64 values
+  "horizon": [float, ...],  // 64 values
+  "zenith": [float, ...]    // 64 values
 }
 ```
 
-#### `/horizon_angle`
+#### `/horizon`
 Calculate single horizon angle for specific direction.
 
-#### `/zenith_angle`
+#### `/zenith`
 Calculate single zenith angle for specific direction.
 
 ---
@@ -82,8 +82,8 @@ Encode room geometry with obstruction angles.
         "x1": float, "y1": float, "z1": float,
         "x2": float, "y2": float, "z2": float,
         "window_frame_ratio": float,
-        "obstruction_angle_horizon": [float, ...],
-        "obstruction_angle_zenith": [float, ...]
+        "horizon": [float, ...],
+        "zenith": [float, ...]
       }
     }
   }
@@ -226,7 +226,7 @@ Client Request
   └─> For each window:
       │
       ├─> [Obstruction] mesh + window position
-      │   └─> horizon_angles[64], zenith_angles[64]
+      │   └─> horizon[64], zenith[64]
       │
       ├─> [Encoder] parameters + obstruction angles
       │   └─> NPZ file (encoded arrays)

@@ -87,12 +87,12 @@ Calculate horizon and zenith obstruction angles for all 64 directions around a w
 ```json
 {
   "status": "success",
-  "horizon_angles": [/* 64 angles in degrees */],
-  "zenith_angles": [/* 64 angles in degrees */]
+  "horizon": [/* 64 angles in degrees */],
+  "zenith": [/* 64 angles in degrees */]
 }
 ```
 
-#### `POST /v1/horizon_angle`
+#### `POST /v1/horizon`
 
 Calculate single horizon obstruction angle for a specific direction.
 
@@ -111,21 +111,21 @@ Calculate single horizon obstruction angle for a specific direction.
 ```json
 {
   "status": "success",
-  "horizon_angle": 15.5
+  "horizon": 15.5
 }
 ```
 
-#### `POST /v1/zenith_angle`
+#### `POST /v1/zenith`
 
 Calculate single zenith obstruction angle for a specific direction.
 
-**Request:** Same as `/horizon_angle`
+**Request:** Same as `/horizon`
 
 **Response:**
 ```json
 {
   "status": "success",
-  "zenith_angle": 10.2
+  "zenith": 10.2
 }
 ```
 
@@ -242,8 +242,8 @@ Encode room parameters with pre-calculated obstruction angles.
         "x2": -2, "y2": 7.3, "z2": 5.4,
         "window_frame_ratio": 0.41,
         "direction_angle": 90.0,
-        "obstruction_angle_horizon": [/* 64 angles */],
-        "obstruction_angle_zenith": [/* 64 angles */]
+        "horizon": [/* 64 angles */],
+        "zenith": [/* 64 angles */]
       }
     }
   }

@@ -20,11 +20,12 @@ class LengthReplacementStrategy:
     # Keys that should show length instead of full content
     KEYS_TO_TRIM: Set[str] = {
         'mesh',
-        'obstruction_angle_horizon',
-        'obstruction_angle_zenith',
-        'horizon_angles',
-        'zenith_angles',
+        'horizon',
+        'zenith',
+        'horizon',
+        'zenith',
         'direction_angles',
+        'direction',
         'direction_angles_degrees',
         'df_values',
         'mask',
@@ -245,7 +246,7 @@ class LoggingDictFormatter(ILoggingFormatter):
                 formatted[key] = self.format(value, max_depth, current_depth + 1)
         return formatted
 
-    def _format_list(self, data: List[Any], max_depth: int, current_depth: int, parent_key: str = None) -> Any:
+    def _format_list(self, data: List[Any], max_depth: int, current_depth: int, parent_key: str = "") -> Any:
         """Format list for logging
 
         For large lists (>10 items), shows summary with length and first element.
@@ -265,7 +266,7 @@ class LoggingFormatter:
 
     Uses Singleton Pattern - single shared instance for all logging.
     """
-    _instance: LoggingDictFormatter = None
+    _instance: LoggingDictFormatter | None = None
 
     @classmethod
     def get_instance(cls) -> LoggingDictFormatter:
