@@ -44,9 +44,9 @@ class ParallelObstructionCalculator(IObstructionCalculator):
 
             data = result[ResponseKey.DATA.value]
             obstruction_results.append(ObstructionResult(
-                direction_angle=direction_angle,
-                horizon_angle=data[ResponseKey.HORIZON.value][ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value],
-                zenith_angle=data[ResponseKey.ZENITH.value][ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value],
+                direction=direction_angle,
+                horizon=data[ResponseKey.HORIZON.value][ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value],
+                zenith=data[ResponseKey.ZENITH.value][ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value],
                 horizon_highest_point=data[ResponseKey.HORIZON.value][ResponseKey.HIGHEST_POINT.value],
                 zenith_highest_point=data[ResponseKey.ZENITH.value][ResponseKey.HIGHEST_POINT.value]
             ))

@@ -15,8 +15,8 @@ class FieldMap(StandardMap):
         EndpointType.REFERENCE_POINT: [RequestField.ROOM_POLYGON, RequestField.WINDOWS],
         EndpointType.ENCODE: [RequestField.MODEL_TYPE, RequestField.MESH, RequestField.PARAMETERS],
         EndpointType.ENCODE_RAW: [RequestField.MODEL_TYPE, RequestField.PARAMETERS],
-        EndpointType.HORIZON_ANGLE: [],
-        EndpointType.ZENITH_ANGLE: [],
+        EndpointType.HORIZON: [],
+        EndpointType.ZENITH: [],
         EndpointType.MERGE: [RequestField.SIMULATION, RequestField.ROOM_POLYGON, RequestField.WINDOWS],
         EndpointType.STATS_CALCULATE: [RequestField.RESULT, RequestField.MASK],
         EndpointType.STATUS: []

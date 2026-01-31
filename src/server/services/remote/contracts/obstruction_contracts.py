@@ -12,7 +12,7 @@ logger = logging.getLogger('logger')
 class ObstructionRequest(RemoteServiceRequest):
     """Request for obstruction angle calculations (single point and direction)
 
-    Used for /horizon_angle, /zenith_angle, and /obstruction endpoints.
+    Used for /horizon, /zenith, and /obstruction endpoints.
     """
     x: float
     y: float
@@ -137,8 +137,8 @@ class ObstructionResponse(RemoteServiceResponse):
     Parses the standardized data.results format from the obstruction microservice.
     """
     status: Optional[str] = None
-    horizon_angle: Optional[List[float]] = None
-    zenith_angle: Optional[List[float]] = None
+    horizon: Optional[List[float]] = None
+    zenith: Optional[List[float]] = None
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
@@ -147,23 +147,23 @@ class ObstructionResponse(RemoteServiceResponse):
         Expects the standardized data.results format from /obstruction_parallel.
         Each result contains horizon/zenith with obstruction_angle_degrees.
         """
-        data = content.get('data', {})
-        results = data.get('results', [])
-        status = content.get('status', 'success')
+        data = content.get(ResponseKey.DATA.value, {})
+        results = data.get(ResponseKey.RESULTS.value, [])
+        status = content.get(ResponseKey.STATUS.value, 'success')
 
-        horizon_angles = [
-            r.get('horizon', {}).get('obstruction_angle_degrees', 0.0)
+        horizon = [
+            r.get(ResponseKey.HORIZON.value, {}).get(ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value, 0.0)
             for r in results
         ]
-        zenith_angles = [
-            r.get('zenith', {}).get('obstruction_angle_degrees', 0.0)
+        zenith = [
+            r.get(ResponseKey.ZENITH.value, {}).get(ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value, 0.0)
             for r in results
         ]
 
         return cls(
             status=status,
-            horizon_angle=horizon_angles,
-            zenith_angle=zenith_angles
+            horizon=horizon,
+            zenith=zenith
         )
     
     @property
@@ -175,10 +175,10 @@ class ObstructionResponse(RemoteServiceResponse):
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         result = {}
-        if self.horizon_angle is not None:
-            result[ResponseKey.HORIZON.value] = self.horizon_angle
-        if self.zenith_angle is not None:
-            result[ResponseKey.ZENITH.value] = self.zenith_angle
+        if self.horizon is not None:
+            result[ResponseKey.HORIZON.value] = self.horizon
+        if self.zenith is not None:
+            result[ResponseKey.ZENITH.value] = self.zenith
         return result
 
 
