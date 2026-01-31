@@ -641,6 +641,7 @@ class EndpointHandlers:
         """Run ML model inference for daylight simulation
 
         Same as /simulate endpoint. End-to-end daylight simulation.
+        Optionally accepts pre-calculated horizon and zenith angles to skip obstruction calculation.
         ---
         tags:
           - Model
@@ -707,6 +708,16 @@ class EndpointHandlers:
                           window_frame_ratio:
                             type: number
                             format: float
+                          horizon:
+                            type: array
+                            description: Optional pre-calculated horizon angles for this window (64 values). Skips obstruction calculation for this window.
+                            items:
+                              type: number
+                          zenith:
+                            type: array
+                            description: Optional pre-calculated zenith angles for this window (64 values). Skips obstruction calculation for this window.
+                            items:
+                              type: number
                         required:
                           - x1
                           - y1
@@ -724,6 +735,8 @@ class EndpointHandlers:
                           y2: 7.2
                           z2: 5.4
                           window_frame_ratio: 0.41
+                          horizon: [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
+                          zenith: [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
                   required:
                     - height_roof_over_floor
                     - floor_height_above_terrain
@@ -731,6 +744,18 @@ class EndpointHandlers:
                     - windows
                 mesh:
                   $ref: '#/definitions/Mesh'
+                horizon:
+                  type: array
+                  description: Optional pre-calculated horizon angles (64 values). If provided along with zenith, obstruction calculation will be skipped.
+                  items:
+                    type: number
+                  example: [15.5, 16.2, 14.8, 17.1, 15.9, 16.5, 14.2, 18.3, 15.7, 16.8, 14.5, 17.9, 15.3, 16.1, 14.9, 17.5, 15.6, 16.3, 14.7, 17.2, 15.8, 16.4, 14.3, 18.1, 15.4, 16.9, 14.6, 17.8, 15.2, 16.0, 14.8, 17.4, 15.5, 16.2, 14.8, 17.1, 15.9, 16.5, 14.2, 18.3, 15.7, 16.8, 14.5, 17.9, 15.3, 16.1, 14.9, 17.5, 15.6, 16.3, 14.7, 17.2, 15.8, 16.4, 14.3, 18.1, 15.4, 16.9, 14.6, 17.8, 15.2, 16.0, 14.8, 17.4]
+                zenith:
+                  type: array
+                  description: Optional pre-calculated zenith angles (64 values). If provided along with horizon, obstruction calculation will be skipped.
+                  items:
+                    type: number
+                  example: [10.2, 11.1, 9.8, 12.3, 10.5, 11.4, 9.5, 13.1, 10.8, 11.7, 9.7, 12.9, 10.3, 11.2, 9.9, 12.5, 10.6, 11.5, 9.6, 12.4, 10.9, 11.8, 9.4, 13.2, 10.4, 12.0, 9.8, 12.8, 10.1, 11.0, 9.7, 12.2, 10.2, 11.1, 9.8, 12.3, 10.5, 11.4, 9.5, 13.1, 10.8, 11.7, 9.7, 12.9, 10.3, 11.2, 9.9, 12.5, 10.6, 11.5, 9.6, 12.4, 10.9, 11.8, 9.4, 13.2, 10.4, 12.0, 9.8, 12.8, 10.1, 11.0, 9.7, 12.2]
         responses:
           200:
             description: Daylight factor result as 128x128 RGB image
