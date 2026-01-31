@@ -79,9 +79,9 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
                     zip(direction_angles, horizon_angles, zenith_angles)
                 ):
                     obstruction_results.append(ObstructionResult(
-                        direction_angle=direction_angle,
-                        horizon_angle=horizon_angle,
-                        zenith_angle=zenith_angle,
+                        direction=direction_angle,
+                        horizon=horizon_angle,
+                        zenith=zenith_angle,
                         horizon_highest_point={},
                         zenith_highest_point={}
                     ))

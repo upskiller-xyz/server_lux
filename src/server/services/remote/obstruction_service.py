@@ -32,15 +32,13 @@ class ObstructionService(RemoteService):
         # response is now an ObstructionResponse object
         response = super().run(endpoint, request, file, response_class)
 
-        logger.info(f"[ObstructionService] Raw response from remote: {response}")
-
         # Cast to ObstructionRequest since _get_request returns ObstructionRequest
         obstruction_request = cast(ObstructionRequest, request)
         window_name = obstruction_request.window_name
 
         # Access attributes directly from the dataclass/object
-        horizon_angles = response.horizon_angle if response.horizon_angle is not None else []
-        zenith_angles = response.zenith_angle if response.zenith_angle is not None else []
+        horizon_angles = response.horizon if response.horizon is not None else []
+        zenith_angles = response.zenith if response.zenith is not None else []
 
         logger.info(f"[ObstructionService] Parsed horizon_angles: {horizon_angles}")
         logger.info(f"[ObstructionService] Parsed zenith_angles: {zenith_angles}")

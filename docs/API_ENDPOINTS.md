@@ -104,8 +104,8 @@ Calculate obstruction angles for a single window point in all directions.
 ```json
 {
   "status": "success",
-  "horizon_angles": [0.0, 1.2, ...],
-  "zenith_angles": [45.0, 43.2, ...]
+  "horizon": [0.0, 1.2, ...],
+  "zenith": [45.0, 43.2, ...]
 }
 ```
 
@@ -201,8 +201,8 @@ Calculate direction angles for windows.
 ## Other Endpoints
 
 - `/v1/simulate` - Alias for `/v1/run`
-- `/v1/horizon_angle` - Calculate horizon obstruction angle only
-- `/v1/zenith_angle` - Calculate zenith obstruction angle only
+- `/v1/horizon` - Calculate horizon obstruction angle only
+- `/v1/zenith` - Calculate zenith obstruction angle only
 - `/v1/obstruction` - Alias for `/v1/obstruction_all`
 - `/v1/obstruction_multi` - Calculate obstruction for multiple points
 - `/v1/obstruction_parallel` - Parallel obstruction calculation

@@ -68,8 +68,8 @@ class ObstructionResult:
 
     Contains all data from one obstruction angle calculation.
     """
-    direction_angle: float
-    horizon_angle: float
-    zenith_angle: float
+    direction: float
+    horizon: float
+    zenith: float
     horizon_highest_point: dict
     zenith_highest_point: dict

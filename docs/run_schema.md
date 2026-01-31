@@ -71,7 +71,7 @@ Each window in the `windows` dictionary contains:
 | `window_frame_ratio` | float | Yes | Frame ratio (0-1), portion of window occupied by frame |
 | `direction_angle` | float | No | Window direction angle in radians (auto-calculated if not provided) |
 
-**Note:** The `obstruction_angle_horizon` and `obstruction_angle_zenith` fields are automatically calculated from the mesh for each window and do not need to be provided in the request. Each window is processed through the complete workflow: obstruction calculation → encoding → simulation.
+**Note:** The `horizon` and `zenith` fields are automatically calculated from the mesh for each window and do not need to be provided in the request. Each window is processed through the complete workflow: obstruction calculation → encoding → simulation.
 
 ### Mesh Array
 

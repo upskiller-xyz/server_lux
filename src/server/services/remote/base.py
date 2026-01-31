@@ -85,8 +85,7 @@ class RemoteService:
 
         if response_class is None:
             response_class = ServiceResponseMap.get(cls.name)
-        logger.info("[REMOTE SERVICE] : response class is {}".format(response_class))
-        # Factory Pattern: All response classes use classmethod parse(content) -> Object
+            
         return response_class.parse(response_dict)
 
     @classmethod
