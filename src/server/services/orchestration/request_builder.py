@@ -15,8 +15,19 @@ class WindowRequestBuilder:
         return self
 
     def with_mesh(self, mesh: Any) -> 'WindowRequestBuilder':
+        """Set legacy single mesh (backward compatibility)."""
         if mesh is not None:
             self._request[RequestField.MESH.value] = mesh
+        return self
+
+    def with_horizon_mesh(self, horizon_mesh: Any) -> 'WindowRequestBuilder':
+        if horizon_mesh is not None:
+            self._request[RequestField.HORIZON_MESH.value] = horizon_mesh
+        return self
+
+    def with_zenith_mesh(self, zenith_mesh: Any) -> 'WindowRequestBuilder':
+        if zenith_mesh is not None:
+            self._request[RequestField.ZENITH_MESH.value] = zenith_mesh
         return self
 
     def with_window(self, window_name: str, window_data: Any) -> 'WindowRequestBuilder':
@@ -64,15 +75,17 @@ class WindowRequestBuilder:
         """
         params = request_data.get(RequestField.PARAMETERS.value, {})
 
-        # Build the base request
-        built_request = (WindowRequestBuilder()
+        # Build the base request (supports split meshes or legacy single mesh)
+        builder = (WindowRequestBuilder()
                 .with_model_type(request_data.get(RequestField.MODEL_TYPE.value))
+                .with_horizon_mesh(request_data.get(RequestField.HORIZON_MESH.value))
+                .with_zenith_mesh(request_data.get(RequestField.ZENITH_MESH.value))
                 .with_mesh(request_data.get(RequestField.MESH.value))
                 .with_window(window_name, window_data)
                 .with_room_polygon(params.get(RequestField.ROOM_POLYGON.value))
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
-                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))
-                .build())
+                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value)))
+        built_request = builder.build()
 
         # Extract horizon and zenith from window_data if they exist
         # This allows per-window obstruction data to skip the obstruction service
