@@ -1,5 +1,6 @@
 """Swagger/Flasgger configuration for API documentation"""
 
+import os
 from src.__version__ import version
 
 
@@ -9,11 +10,40 @@ def get_swagger_template() -> dict:
     Returns:
         Dictionary containing Swagger template configuration
     """
-    return {
+    auth_type = os.getenv('AUTH_TYPE', 'token').lower()
+
+    # Build security definitions based on auth type
+    security_definitions = {}
+    security_requirements = []
+
+    if auth_type == 'token':
+        security_definitions['Bearer'] = {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Token-based authentication. Enter your token in the format: Bearer <your_token>'
+        }
+        security_requirements.append({'Bearer': []})
+    elif auth_type == 'auth0':
+        security_definitions['Auth0'] = {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Auth0 JWT authentication. Enter your JWT token in the format: Bearer <your_jwt_token>'
+        }
+        security_requirements.append({'Auth0': []})
+
+    auth_info = ''
+    if auth_type == 'token':
+        auth_info = '\n\n**Authentication:** This API uses Bearer token authentication. Include your token in the Authorization header.'
+    elif auth_type == 'auth0':
+        auth_info = '\n\n**Authentication:** This API uses Auth0 JWT authentication. Include your JWT token in the Authorization header.'
+
+    template = {
         'info': {
             'title': 'Server Lux API',
             'version': version,
-            'description': '''API documentation for Server Lux services
+            'description': f'''API documentation for Server Lux services{auth_info}
 
 **Note:** When testing endpoints in Swagger UI, use valid example data:
 - Mesh must contain complete triangles (vertices in multiples of 3)
@@ -138,6 +168,13 @@ def get_swagger_template() -> dict:
             }
         }
     }
+
+    # Add security definitions if authentication is enabled
+    if security_definitions:
+        template['securityDefinitions'] = security_definitions
+        template['security'] = security_requirements
+
+    return template
 
 
 def get_swagger_config() -> dict:

@@ -77,7 +77,22 @@ class ServerApplication:
         self._controller = ServerController(services=services)
         self._controller.initialize()
 
-        self._authenticator = TokenAuthenticator()
+        # Initialize authenticator (automatically selects strategy based on AUTH_TYPE)
+        from src.server.auth import Authenticator
+        from src.server.enums import AuthType
+
+        self._authenticator = Authenticator()
+
+        # Log authentication mode for visibility
+        auth_type = os.getenv('AUTH_TYPE', 'token').lower()
+        auth_messages = {
+            AuthType.NONE.value: "Community Edition - No authentication required ✨",
+            AuthType.TOKEN.value: "Token-based authentication enabled",
+            AuthType.AUTH0.value: "Auth0 JWT authentication enabled"
+        }
+        auth_msg = auth_messages.get(auth_type, "Unknown authentication type")
+        logger.info(f"Authentication Type: {auth_type} ({auth_msg})")
+
         self._request_handler = EndpointRequestHandler()
         self._endpoint_handlers = EndpointHandlers(self._request_handler)
 

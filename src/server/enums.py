@@ -139,11 +139,21 @@ class ServiceHost(Enum):
     PRODUCTION_SERVER = "http://51.15.197.220"
 
 
+class AuthType(Enum):
+    """Authentication type identifiers"""
+    TOKEN = "token"
+    AUTH0 = "auth0"
+    NONE = "none"
+
+
 class ErrorType(Enum):
     """Error type identifiers for error responses"""
     MISSING_AUTHORIZATION = "missing_authorization"
     INVALID_AUTH_FORMAT = "invalid_auth_format"
     INVALID_TOKEN = "invalid_token"
+    INVALID_JWT = "invalid_jwt"
+    EXPIRED_JWT = "expired_jwt"
+    INSUFFICIENT_PERMISSIONS = "insufficient_permissions"
     MISSING_JSON = "missing_json"
     MISSING_FILE = "missing_file"
     VALIDATION_ERROR = "validation_error"
@@ -155,6 +165,9 @@ class ErrorMessage(Enum):
     MISSING_AUTHORIZATION = "Missing Authorization header"
     INVALID_AUTH_FORMAT = "Invalid Authorization header format. Expected: 'Bearer <token>'"
     INVALID_TOKEN = "Invalid authentication token"
+    INVALID_JWT = "Invalid JWT token"
+    EXPIRED_JWT = "JWT token has expired"
+    INSUFFICIENT_PERMISSIONS = "Insufficient permissions"
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
 
