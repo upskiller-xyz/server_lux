@@ -73,20 +73,17 @@ class ObstructionRequest(RemoteServiceRequest):
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        base = {
+        # Obstruction service only understands 'mesh' - combine split meshes if present
+        combined_mesh = self.mesh
+        if self.horizon_mesh is not None or self.zenith_mesh is not None:
+            combined_mesh = (self.horizon_mesh or []) + (self.zenith_mesh or [])
+        return {
             RequestField.X.value: self.x,
             RequestField.Y.value: self.y,
             RequestField.Z.value: self.z,
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
+            RequestField.MESH.value: combined_mesh,
         }
-        if self.horizon_mesh is not None or self.zenith_mesh is not None:
-            if self.horizon_mesh is not None:
-                base[RequestField.HORIZON_MESH.value] = self.horizon_mesh
-            if self.zenith_mesh is not None:
-                base[RequestField.ZENITH_MESH.value] = self.zenith_mesh
-        else:
-            base[RequestField.MESH.value] = self.mesh
-        return base
 
 
 @dataclass
@@ -109,21 +106,16 @@ class ObstructionMultiRequest(RemoteServiceRequest):
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        mesh_fields = {}
+        combined_mesh = self.mesh
         if self.horizon_mesh is not None or self.zenith_mesh is not None:
-            if self.horizon_mesh is not None:
-                mesh_fields[RequestField.HORIZON_MESH.value] = self.horizon_mesh
-            if self.zenith_mesh is not None:
-                mesh_fields[RequestField.ZENITH_MESH.value] = self.zenith_mesh
-        else:
-            mesh_fields[RequestField.MESH.value] = self.mesh
+            combined_mesh = (self.horizon_mesh or []) + (self.zenith_mesh or [])
         return self._build_dict(
             **{
                 RequestField.X.value: self.x,
                 RequestField.Y.value: self.y,
                 RequestField.Z.value: self.z,
                 RequestField.DIRECTION_ANGLE.value: self.direction_angle,
-                **mesh_fields,
+                RequestField.MESH.value: combined_mesh,
                 RequestField.START_ANGLE.value: self.start_angle,
                 RequestField.END_ANGLE.value: self.end_angle,
                 RequestField.NUM_DIRECTIONS.value: self.num_directions
@@ -148,20 +140,16 @@ class ObstructionParallelRequest(RemoteServiceRequest):
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        base = {
+        combined_mesh = self.mesh
+        if self.horizon_mesh is not None or self.zenith_mesh is not None:
+            combined_mesh = (self.horizon_mesh or []) + (self.zenith_mesh or [])
+        return {
             RequestField.X.value: self.x,
             RequestField.Y.value: self.y,
             RequestField.Z.value: self.z,
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
+            RequestField.MESH.value: combined_mesh,
         }
-        if self.horizon_mesh is not None or self.zenith_mesh is not None:
-            if self.horizon_mesh is not None:
-                base[RequestField.HORIZON_MESH.value] = self.horizon_mesh
-            if self.zenith_mesh is not None:
-                base[RequestField.ZENITH_MESH.value] = self.zenith_mesh
-        else:
-            base[RequestField.MESH.value] = self.mesh
-        return base
 
 
 @dataclass
