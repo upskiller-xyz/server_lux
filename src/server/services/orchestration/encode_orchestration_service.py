@@ -33,7 +33,7 @@ class SimulationOrchestrator(IOrchestrator):
             file: File data if any
 
         Returns:
-            Merged simulation results
+            Merged simulation results (with optional window_results if debug_mode=true)
         """
         try:
             window_results = self._window_processor.process_all_windows(endpoint, request_data, file)
@@ -47,7 +47,10 @@ class SimulationOrchestrator(IOrchestrator):
 
         merger_result = self._call_merger_service(merged_data, file)
 
-        return self._build_final_response(merger_result)
+        # Check if debug mode is enabled in request
+        debug_mode = request_data.get('debug_mode', False)
+
+        return self._build_final_response(merger_result, window_results, debug_mode)
 
     def _merge_window_results(self, request_data: dict, window_results: list) -> Dict[str, Any]:
         """Merge results from all window processing"""
@@ -66,14 +69,42 @@ class SimulationOrchestrator(IOrchestrator):
         merger_endpoint = ServiceEndpointMap.get(self._merger_service)
         return self._merger_service.run(merger_endpoint, merger_request, file)
 
-    def _build_final_response(self, merger_result: 'MergerResponse') -> Dict[str, Any]:
-        """Build final response from merger result"""
-        
-        return {
+    def _build_final_response(
+        self,
+        merger_result: 'MergerResponse',
+        window_results: list = None,
+        debug_mode: bool = False
+    ) -> Dict[str, Any]:
+        """Build final response from merger result
+
+        Args:
+            merger_result: Merged result from merger service
+            window_results: Individual window results (optional, for debug)
+            debug_mode: If True, include window_results in response
+
+        Returns:
+            Response dict with merged result and optionally individual window results
+        """
+
+        response = {
             ResponseKey.STATUS.value: ResponseKey.SUCCESS.value,
             RequestField.RESULT.value: merger_result.result.tolist() if merger_result.result is not None else [],
             RequestField.MASK.value: merger_result.mask.tolist() if merger_result.mask is not None else []
         }
+
+        # Include individual window results only if debug mode is enabled
+        if debug_mode and window_results:
+            # Convert window results to serializable format
+            debug_window_results = {}
+            for window_name, result_dict in window_results:
+                if isinstance(result_dict, dict):
+                    debug_window_results[window_name] = {
+                        'result': result_dict.get(RequestField.RESULT.value, []),
+                        'mask': result_dict.get(RequestField.MASK.value, [])
+                    }
+            response['window_results'] = debug_window_results
+
+        return response
 
 
 class EncodeOrchestrator(IOrchestrator):
