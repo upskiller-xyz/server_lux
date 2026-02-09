@@ -190,7 +190,6 @@ class RequestField(Enum):
     Z2 = "z2"
 
     # Obstruction fields
-
     MESH = "mesh"
     DIRECTION_ANGLE = "direction_angle"
     START_ANGLE = "start_angle"

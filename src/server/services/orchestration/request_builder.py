@@ -15,6 +15,7 @@ class WindowRequestBuilder:
         return self
 
     def with_mesh(self, mesh: Any) -> 'WindowRequestBuilder':
+        """Set mesh data (nested format: {"horizon": [...], "zenith": [...]})."""
         if mesh is not None:
             self._request[RequestField.MESH.value] = mesh
         return self
@@ -64,15 +65,14 @@ class WindowRequestBuilder:
         """
         params = request_data.get(RequestField.PARAMETERS.value, {})
 
-        # Build the base request
-        built_request = (WindowRequestBuilder()
+        builder = (WindowRequestBuilder()
                 .with_model_type(request_data.get(RequestField.MODEL_TYPE.value))
                 .with_mesh(request_data.get(RequestField.MESH.value))
                 .with_window(window_name, window_data)
                 .with_room_polygon(params.get(RequestField.ROOM_POLYGON.value))
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
-                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))
-                .build())
+                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value)))
+        built_request = builder.build()
 
         # Extract horizon and zenith from window_data if they exist
         # This allows per-window obstruction data to skip the obstruction service
