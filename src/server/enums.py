@@ -191,8 +191,6 @@ class RequestField(Enum):
 
     # Obstruction fields
     MESH = "mesh"
-    HORIZON_MESH = "horizon_mesh"
-    ZENITH_MESH = "zenith_mesh"
     DIRECTION_ANGLE = "direction_angle"
     START_ANGLE = "start_angle"
     END_ANGLE = "end_angle"
