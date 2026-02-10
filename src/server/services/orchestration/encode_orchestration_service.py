@@ -99,7 +99,7 @@ class SimulationOrchestrator(IOrchestrator):
             for window_name, result_dict in window_results:
                 if isinstance(result_dict, dict):
                     debug_window_results[window_name] = {
-                        'result': result_dict.get(RequestField.RESULT.value, []),
+                        'result': result_dict.get(RequestField.SIMULATION.value, []),
                         'mask': result_dict.get(RequestField.MASK.value, [])
                     }
             response['window_results'] = debug_window_results
