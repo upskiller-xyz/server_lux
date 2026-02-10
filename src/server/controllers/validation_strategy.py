@@ -56,7 +56,7 @@ class ValidationStrategy:
     # Map fields to their specific validators
     FIELD_VALIDATORS: Dict[RequestField, List[IFieldValidator]] = {
         RequestField.PARAMETERS: [PresenceValidator(), DictTypeValidator()],
-        RequestField.MESH: [PresenceValidator(), ListTypeValidator()],
+        RequestField.MESH: [PresenceValidator(), DictTypeValidator()],
     }
 
     @classmethod
