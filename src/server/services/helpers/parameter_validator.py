@@ -58,10 +58,10 @@ class ParameterValidator:
         if not isinstance(mesh, dict):
             return ValidationResponseBuilder.error("Mesh must be a dict with 'horizon' and 'zenith' keys")
 
-        for key in ("horizon", "zenith"):
-            sub_mesh = mesh.get(key)
+        for field in (RequestField.HORIZON, RequestField.ZENITH):
+            sub_mesh = mesh.get(field.value)
             if not isinstance(sub_mesh, list):
-                return ValidationResponseBuilder.error(f"Mesh '{key}' must be a list of vertices")
+                return ValidationResponseBuilder.error(f"Mesh '{field.value}' must be a list of vertices")
 
         return ValidationResponseBuilder.success()
 

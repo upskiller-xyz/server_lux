@@ -38,8 +38,8 @@ class ObstructionRequest(RemoteServiceRequest):
         # Extract meshes from nested format: {"mesh": {"horizon": [...], "zenith": [...]}}
         mesh_data = content.get(RequestField.MESH.value, {})
         if isinstance(mesh_data, dict):
-            horizon_mesh = mesh_data.get("horizon")
-            zenith_mesh = mesh_data.get("zenith")
+            horizon_mesh = mesh_data.get(RequestField.HORIZON.value)
+            zenith_mesh = mesh_data.get(RequestField.ZENITH.value)
             mesh = []
         else:
             horizon_mesh = None
@@ -88,8 +88,8 @@ class ObstructionRequest(RemoteServiceRequest):
         }
         if self.horizon_mesh is not None or self.zenith_mesh is not None:
             result[RequestField.MESH.value] = {
-                "horizon": self.horizon_mesh or [],
-                "zenith": self.zenith_mesh or [],
+                RequestField.HORIZON.value: self.horizon_mesh or [],
+                RequestField.ZENITH.value: self.zenith_mesh or [],
             }
         else:
             result[RequestField.MESH.value] = self.mesh
@@ -117,7 +117,7 @@ class ObstructionMultiRequest(RemoteServiceRequest):
     @property
     def to_dict(self) -> Dict[str, Any]:
         if self.horizon_mesh is not None or self.zenith_mesh is not None:
-            mesh_value = {"horizon": self.horizon_mesh or [], "zenith": self.zenith_mesh or []}
+            mesh_value = {RequestField.HORIZON.value: self.horizon_mesh or [], RequestField.ZENITH.value: self.zenith_mesh or []}
         else:
             mesh_value = self.mesh
         return self._build_dict(
@@ -159,8 +159,8 @@ class ObstructionParallelRequest(RemoteServiceRequest):
         }
         if self.horizon_mesh is not None or self.zenith_mesh is not None:
             result[RequestField.MESH.value] = {
-                "horizon": self.horizon_mesh or [],
-                "zenith": self.zenith_mesh or [],
+                RequestField.HORIZON.value: self.horizon_mesh or [],
+                RequestField.ZENITH.value: self.zenith_mesh or [],
             }
         else:
             result[RequestField.MESH.value] = self.mesh
