@@ -197,7 +197,7 @@ class MainRequest(RemoteServiceRequest):
     """Request for obstruction angle calculations"""
     model_type: str
     params: Parameters
-    mesh: list
+    mesh: dict
     result: Any = None
 
     @property
@@ -235,7 +235,7 @@ class ObstructionRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: List[List[float]]
+    mesh: dict
     window_name: str = "window"  # Store window name for response mapping
 
     @classmethod
@@ -312,7 +312,7 @@ class ObstructionMultiRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: List[List[float]]
+    mesh: dict
     start_angle: Optional[float] = None
     end_angle: Optional[float] = None
     num_directions: Optional[int] = None
@@ -344,7 +344,7 @@ class ObstructionParallelRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: List[List[float]]
+    mesh: dict
 
     @property
     def to_dict(self) -> Dict[str, Any]:

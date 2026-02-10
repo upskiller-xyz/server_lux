@@ -55,8 +55,13 @@ class ParameterValidator:
         if result.get(ResponseKey.STATUS.value) == ResponseStatus.ERROR.value:
             return result
 
-        if not isinstance(mesh, list) or len(mesh) < MeshValidation.MIN_TRIANGLES:
-            return ValidationResponseBuilder.error(f"Mesh must be a list with at least {MeshValidation.MIN_TRIANGLES} points")
+        if not isinstance(mesh, dict):
+            return ValidationResponseBuilder.error("Mesh must be a dict with 'horizon' and 'zenith' keys")
+
+        for key in ("horizon", "zenith"):
+            sub_mesh = mesh.get(key)
+            if not isinstance(sub_mesh, list):
+                return ValidationResponseBuilder.error(f"Mesh '{key}' must be a list of vertices")
 
         return ValidationResponseBuilder.success()
 
