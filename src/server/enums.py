@@ -226,6 +226,9 @@ class RequestField(Enum):
     ROOF_HEIGHT = "height_roof_over_floor"
     FLOOR_HEIGHT = "floor_height_above_terrain"
 
+    # Debug flags
+    DEBUG_MODE = "debug_mode"
+
     # Optimization flags
     USE_EARLY_EXIT_OPTIMIZATION = "use_early_exit_optimization"
 
