@@ -48,7 +48,7 @@ class SimulationOrchestrator(IOrchestrator):
         merger_result = self._call_merger_service(merged_data, file)
 
         # Check if debug mode is enabled in request
-        debug_mode = request_data.get('debug_mode', False)
+        debug_mode = request_data.get(RequestField.DEBUG_MODE.value, False)
 
         return self._build_final_response(merger_result, window_results, debug_mode)
 
@@ -99,10 +99,10 @@ class SimulationOrchestrator(IOrchestrator):
             for window_name, result_dict in window_results:
                 if isinstance(result_dict, dict):
                     debug_window_results[window_name] = {
-                        'result': result_dict.get(RequestField.SIMULATION.value, []),
-                        'mask': result_dict.get(RequestField.MASK.value, [])
+                        RequestField.RESULT.value: result_dict.get(RequestField.SIMULATION.value, []),
+                        RequestField.MASK.value: result_dict.get(RequestField.MASK.value, [])
                     }
-            response['window_results'] = debug_window_results
+            response[ResponseKey.WINDOW_RESULTS.value] = debug_window_results
 
         return response
 
