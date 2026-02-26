@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 
 from .base_contracts import RemoteServiceRequest
 from .encoder_contracts import Parameters
@@ -11,10 +11,11 @@ class MainRequest(RemoteServiceRequest):
     """Request for main /simulate endpoint
 
     The primary external request that initiates the full simulation pipeline.
+    Mesh can be a dict {horizon: [...], zenith: [...]} or a flat list [[x,y,z], ...].
     """
     model_type: str
     params: Parameters
-    mesh: dict
+    mesh: Union[dict, list]
     result: Any = None
 
     @property
