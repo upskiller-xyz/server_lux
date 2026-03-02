@@ -75,11 +75,12 @@ class WindowRequestBuilder:
         built_request = builder.build()
 
         # Extract horizon and zenith from window_data if they exist
-        # This allows per-window obstruction data to skip the obstruction service
+        # Wrap in dict keyed by window_name so Parameters._normalize_to_dict() accepts them
+        # and the encoder can look up angles by window name
         if isinstance(window_data, dict):
             if 'horizon' in window_data:
-                built_request['horizon'] = window_data['horizon']
+                built_request['horizon'] = {window_name: window_data['horizon']}
             if 'zenith' in window_data:
-                built_request['zenith'] = window_data['zenith']
+                built_request['zenith'] = {window_name: window_data['zenith']}
 
         return built_request
