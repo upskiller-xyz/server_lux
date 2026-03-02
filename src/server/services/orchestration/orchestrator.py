@@ -34,7 +34,10 @@ class Orchestrator(IOrchestrator):
         for service in services:
             # Skip service if its output already exists in params
             if self._should_skip_service(service, params):
-                logger.debug(f"Skipping {service.__name__} - output already exists in params")
+                logger.info(f"[DEBUG-SKIP] Skipping {service.__name__} - horizon in params: {'horizon' in params}, zenith in params: {'zenith' in params}")
+                if 'horizon' in params:
+                    h_val = params['horizon']
+                    logger.info(f"[DEBUG-SKIP] horizon type={type(h_val).__name__}, value_preview={str(h_val)[:200]}")
                 continue
 
             response = self._execute_service(service, endpoint, params, file)

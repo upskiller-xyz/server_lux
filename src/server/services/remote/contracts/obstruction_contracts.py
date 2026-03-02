@@ -180,14 +180,13 @@ class ObstructionResponse(RemoteServiceResponse):
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
-        """Parse response data from obstruction service
+        """Parse response data from /obstruction_parallel endpoint
 
-        Expects the standardized data.results format from /obstruction_parallel.
-        Each result contains horizon/zenith with obstruction_angle_degrees.
+        Expects data.results[] with per-direction horizon/zenith angle objects.
         """
         data = content.get(ResponseKey.DATA.value, {})
-        results = data.get(ResponseKey.RESULTS.value, [])
         status = content.get(ResponseKey.STATUS.value, 'success')
+        results = data.get(ResponseKey.RESULTS.value, [])
 
         horizon = [
             r.get(ResponseKey.HORIZON.value, {}).get(ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value, 0.0)
