@@ -55,17 +55,8 @@ class ParameterValidator:
         if result.get(ResponseKey.STATUS.value) == ResponseStatus.ERROR.value:
             return result
 
-        # Accept flat list format (unified mesh) or dict format (split horizon/zenith)
-        if isinstance(mesh, list):
-            return ValidationResponseBuilder.success()
-
-        if not isinstance(mesh, dict):
-            return ValidationResponseBuilder.error("Mesh must be a list of vertices or a dict with 'horizon' and 'zenith' keys")
-
-        for field in (RequestField.HORIZON, RequestField.ZENITH):
-            sub_mesh = mesh.get(field.value)
-            if not isinstance(sub_mesh, list):
-                return ValidationResponseBuilder.error(f"Mesh '{field.value}' must be a list of vertices")
+        if not isinstance(mesh, list):
+            return ValidationResponseBuilder.error("Mesh must be a list of vertices")
 
         return ValidationResponseBuilder.success()
 

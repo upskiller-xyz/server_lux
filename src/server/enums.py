@@ -116,6 +116,7 @@ class EndpointType(ExtendedEnumMixin, Enum):
     ENCODE = "encode"
     ENCODE_RAW = "encode_raw"
     RUN = "run"
+    RUN_DETAILED = "run_detailed"
     CALCULATE_DIRECTION = "calculate-direction"
     REFERENCE_POINT = "get-reference-point"
     MERGE = "merge"
@@ -225,9 +226,6 @@ class RequestField(Enum):
 
     ROOF_HEIGHT = "height_roof_over_floor"
     FLOOR_HEIGHT = "floor_height_above_terrain"
-
-    # Debug flags
-    DEBUG_MODE = "debug_mode"
 
     # Optimization flags
     USE_EARLY_EXIT_OPTIMIZATION = "use_early_exit_optimization"

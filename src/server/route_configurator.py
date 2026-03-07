@@ -44,6 +44,7 @@ class RouteBuilder:
             Route(f"/{self._version}/calculate-direction", EndpointType.CALCULATE_DIRECTION, [Methods.POST.value], handlers.get(EndpointType.CALCULATE_DIRECTION)),
             Route(f"/{self._version}/get-reference-point", EndpointType.REFERENCE_POINT, [Methods.POST.value], handlers.get(EndpointType.REFERENCE_POINT)),
             Route(f"/{self._version}/run", EndpointType.RUN, [Methods.POST.value], handlers.get(EndpointType.RUN)),
+            Route(f"/{self._version}/run/detailed", EndpointType.RUN_DETAILED, [Methods.POST.value], handlers.get(EndpointType.RUN_DETAILED)),
             Route(f"/{self._version}/merge", EndpointType.MERGE, [Methods.POST.value], handlers.get(EndpointType.MERGE)),
         ]
 
