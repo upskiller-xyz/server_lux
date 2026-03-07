@@ -14,7 +14,7 @@ class MainRequest(RemoteServiceRequest):
     """
     model_type: str
     params: Parameters
-    mesh: list
+    mesh: List[List[float]]
     result: Any = None
 
     @property

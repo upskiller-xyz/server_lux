@@ -24,6 +24,7 @@ class EndpointServiceMap(StandardMap):
     """Maps endpoints to the sequence of services that should process them"""
     _content:Dict[EndpointType, list[type[RemoteService]]] = {
         EndpointType.RUN: [ReferencePointService, DirectionAngleService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN_DETAILED: [ReferencePointService, DirectionAngleService, ObstructionService, EncoderService, ModelService],
         EndpointType.MERGE : [MergerService],
         EndpointType.ENCODE: [ReferencePointService, DirectionAngleService, ObstructionService, EncoderService],
         EndpointType.ENCODE_RAW: [EncoderService],
