@@ -12,6 +12,8 @@ class DirectionAngleRequest(RemoteServiceRequest):
 
     Used for /calculate-direction endpoint to calculate direction angles
     for windows in a room based on room polygon and window positions.
+    
+    Uses Enumerator Pattern - maps string keys to RequestField enums.
     """
     room_polygon: List[List[float]]
     windows: Dict[str, WindowGeometry]
@@ -19,13 +21,17 @@ class DirectionAngleRequest(RemoteServiceRequest):
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> List['DirectionAngleRequest']:
         """Parse dictionary into list of DirectionAngleRequest (one per window)
+        
+        Checks if windows already have direction_angle parameter. 
+        If direction_angle exists, uses pre-calculated value.
+        Only creates requests for windows that need angle calculation.
 
         Args:
             content: Dictionary with 'room_polygon' and 'windows' keys,
                     or with 'parameters' key containing room_polygon and windows
 
         Returns:
-            List of DirectionAngleRequest instances (one per window)
+            List of DirectionAngleRequest instances (one per window that needs calculation)
         """
         # Check if data is nested in 'parameters' (from /encode or /run endpoints)
         if RequestField.PARAMETERS.value in content:
@@ -34,14 +40,19 @@ class DirectionAngleRequest(RemoteServiceRequest):
         room_polygon = content.get(RequestField.ROOM_POLYGON.value, [])
         windows_dict = content.get(RequestField.WINDOWS.value, {})
 
-        # Create one request per window
+        # Create one request per window that doesn't already have direction_angle
         requests = []
         for window_name, window_data in windows_dict.items():
-            window_geom = WindowGeometry.from_dict(window_data)
-            requests.append(cls(
-                room_polygon=room_polygon,
-                windows={window_name: window_geom}
-            ))
+            # Check if window already has direction_angle parameter using enum
+            has_direction_angle = RequestField.DIRECTION_ANGLE.value in window_data
+            
+            if not has_direction_angle:
+                # Only request calculation for windows without pre-calculated angle
+                window_geom = WindowGeometry.from_dict(window_data)
+                requests.append(cls(
+                    room_polygon=room_polygon,
+                    windows={window_name: window_geom}
+                ))
 
         return requests
 

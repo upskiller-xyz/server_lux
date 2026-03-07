@@ -1,9 +1,12 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
+import logging
 
 from .contracts import RemoteServiceRequest, DirectionAngleRequest
 from .contracts import DirectionAngleResponse
-from ...enums import ServiceName, EndpointType
+from ...enums import ServiceName, EndpointType, RequestField, ResponseKey
 from .base import RemoteService
+
+logger = logging.getLogger("logger")
 
 
 class DirectionAngleService(RemoteService):
@@ -11,6 +14,7 @@ class DirectionAngleService(RemoteService):
 
     Handles /calculate-direction endpoint.
     Follows Single Responsibility Principle - only calculates direction angles.
+    Uses Enumerator Pattern - all string keys use RequestField/ResponseKey enums.
     """
     name: ServiceName = ServiceName.ENCODER  # Uses encoder microservice
 
@@ -26,6 +30,27 @@ class DirectionAngleService(RemoteService):
 
     @classmethod
     def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None) -> Dict[str, Any]:
-        """Calculate direction angles for windows"""
+        """Calculate direction angles for windows
+        
+        Checks if windows already have direction_angle parameter.
+        Uses pre-calculated angles where available, only computes missing ones.
+        
+        Args:
+            endpoint: The endpoint to call
+            request: The request object containing room_polygon and windows
+            file: Optional file upload
+            
+        Returns:
+            Dictionary with direction_angles for all windows
+        """
+        # If request has no windows (all were pre-calculated), return empty dict
+        if not request.windows:
+            logger.info("No windows requiring direction angle calculation")
+            return {
+                ResponseKey.DIRECTION_ANGLE.value: {},
+                ResponseKey.STATUS.value: ResponseKey.SUCCESS.value
+            }
+        
+        # Calculate missing angles via remote service
         response_class = cls._get_response(endpoint)
         return super().run(endpoint, request, file, response_class)
