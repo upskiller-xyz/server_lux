@@ -262,7 +262,12 @@ class ObstructionRequest(RemoteServiceRequest):
             )]
 
         # Otherwise, extract from reference_point and direction_angle responses
-        reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        # Prefer external_reference_point if available (from ExternalReferencePointService),
+        # otherwise fall back to internal reference_point
+        reference_points = content.get(RequestField.EXTERNAL_REFERENCE_POINT.value, {})
+        if not reference_points:
+            reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        
         direction_angles = content.get(RequestField.DIRECTION_ANGLE.value, {})
         mesh = content.get(RequestField.MESH.value, [])
 

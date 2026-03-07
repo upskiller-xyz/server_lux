@@ -3,6 +3,7 @@ from .obstruction_service import ObstructionService
 from .encoder_service import EncoderService
 from .direction_angle_service import DirectionAngleService
 from .reference_point_service import ReferencePointService
+from .external_reference_point_service import ExternalReferencePointService
 from .model_service import ModelService
 from .merger_service import MergerService
 from .stats_service import StatsService
@@ -27,6 +28,7 @@ from .contracts import (
     ObstructionParallelRequest,
     DirectionAngleRequest,
     ReferencePointRequest,
+    ExternalReferencePointRequest,
     MergerRequest,
     StatsRequest,
     ModelRequest,
@@ -40,6 +42,7 @@ from .contracts import (
     ObstructionResponse,
     DirectionAngleResponse,
     ReferencePointResponse,
+    ExternalReferencePointResponse,
     EncoderResponse,
     ModelResponse,
     MergerResponse,
@@ -53,6 +56,7 @@ __all__ = [
     'EncoderService',
     'DirectionAngleService',
     'ReferencePointService',
+    'ExternalReferencePointService',
     'ModelService',
     'MergerService',
     'StatsService',
@@ -71,6 +75,7 @@ __all__ = [
     "ObstructionParallelRequest",
     "DirectionAngleRequest",
     "ReferencePointRequest",
+    "ExternalReferencePointRequest",
     "MergerRequest",
     "StatsRequest",
     "ModelRequest",
@@ -81,6 +86,7 @@ __all__ = [
     "ObstructionResponse",
     "DirectionAngleResponse",
     "ReferencePointResponse",
+    "ExternalReferencePointResponse",
     "EncoderResponse",
     "ModelResponse",
     "MergerResponse",
