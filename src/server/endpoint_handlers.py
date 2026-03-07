@@ -775,6 +775,45 @@ class EndpointHandlers:
         """
         return self._request_handler.handle(request)
 
+    def handle_run_detailed(self) -> Tuple[Response, int]:
+        """Run ML model inference and return detailed per-window results
+
+        Same pipeline as /run, but the response includes a per-window breakdown
+        in addition to the merged result.
+        ---
+        tags:
+          - Model
+        parameters:
+          - in: body
+            name: body
+            required: true
+            schema:
+              $ref: '#/definitions/RunRequest'
+        responses:
+          200:
+            description: Daylight factor result with per-window breakdown
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "success"
+                result:
+                  type: array
+                  description: Merged 128x128 result array
+                mask:
+                  type: array
+                  description: Merged mask array
+                window_results:
+                  type: object
+                  description: Per-window simulation results keyed by window name
+          400:
+            description: Bad request
+          500:
+            description: Internal server error
+        """
+        return self._request_handler.handle(request)
+
     def handle_merge(self) -> Tuple[Response, int]:
         """Merge multiple window simulation results
 
