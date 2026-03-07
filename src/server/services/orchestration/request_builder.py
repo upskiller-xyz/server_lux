@@ -15,7 +15,7 @@ class WindowRequestBuilder:
         return self
 
     def with_mesh(self, mesh: Any) -> 'WindowRequestBuilder':
-        """Set mesh data (nested format: {"horizon": [...], "zenith": [...]})."""
+        """Set mesh data as a flat list of triangle vertices [[x,y,z], ...]."""
         if mesh is not None:
             self._request[RequestField.MESH.value] = mesh
         return self
@@ -65,21 +65,21 @@ class WindowRequestBuilder:
         """
         params = request_data.get(RequestField.PARAMETERS.value, {})
 
-        builder = (WindowRequestBuilder()
+        built_request = (WindowRequestBuilder()
                 .with_model_type(request_data.get(RequestField.MODEL_TYPE.value))
                 .with_mesh(request_data.get(RequestField.MESH.value))
                 .with_window(window_name, window_data)
                 .with_room_polygon(params.get(RequestField.ROOM_POLYGON.value))
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
-                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value)))
-        built_request = builder.build()
+                .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))).build()
 
         # Extract horizon and zenith from window_data if they exist
-        # This allows per-window obstruction data to skip the obstruction service
+        # Wrap in dict keyed by window_name so Parameters._normalize_to_dict() accepts them
+        # and the encoder can look up angles by window name
         if isinstance(window_data, dict):
             if 'horizon' in window_data:
-                built_request['horizon'] = window_data['horizon']
+                built_request['horizon'] = {window_name: window_data['horizon']}
             if 'zenith' in window_data:
-                built_request['zenith'] = window_data['zenith']
+                built_request['zenith'] = {window_name: window_data['zenith']}
 
         return built_request

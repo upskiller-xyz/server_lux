@@ -13,8 +13,6 @@ from ..remote.service_map import ServiceEndpointMap
 from ...maps import StandardMap
 from ...interfaces.orchestration_interfaces import IOrchestrator
 
-logger = logging.getLogger("logger")
-
 
 class SimulationOrchestrator(IOrchestrator):
     """Orchestrates simulation requests with parallel window processing"""
@@ -33,7 +31,7 @@ class SimulationOrchestrator(IOrchestrator):
             file: File data if any
 
         Returns:
-            Merged simulation results (with optional window_results if debug_mode=true)
+            Merged simulation results. RUN_DETAILED includes per-window breakdown.
         """
         try:
             window_results = self._window_processor.process_all_windows(endpoint, request_data, file)
@@ -47,10 +45,9 @@ class SimulationOrchestrator(IOrchestrator):
 
         merger_result = self._call_merger_service(merged_data, file)
 
-        # Check if debug mode is enabled in request
-        debug_mode = request_data.get('debug_mode', False)
+        detailed = endpoint == EndpointType.RUN_DETAILED
 
-        return self._build_final_response(merger_result, window_results, debug_mode)
+        return self._build_final_response(merger_result, window_results, detailed)
 
     def _merge_window_results(self, request_data: dict, window_results: list) -> Dict[str, Any]:
         """Merge results from all window processing"""
@@ -63,7 +60,7 @@ class SimulationOrchestrator(IOrchestrator):
         merger_request = merger_requests[0] if merger_requests else None
 
         if not merger_request:
-            logger.error("Failed to create MergerRequest")
+            logging.error("Failed to create MergerRequest")
             raise ValueError("Failed to create merger request")
 
         merger_endpoint = ServiceEndpointMap.get(self._merger_service)
@@ -72,15 +69,15 @@ class SimulationOrchestrator(IOrchestrator):
     def _build_final_response(
         self,
         merger_result: 'MergerResponse',
-        window_results: list = None,
-        debug_mode: bool = False
+        window_results: list = [],
+        detailed: bool = False
     ) -> Dict[str, Any]:
         """Build final response from merger result
 
         Args:
             merger_result: Merged result from merger service
-            window_results: Individual window results (optional, for debug)
-            debug_mode: If True, include window_results in response
+            window_results: Individual window results (included when detailed=True)
+            detailed: If True, include per-window breakdown in response
 
         Returns:
             Response dict with merged result and optionally individual window results
@@ -92,17 +89,16 @@ class SimulationOrchestrator(IOrchestrator):
             RequestField.MASK.value: merger_result.mask.tolist() if merger_result.mask is not None else []
         }
 
-        # Include individual window results only if debug mode is enabled
-        if debug_mode and window_results:
+        if detailed and window_results:
             # Convert window results to serializable format
             debug_window_results = {}
             for window_name, result_dict in window_results:
                 if isinstance(result_dict, dict):
                     debug_window_results[window_name] = {
-                        'result': result_dict.get(RequestField.RESULT.value, []),
-                        'mask': result_dict.get(RequestField.MASK.value, [])
+                        RequestField.RESULT.value: result_dict.get(RequestField.SIMULATION.value, []),
+                        RequestField.MASK.value: result_dict.get(RequestField.MASK.value, [])
                     }
-            response['window_results'] = debug_window_results
+            response[ResponseKey.WINDOW_RESULTS.value] = debug_window_results
 
         return response
 
@@ -137,6 +133,7 @@ class EncodeOrchestrator(IOrchestrator):
 class EndpointOrchestratorMap(StandardMap):
     _content: Dict[EndpointType, type] = {
         EndpointType.RUN: SimulationOrchestrator,
+        EndpointType.RUN_DETAILED: SimulationOrchestrator,
         EndpointType.SIMULATE: SimulationOrchestrator,
         EndpointType.ENCODE: EncodeOrchestrator,
     }

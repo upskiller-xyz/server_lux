@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
+import logging
 import numpy as np
 
 from src.server.services.helpers.parameter_validator import ParameterValidator
@@ -194,10 +195,10 @@ class Parameters(RemoteServiceRequest):
 
 @dataclass
 class MainRequest(RemoteServiceRequest):
-    """Request for obstruction angle calculations"""
+    """Request for main /simulate endpoint"""
     model_type: str
     params: Parameters
-    mesh: list
+    mesh: List[List[float]]
     result: Any = None
 
     @property
@@ -536,7 +537,7 @@ class MergerRequest(RemoteServiceRequest):
         windows_dict = params.get(RequestField.WINDOWS.value, {})
         direction_angles_dict = content.get(RequestField.DIRECTION_ANGLE.value, {})
 
-        print(direction_angles_dict)
+        logging.debug("Direction angles: %s", direction_angles_dict)
 
         windows = {}
         for window_name, window_data in windows_dict.items():
