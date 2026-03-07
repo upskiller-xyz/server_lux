@@ -4,8 +4,6 @@ from typing import Dict, Any, Optional, List
 import logging
 import numpy as np
 
-logger = logging.getLogger("logger")
-
 from src.server.services.helpers.parameter_validator import ParameterValidator
 from ...enums import RequestField
 
@@ -197,10 +195,10 @@ class Parameters(RemoteServiceRequest):
 
 @dataclass
 class MainRequest(RemoteServiceRequest):
-    """Request for obstruction angle calculations"""
+    """Request for main /simulate endpoint"""
     model_type: str
     params: Parameters
-    mesh: dict
+    mesh: List[List[float]]
     result: Any = None
 
     @property
@@ -238,7 +236,7 @@ class ObstructionRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: dict
+    mesh: List[List[float]]
     window_name: str = "window"  # Store window name for response mapping
 
     @classmethod
@@ -315,7 +313,7 @@ class ObstructionMultiRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: dict
+    mesh: List[List[float]]
     start_angle: Optional[float] = None
     end_angle: Optional[float] = None
     num_directions: Optional[int] = None
@@ -347,7 +345,7 @@ class ObstructionParallelRequest(RemoteServiceRequest):
     y: float
     z: float
     direction_angle: float
-    mesh: dict
+    mesh: List[List[float]]
 
     @property
     def to_dict(self) -> Dict[str, Any]:
@@ -539,7 +537,7 @@ class MergerRequest(RemoteServiceRequest):
         windows_dict = params.get(RequestField.WINDOWS.value, {})
         direction_angles_dict = content.get(RequestField.DIRECTION_ANGLE.value, {})
 
-        logger.debug("Direction angles: %s", direction_angles_dict)
+        logging.debug("Direction angles: %s", direction_angles_dict)
 
         windows = {}
         for window_name, window_data in windows_dict.items():

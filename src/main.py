@@ -102,6 +102,7 @@ class ServerApplication:
             EndpointType.CALCULATE_DIRECTION: self._endpoint_handlers.handle_calculate_direction,
             EndpointType.REFERENCE_POINT: self._endpoint_handlers.handle_reference_point,
             EndpointType.RUN: self._endpoint_handlers.handle_run,
+            EndpointType.RUN_DETAILED: self._endpoint_handlers.handle_run_detailed,
             EndpointType.MERGE: self._endpoint_handlers.handle_merge,
         }
 
