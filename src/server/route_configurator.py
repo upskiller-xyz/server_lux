@@ -18,7 +18,7 @@ class RouteBuilder:
     """Builds route configurations based on API version"""
 
     def __init__(self, version: str):
-        self._version = f"v{version.split('.')[0]}"
+        self._version = "v1"
 
     def build_routes(self, handlers: Dict[EndpointType, Callable]) -> List[Route]:
         """Build all route configurations

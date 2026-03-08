@@ -119,6 +119,7 @@ class EndpointType(ExtendedEnumMixin, Enum):
     RUN_DETAILED = "run_detailed"
     CALCULATE_DIRECTION = "calculate-direction"
     REFERENCE_POINT = "get-reference-point"
+    EXTERNAL_REFERENCE_POINT = "get-external-reference-point"
     MERGE = "merge"
     STATS_CALCULATE = "calculate"
 
@@ -223,6 +224,7 @@ class RequestField(Enum):
 
     # Reference point
     REFERENCE_POINT = "reference_point"
+    EXTERNAL_REFERENCE_POINT = "external_reference_point"
 
     ROOF_HEIGHT = "height_roof_over_floor"
     FLOOR_HEIGHT = "floor_height_above_terrain"

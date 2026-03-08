@@ -24,6 +24,10 @@ from .reference_point_contracts import (
     ReferencePointRequest,
     ReferencePointResponse
 )
+from .external_reference_point_contracts import (
+    ExternalReferencePointRequest,
+    ExternalReferencePointResponse
+)
 from .encoder_contracts import (
     Parameters,
     EncoderResponse
@@ -66,6 +70,9 @@ __all__ = [
     # Reference Point
     'ReferencePointRequest',
     'ReferencePointResponse',
+    # External Reference Point
+    'ExternalReferencePointRequest',
+    'ExternalReferencePointResponse',
     # Encoder
     'Parameters',
     'EncoderResponse',
