@@ -91,5 +91,6 @@ class ExternalReferencePointResponse(StandardResponse):
     @property
     def to_dict(self) -> Dict[str, Any]:
         return {
-            RequestField.EXTERNAL_REFERENCE_POINT.value: self.external_reference_point
+            RequestField.EXTERNAL_REFERENCE_POINT.value: self.external_reference_point,
+            RequestField.REFERENCE_POINT.value: self.external_reference_point
         }

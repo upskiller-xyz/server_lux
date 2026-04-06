@@ -34,7 +34,10 @@ class ObstructionRequest(RemoteServiceRequest):
                 mesh=mesh,
             )]
 
-        reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        reference_points = content.get(RequestField.EXTERNAL_REFERENCE_POINT.value, {})
+        if not reference_points:
+            reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        
         direction_angles = content.get(RequestField.DIRECTION_ANGLE.value, {})
 
         requests = []
