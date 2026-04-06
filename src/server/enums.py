@@ -217,6 +217,7 @@ class RequestField(Enum):
     SHAPE = "shape"
 
     # Image fields
+    MODEL = "model"
     FILE = "file"
     IMAGE_BASE64 = "image_base64"
     IMAGE_ARRAY = "image_array"
