@@ -3,7 +3,7 @@ import logging
 
 from .contracts import RemoteServiceRequest, DirectionAngleRequest
 from .contracts import DirectionAngleResponse
-from ...enums import ServiceName, EndpointType, RequestField, ResponseKey
+from ...enums import ServiceName, EndpointType
 from .base import RemoteService
 
 logger = logging.getLogger("logger")
@@ -43,14 +43,6 @@ class DirectionAngleService(RemoteService):
         Returns:
             Dictionary with direction_angles for all windows
         """
-        # If request has no windows (all were pre-calculated), return empty dict
-        if not request.windows:
-            logger.info("No windows requiring direction angle calculation")
-            return {
-                ResponseKey.DIRECTION_ANGLE.value: {},
-                ResponseKey.STATUS.value: ResponseKey.SUCCESS.value
-            }
-        
         # Calculate missing angles via remote service
         response_class = cls._get_response(endpoint)
         return super().run(endpoint, request, file, response_class)

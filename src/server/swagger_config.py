@@ -1,7 +1,8 @@
 """Swagger/Flasgger configuration for API documentation"""
 
-import os
 from src.__version__ import version
+from src.server.auth_config import AuthConfig
+from src.server.enums import AuthType
 
 
 def get_swagger_template() -> dict:
@@ -10,13 +11,13 @@ def get_swagger_template() -> dict:
     Returns:
         Dictionary containing Swagger template configuration
     """
-    auth_type = os.getenv('AUTH_TYPE', 'token').lower()
+    auth_type = AuthConfig().auth_type
 
-    # Build security definitions based on auth type
+    # Build security definitions based on effective auth type
     security_definitions = {}
     security_requirements = []
 
-    if auth_type == 'token':
+    if auth_type == AuthType.TOKEN:
         security_definitions['Bearer'] = {
             'type': 'apiKey',
             'name': 'Authorization',
@@ -24,7 +25,7 @@ def get_swagger_template() -> dict:
             'description': 'Token-based authentication. Enter your token in the format: Bearer <your_token>'
         }
         security_requirements.append({'Bearer': []})
-    elif auth_type == 'auth0':
+    elif auth_type == AuthType.AUTH0:
         security_definitions['Auth0'] = {
             'type': 'apiKey',
             'name': 'Authorization',
@@ -34,9 +35,9 @@ def get_swagger_template() -> dict:
         security_requirements.append({'Auth0': []})
 
     auth_info = ''
-    if auth_type == 'token':
+    if auth_type == AuthType.TOKEN:
         auth_info = '\n\n**Authentication:** This API uses Bearer token authentication. Include your token in the Authorization header.'
-    elif auth_type == 'auth0':
+    elif auth_type == AuthType.AUTH0:
         auth_info = '\n\n**Authentication:** This API uses Auth0 JWT authentication. Include your JWT token in the Authorization header.'
 
     template = {

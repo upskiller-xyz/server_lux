@@ -401,7 +401,7 @@ Auth0 has a free tier (7,000 active users). Check [Auth0 pricing](https://auth0.
 - 🎉 [COMMUNITY_EDITION.md](COMMUNITY_EDITION.md) - Community Edition guide
 - 🔑 [AUTH0_SETUP.md](AUTH0_SETUP.md) - Complete Auth0 setup
 - 📚 [AUTH_README.md](AUTH_README.md) - Authentication overview
-- 🧪 [tests/test_auth.py](tests/test_auth.py) - Authentication tests
+- 🧪 [tests/server/test_auth.py](tests/server/test_auth.py) - Authentication tests
 - 🌐 Swagger UI: `http://localhost:8080/docs/`
 
 ---
