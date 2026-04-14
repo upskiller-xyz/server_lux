@@ -60,8 +60,11 @@ class WindowRequestBuilder:
     def from_request_data(request_data: Dict[str, Any], window_name: str, window_data: Any) -> Dict[str, Any]:
         """Convenience method to build a window request from existing request data
 
-        Extracts horizon and zenith from window_data if present and adds them at the top level
-        so the orchestrator can detect and skip obstruction calculation.
+        Extracts horizon, zenith, and direction_angle from window_data if present 
+        and adds them at the top level so the orchestrator can use them and skip 
+        unnecessary service calls.
+        
+        Uses Enumerator Pattern - all string keys use RequestField/ResponseKey enums.
         """
         params = request_data.get(RequestField.PARAMETERS.value, {})
 
@@ -73,13 +76,16 @@ class WindowRequestBuilder:
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
                 .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))).build()
 
-        # Extract horizon and zenith from window_data if they exist
-        # Wrap in dict keyed by window_name so Parameters._normalize_to_dict() accepts them
-        # and the encoder can look up angles by window name
+        # Extract horizon, zenith and direction_angle from window_data if present.
+        # horizon/zenith are wrapped in {window_name: value} so Parameters._normalize_to_dict()
+        # can look up angles by window name. direction_angle is kept as a flat value.
         if isinstance(window_data, dict):
-            if 'horizon' in window_data:
-                built_request['horizon'] = {window_name: window_data['horizon']}
-            if 'zenith' in window_data:
-                built_request['zenith'] = {window_name: window_data['zenith']}
+            if RequestField.HORIZON.value in window_data:
+                built_request[RequestField.HORIZON.value] = {window_name: window_data[RequestField.HORIZON.value]}
+            if RequestField.ZENITH.value in window_data:
+                built_request[RequestField.ZENITH.value] = {window_name: window_data[RequestField.ZENITH.value]}
+            direction_angle = window_data.get(RequestField.DIRECTION_ANGLE.value)
+            if direction_angle is not None:
+                built_request[RequestField.DIRECTION_ANGLE.value] = direction_angle
 
         return built_request
