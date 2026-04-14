@@ -84,48 +84,55 @@ fi
 # Stop existing containers
 echo ""
 echo -e "${YELLOW}Stopping existing containers...${NC}"
-$DOCKER_COMPOSE -f docker-compose-full-stack.yml down 2>/dev/null || true
+$DOCKER_COMPOSE --env-file .env.full-stack -f docker-compose-full-stack.yml down 2>/dev/null || true
 
 # Build services
 if [ "$FORCE_BUILD" = true ]; then
     echo -e "${YELLOW}Building all services (forced rebuild)...${NC}"
-    $DOCKER_COMPOSE -f docker-compose-full-stack.yml build --no-cache
+    $DOCKER_COMPOSE --env-file .env.full-stack -f docker-compose-full-stack.yml build --no-cache
 else
     echo -e "${YELLOW}Building all services...${NC}"
-    $DOCKER_COMPOSE -f docker-compose-full-stack.yml build
+    $DOCKER_COMPOSE --env-file .env.full-stack -f docker-compose-full-stack.yml build
 fi
 
 # Start all services
 echo ""
 echo -e "${YELLOW}Starting all services...${NC}"
-$DOCKER_COMPOSE -f docker-compose-full-stack.yml up -d
+$DOCKER_COMPOSE --env-file .env.full-stack -f docker-compose-full-stack.yml up -d
 
 # Wait for services to be ready
 echo -e "${YELLOW}Waiting for services to start...${NC}"
 sleep 10
 
 # Check service health
+# Downstream services have no host ports — check via docker exec on the internal network
 echo ""
 echo -e "${BLUE}Checking service health...${NC}"
 
 SERVICES=(
-    "server-lux:8080"
-    "obstruction-service:8081"
-    "encoder-service:8082"
-    "model-service:8083"
-    "merger-service:8084"
-    "stats-service:8085"
+    "server-lux:8080:host"
+    "obstruction-service:8081:internal"
+    "encoder-service:8082:internal"
+    "model-service:8083:internal"
+    "merger-service:8084:internal"
+    "stats-service:8085:internal"
 )
 
 ALL_HEALTHY=true
 for service_info in "${SERVICES[@]}"; do
-    IFS=':' read -r service_name port <<< "$service_info"
+    IFS=':' read -r service_name port access <<< "$service_info"
 
     if docker ps --format '{{.Names}}' | grep -q "^${service_name}$"; then
-        if curl -s http://localhost:${port}/ > /dev/null 2>&1; then
-            echo -e "  ${GREEN}✓ ${service_name} (port ${port})${NC}"
+        if [ "$access" = "host" ]; then
+            healthy=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/ 2>/dev/null)
         else
-            echo -e "  ${YELLOW}⚠ ${service_name} (port ${port}) - running but not responding${NC}"
+            healthy=$(docker exec "${service_name}" curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/ 2>/dev/null)
+        fi
+
+        if [ "$healthy" = "200" ]; then
+            echo -e "  ${GREEN}✓ ${service_name}${NC}"
+        else
+            echo -e "  ${YELLOW}⚠ ${service_name} - running but not responding${NC}"
             ALL_HEALTHY=false
         fi
     else
@@ -141,19 +148,15 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${BLUE}Services:${NC}"
-echo -e "  Main Server:        ${GREEN}http://localhost:8080${NC}"
-echo -e "  Obstruction:        ${GREEN}http://localhost:8081${NC}"
-echo -e "  Encoder:            ${GREEN}http://localhost:8082${NC}"
-echo -e "  Model:              ${GREEN}http://localhost:8083${NC}"
-echo -e "  Merger:             ${GREEN}http://localhost:8084${NC}"
-echo -e "  Stats:              ${GREEN}http://localhost:8085${NC}"
+echo -e "  Main Server (public): ${GREEN}http://localhost:8080${NC}"
+echo -e "  Microservices:        internal Docker network only (no host ports)"
 echo ""
 
 if [ "$ALL_HEALTHY" = true ]; then
     echo -e "${GREEN}✓ All services are healthy and responding${NC}"
 else
     echo -e "${YELLOW}⚠ Some services may need more time to start${NC}"
-    echo -e "${YELLOW}  Check logs: docker compose -f docker-compose-full-stack.yml logs${NC}"
+    echo -e "${YELLOW}  Check logs: docker compose --env-file .env.full-stack -f docker-compose-full-stack.yml logs${NC}"
 fi
 
 echo ""

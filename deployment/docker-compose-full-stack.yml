@@ -91,6 +91,11 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - MODEL_URL_TEMPLATE=${MODEL_URL_TEMPLATE}
+      - SCW_ACCESS_KEY=${SCW_ACCESS_KEY}
+      - SCW_SECRET_KEY=${SCW_SECRET_KEY}
+      - SCW_REGION=${SCW_REGION:-fr-par}
+      - SCW_ENDPOINT_URL=${SCW_ENDPOINT_URL:-https://s3.fr-par.scw.cloud}
     networks:
       - lux-network
     healthcheck:
