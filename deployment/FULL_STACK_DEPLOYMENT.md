@@ -347,6 +347,138 @@ Remove downloaded service repositories:
 rm -rf services/
 ```
 
+## Security
+
+### Overview
+
+Server Lux uses a layered security model:
+
+```
+Internet
+   │
+   ▼
+[Nginx]          ← Rate limiting, scanner blocking, security headers
+   │
+   ▼
+[Server Lux]     ← Auth (token or Auth0 JWT) on all /v1/ endpoints
+   │
+   ▼
+[Microservices]  ← Internal Docker network only, no external ports
+```
+
+### Authentication
+
+Set `AUTH_TYPE` in `.env.full-stack`:
+
+**Token-based (simple API key):**
+```env
+AUTH_TYPE=token
+API_TOKEN=your-secret-token
+```
+
+All requests to `/v1/` must include:
+```
+Authorization: Bearer your-secret-token
+```
+
+**Auth0 (JWT, recommended for end users):**
+```env
+AUTH_TYPE=auth0
+AUTH0_DOMAIN=your-tenant.eu.auth0.com
+AUTH0_AUDIENCE=https://your-api
+AUTH0_ALGORITHMS=RS256
+```
+
+Users obtain a token from Auth0 and send it as a Bearer token. See [Auth0 setup](#auth0-setup) below.
+
+**No auth (local development only):**
+```env
+AUTH_TYPE=none
+```
+
+### Auth0 Setup
+
+1. Create an **Auth0 Application** (your client app) and an **Auth0 API** (server_lux)
+2. Disable self-signup in Auth0 dashboard — invite users manually
+3. Optionally add a Post Login Action to whitelist specific users:
+
+```javascript
+exports.onExecutePostLogin = async (event, api) => {
+  const allowedUsers = [
+    "user1@example.com",
+    "user2@example.com",
+  ];
+  if (!allowedUsers.includes(event.user.email)) {
+    api.access.deny("Access not granted.");
+  }
+};
+```
+
+Users authenticate against Auth0 to receive a JWT, then use it as:
+```bash
+curl -X POST https://your-server/v1/simulate \
+  -H "Authorization: Bearer <jwt-from-auth0>" \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+```
+
+### Network Isolation
+
+Downstream microservices have no exposed ports — they are only reachable from within the `lux-network` Docker bridge network. Only server_lux can call them.
+
+To verify:
+```bash
+# Should work (internal)
+docker exec -it server-lux curl http://obstruction-service:8081/
+
+# Should fail (no external port)
+curl http://localhost:8081/
+```
+
+### Rate Limiting (Nginx)
+
+Configured in `nginx-docker.conf`:
+- `/v1/` endpoints: 30 requests/min per IP, burst of 5
+- `/` (health check): 60 requests/min per IP, burst of 10
+- Scanner paths (`.php`, `.env`, `/wp-admin`, etc.): dropped with `444` (no response)
+
+### Autoheal
+
+The `autoheal` container monitors all services and automatically restarts any container that goes unhealthy:
+
+```bash
+# Check autoheal logs
+docker logs autoheal
+```
+
+### fail2ban (VM-level IP blocking)
+
+fail2ban bans IPs that repeatedly trigger 444 or 429 responses from nginx.
+Config files are in `deployment/fail2ban/`.
+
+Install on the VM:
+```bash
+sudo apt install fail2ban
+
+sudo cp deployment/fail2ban/filter.d/nginx-server-lux.conf /etc/fail2ban/filter.d/
+sudo cp deployment/fail2ban/jail.d/nginx-server-lux.conf /etc/fail2ban/jail.d/
+
+sudo systemctl enable fail2ban
+sudo systemctl restart fail2ban
+```
+
+Verify it's running:
+```bash
+sudo fail2ban-client status nginx-server-lux
+```
+
+Manually unban an IP:
+```bash
+sudo fail2ban-client set nginx-server-lux unbanip <ip>
+```
+
+---
+
 ## Additional Resources
 
 - [API Documentation](../docs/api.md)

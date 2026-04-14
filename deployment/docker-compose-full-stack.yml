@@ -44,8 +44,6 @@ services:
       dockerfile: Dockerfile
     container_name: obstruction-service
     restart: unless-stopped
-    ports:
-      - "8081:8081"
     environment:
       - PORT=8081
       - WORKERS=${WORKERS:-1}
@@ -67,8 +65,6 @@ services:
       dockerfile: Dockerfile
     container_name: encoder-service
     restart: unless-stopped
-    ports:
-      - "8082:8082"
     environment:
       - PORT=8082
       - WORKERS=${WORKERS:-1}
@@ -90,8 +86,6 @@ services:
       dockerfile: Dockerfile
     container_name: model-service
     restart: unless-stopped
-    ports:
-      - "8083:8083"
     environment:
       - PORT=8083
       - WORKERS=${WORKERS:-1}
@@ -113,8 +107,6 @@ services:
       dockerfile: Dockerfile
     container_name: merger-service
     restart: unless-stopped
-    ports:
-      - "8084:8084"
     environment:
       - PORT=8084
       - WORKERS=${WORKERS:-1}
@@ -136,8 +128,6 @@ services:
       dockerfile: Dockerfile
     container_name: stats-service
     restart: unless-stopped
-    ports:
-      - "8085:8085"
     environment:
       - PORT=8085
       - WORKERS=${WORKERS:-1}
@@ -151,6 +141,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: autoheal
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
 
 networks:
   lux-network:

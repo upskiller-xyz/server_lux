@@ -19,8 +19,8 @@ from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from flasgger import Swagger
 
-from src.server.auth import TokenAuthenticator
-from src.server.enums import ServiceName, EndpointType
+from src.server.auth import Authenticator
+from src.server.enums import ServiceName, EndpointType, AuthType
 from src.server.controllers.base_controller import ServerController
 from src.server.services.remote import (
     ObstructionService, EncoderService, ModelService, MergerService, StatsService
@@ -77,7 +77,18 @@ class ServerApplication:
         self._controller = ServerController(services=services)
         self._controller.initialize()
 
-        self._authenticator = TokenAuthenticator()
+        self._authenticator = Authenticator()
+
+        # Log authentication mode for visibility
+        auth_type = os.getenv('AUTH_TYPE', 'token').lower()
+        auth_messages = {
+            AuthType.NONE.value: "Community Edition - No authentication required ✨",
+            AuthType.TOKEN.value: "Token-based authentication enabled",
+            AuthType.AUTH0.value: "Auth0 JWT authentication enabled"
+        }
+        auth_msg = auth_messages.get(auth_type, "Unknown authentication type")
+        logger.info(f"Authentication Type: {auth_type} ({auth_msg})")
+
         self._request_handler = EndpointRequestHandler()
         self._endpoint_handlers = EndpointHandlers(self._request_handler)
 
@@ -85,25 +96,25 @@ class ServerApplication:
         """Setup Flask routes using route configurator"""
         route_builder = RouteBuilder(version)
         route_configurator = RouteConfigurator(route_builder)
+        auth = self._authenticator.require_auth
 
-        # Create handler mapping for all endpoints
         handlers = {
             EndpointType.STATUS: self._get_status,
-            EndpointType.SIMULATE: self._endpoint_handlers.handle_simulate,
-            EndpointType.STATS_CALCULATE: self._endpoint_handlers.handle_stats,
-            EndpointType.HORIZON: self._endpoint_handlers.handle_horizon,
-            EndpointType.ZENITH: self._endpoint_handlers.handle_zenith,
-            EndpointType.OBSTRUCTION: self._endpoint_handlers.handle_obstruction,
-            EndpointType.OBSTRUCTION_ALL: self._endpoint_handlers.handle_obstruction_all,
-            EndpointType.OBSTRUCTION_MULTI: self._endpoint_handlers.handle_obstruction_multi,
-            EndpointType.OBSTRUCTION_PARALLEL: self._endpoint_handlers.handle_obstruction_parallel,
-            EndpointType.ENCODE_RAW: self._endpoint_handlers.handle_encode_raw,
-            EndpointType.ENCODE: self._endpoint_handlers.handle_encode,
-            EndpointType.CALCULATE_DIRECTION: self._endpoint_handlers.handle_calculate_direction,
-            EndpointType.REFERENCE_POINT: self._endpoint_handlers.handle_reference_point,
-            EndpointType.RUN: self._endpoint_handlers.handle_run,
-            EndpointType.RUN_DETAILED: self._endpoint_handlers.handle_run_detailed,
-            EndpointType.MERGE: self._endpoint_handlers.handle_merge,
+            EndpointType.SIMULATE: auth(self._endpoint_handlers.handle_simulate),
+            EndpointType.STATS_CALCULATE: auth(self._endpoint_handlers.handle_stats),
+            EndpointType.HORIZON: auth(self._endpoint_handlers.handle_horizon),
+            EndpointType.ZENITH: auth(self._endpoint_handlers.handle_zenith),
+            EndpointType.OBSTRUCTION: auth(self._endpoint_handlers.handle_obstruction),
+            EndpointType.OBSTRUCTION_ALL: auth(self._endpoint_handlers.handle_obstruction_all),
+            EndpointType.OBSTRUCTION_MULTI: auth(self._endpoint_handlers.handle_obstruction_multi),
+            EndpointType.OBSTRUCTION_PARALLEL: auth(self._endpoint_handlers.handle_obstruction_parallel),
+            EndpointType.ENCODE_RAW: auth(self._endpoint_handlers.handle_encode_raw),
+            EndpointType.ENCODE: auth(self._endpoint_handlers.handle_encode),
+            EndpointType.CALCULATE_DIRECTION: auth(self._endpoint_handlers.handle_calculate_direction),
+            EndpointType.REFERENCE_POINT: auth(self._endpoint_handlers.handle_reference_point),
+            EndpointType.RUN: auth(self._endpoint_handlers.handle_run),
+            EndpointType.RUN_DETAILED: auth(self._endpoint_handlers.handle_run_detailed),
+            EndpointType.MERGE: auth(self._endpoint_handlers.handle_merge),
         }
 
         route_configurator.configure(self._app, handlers)
@@ -113,19 +124,18 @@ class ServerApplication:
         ---
         tags:
           - Health
+        security: []
         responses:
           200:
-            description: Server status information
+            description: Server status
             schema:
               type: object
               properties:
                 status:
                   type: string
                   example: "ok"
-                services:
-                  type: object
         """
-        return jsonify(self._controller.get_status())
+        return jsonify({"status": "ok"})
 
     @property
     def app(self) -> Flask:

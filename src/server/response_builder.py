@@ -18,6 +18,9 @@ class ErrorTypeMessageMap(StandardMap):
         ErrorType.MISSING_AUTHORIZATION: ErrorMessage.MISSING_AUTHORIZATION.value,
         ErrorType.INVALID_AUTH_FORMAT: ErrorMessage.INVALID_AUTH_FORMAT.value,
         ErrorType.INVALID_TOKEN: ErrorMessage.INVALID_TOKEN.value,
+        ErrorType.INVALID_JWT: ErrorMessage.INVALID_JWT.value,
+        ErrorType.EXPIRED_JWT: ErrorMessage.EXPIRED_JWT.value,
+        ErrorType.INSUFFICIENT_PERMISSIONS: ErrorMessage.INSUFFICIENT_PERMISSIONS.value,
         ErrorType.MISSING_JSON: ErrorMessage.MISSING_JSON.value,
         ErrorType.MISSING_FILE: ErrorMessage.MISSING_FILE.value,
     }
@@ -28,7 +31,10 @@ class ErrorTypeStatusMap(StandardMap):
     _content: Dict[ErrorType, int] = {
         ErrorType.MISSING_AUTHORIZATION: HTTPStatus.BAD_REQUEST.value,
         ErrorType.INVALID_AUTH_FORMAT: HTTPStatus.BAD_REQUEST.value,
-        ErrorType.INVALID_TOKEN: HTTPStatus.BAD_REQUEST.value,
+        ErrorType.INVALID_TOKEN: HTTPStatus.FORBIDDEN.value,
+        ErrorType.INVALID_JWT: HTTPStatus.FORBIDDEN.value,
+        ErrorType.EXPIRED_JWT: HTTPStatus.FORBIDDEN.value,
+        ErrorType.INSUFFICIENT_PERMISSIONS: HTTPStatus.FORBIDDEN.value,
         ErrorType.MISSING_JSON: HTTPStatus.BAD_REQUEST.value,
         ErrorType.MISSING_FILE: HTTPStatus.BAD_REQUEST.value,
         ErrorType.VALIDATION_ERROR: HTTPStatus.BAD_REQUEST.value,
