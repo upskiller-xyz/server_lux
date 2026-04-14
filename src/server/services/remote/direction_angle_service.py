@@ -45,4 +45,5 @@ class DirectionAngleService(RemoteService):
         """
         # Calculate missing angles via remote service
         response_class = cls._get_response(endpoint)
-        return super().run(endpoint, request, file, response_class)
+        response = super().run(endpoint, request, file, response_class)
+        return response.to_dict if hasattr(response, 'to_dict') else response

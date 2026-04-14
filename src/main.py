@@ -124,6 +124,7 @@ class ServerApplication:
         ---
         tags:
           - Health
+        security: []
         responses:
           200:
             description: Server status
