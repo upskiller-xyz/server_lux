@@ -126,17 +126,15 @@ class ServerApplication:
           - Health
         responses:
           200:
-            description: Server status information
+            description: Server status
             schema:
               type: object
               properties:
                 status:
                   type: string
                   example: "ok"
-                services:
-                  type: object
         """
-        return jsonify(self._controller.get_status())
+        return jsonify({"status": "ok"})
 
     @property
     def app(self) -> Flask:
