@@ -128,14 +128,14 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
 
         return self._jwks_cache
 
-    def _get_signing_key(self, token: str) -> str:
-        """Get the signing key for token verification
+    def _get_signing_key(self, token: str) -> dict:
+        """Get the JWKS signing key for token verification
 
         Args:
             token: JWT token
 
         Returns:
-            Signing key
+            JWKS key dict matching the token's kid
 
         Raises:
             ValueError: If signing key cannot be found
