@@ -116,8 +116,10 @@ class EndpointType(ExtendedEnumMixin, Enum):
     ENCODE = "encode"
     ENCODE_RAW = "encode_raw"
     RUN = "run"
+    RUN_DETAILED = "run_detailed"
     CALCULATE_DIRECTION = "calculate-direction"
     REFERENCE_POINT = "get-reference-point"
+    EXTERNAL_REFERENCE_POINT = "get-external-reference-point"
     MERGE = "merge"
     STATS_CALCULATE = "calculate"
 
@@ -203,7 +205,6 @@ class RequestField(Enum):
     Z2 = "z2"
 
     # Obstruction fields
-
     MESH = "mesh"
     DIRECTION_ANGLE = "direction_angle"
     START_ANGLE = "start_angle"
@@ -229,6 +230,7 @@ class RequestField(Enum):
     SHAPE = "shape"
 
     # Image fields
+    MODEL = "model"
     FILE = "file"
     IMAGE_BASE64 = "image_base64"
     IMAGE_ARRAY = "image_array"
@@ -236,6 +238,7 @@ class RequestField(Enum):
 
     # Reference point
     REFERENCE_POINT = "reference_point"
+    EXTERNAL_REFERENCE_POINT = "external_reference_point"
 
     ROOF_HEIGHT = "height_roof_over_floor"
     FLOOR_HEIGHT = "floor_height_above_terrain"

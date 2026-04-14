@@ -5,7 +5,7 @@ from .contracts import RemoteServiceRequest, ObstructionRequest, MergerRequest, 
 from ...maps import StandardMap
 from src.server.enums import ServiceName, EndpointType
 from .base import RemoteService
-from . import MergerService, EncoderService, DirectionAngleService, ReferencePointService, ObstructionService, ModelService, StatsService
+from . import MergerService, EncoderService, DirectionAngleService, ReferencePointService, ExternalReferencePointService, ObstructionService, ModelService, StatsService
 
 
 
@@ -23,20 +23,22 @@ class ServiceRegistryMap(StandardMap):
 class EndpointServiceMap(StandardMap):
     """Maps endpoints to the sequence of services that should process them"""
     _content:Dict[EndpointType, list[type[RemoteService]]] = {
-        EndpointType.RUN: [ReferencePointService, DirectionAngleService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN_DETAILED: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
         EndpointType.MERGE : [MergerService],
-        EndpointType.ENCODE: [ReferencePointService, DirectionAngleService, ObstructionService, EncoderService],
+        EndpointType.ENCODE: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService],
         EndpointType.ENCODE_RAW: [EncoderService],
 
         EndpointType.OBSTRUCTION: [ObstructionService],
         EndpointType.OBSTRUCTION_PARALLEL: [ObstructionService],
         EndpointType.OBSTRUCTION_MULTI: [ObstructionService],
-        EndpointType.OBSTRUCTION_ALL: [ReferencePointService, DirectionAngleService, ObstructionService],
+        EndpointType.OBSTRUCTION_ALL: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService],
         EndpointType.HORIZON: [ObstructionService],
         EndpointType.ZENITH: [ObstructionService],
         EndpointType.SIMULATE: [ModelService],
         EndpointType.CALCULATE_DIRECTION: [DirectionAngleService],
         EndpointType.REFERENCE_POINT: [ReferencePointService],
+        EndpointType.EXTERNAL_REFERENCE_POINT: [ExternalReferencePointService],
         EndpointType.STATS_CALCULATE: [StatsService]
 
     }
@@ -62,6 +64,7 @@ class ServiceEndpointMap(StandardMap):
     """
     _content: Dict[type[RemoteService], EndpointType] = {
         ReferencePointService: EndpointType.REFERENCE_POINT,
+        ExternalReferencePointService: EndpointType.EXTERNAL_REFERENCE_POINT,
         DirectionAngleService: EndpointType.CALCULATE_DIRECTION,
         ObstructionService: EndpointType.OBSTRUCTION_PARALLEL,
         EncoderService: EndpointType.ENCODE,

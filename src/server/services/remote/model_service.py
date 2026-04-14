@@ -56,7 +56,7 @@ class ModelService(RemoteService):
         # Prepare file for multipart upload
         files = {RequestField.FILE.value: (request.filename, io.BytesIO(image_bytes), "image/png")}
 
-        response_dict = cls._http_client.post_multipart(url, files, {})
+        response_dict = cls._http_client.post_multipart(url, files, {RequestField.MODEL.value: request.model_name})
 
         # Use provided response_class or fall back to service's default
         if response_class is None:

@@ -17,6 +17,7 @@ class ModelRequest(RemoteServiceRequest):
     Expects image data from encoder service in the image field.
     """
     image: bytes  # Binary image data from encoder
+    model_name: str = "df_default_2.0.1"
     filename: str = "image.png"
     invert_channels: bool = False
 
@@ -36,6 +37,7 @@ class ModelRequest(RemoteServiceRequest):
 
         return [cls(
             image=image_data,
+            model_name=content.get(RequestField.MODEL_TYPE.value, "df_default_2.0.1"),
             filename=content.get('filename', 'image.png')
         )]
 

@@ -114,6 +114,17 @@ class RemoteService:
         # Convert request to dict and log it
         request_dict = request.to_dict
 
+        # Debug: log window data being sent to encoder (especially horizon/zenith)
+        if 'parameters' in request_dict:
+            params = request_dict['parameters']
+            windows = params.get('windows', {})
+            for wname, wdata in windows.items():
+                has_h = 'horizon' in wdata if isinstance(wdata, dict) else False
+                has_z = 'zenith' in wdata if isinstance(wdata, dict) else False
+                h_len = len(wdata.get('horizon', [])) if has_h else 0
+                z_len = len(wdata.get('zenith', [])) if has_z else 0
+                logger.info(f"[DEBUG-ENCODE] Window {wname}: horizon={has_h}(len={h_len}), zenith={has_z}(len={z_len}), keys={list(wdata.keys()) if isinstance(wdata, dict) else 'N/A'}")
+
         binary_data = cls._http_client.post_binary(url, request_dict)
         
         # Factory Pattern: Check for explicit marker

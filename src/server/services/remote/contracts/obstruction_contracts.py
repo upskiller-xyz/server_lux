@@ -5,48 +5,40 @@ import logging
 from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
 from ....enums import RequestField, ResponseKey
 
-logger = logging.getLogger('logger')
-
 
 @dataclass
 class ObstructionRequest(RemoteServiceRequest):
     """Request for obstruction angle calculations (single point and direction)
 
     Used for /horizon, /zenith, and /obstruction endpoints.
+    Supports split meshes (horizon_mesh + zenith_mesh) or legacy single mesh.
     """
     x: float
     y: float
     z: float
     direction_angle: float
     mesh: List[List[float]]
-    window_name: str = "window"  # Store window name for response mapping
+    window_name: str = "window"
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> List['ObstructionRequest']:
-        """Parse dictionary into list of ObstructionRequest (one per window)
+        """Parse dictionary into list of ObstructionRequest (one per window)"""
+        mesh = content.get(RequestField.MESH.value, [])
 
-        Args:
-            content: Dictionary with required fields, optionally including
-                    reference_point and direction_angle dicts from previous services
-
-        Returns:
-            List of ObstructionRequest instances (one per window)
-        """
-        # Check if this is a simple single-window request
         if RequestField.X.value in content:
-            # Direct format with x, y, z
             return [cls(
                 x=content.get(RequestField.X.value, 0.0),
                 y=content.get(RequestField.Y.value, 0.0),
                 z=content.get(RequestField.Z.value, 0.0),
                 direction_angle=content.get(RequestField.DIRECTION_ANGLE.value, 0.0),
-                mesh=content.get(RequestField.MESH.value, [])
+                mesh=mesh,
             )]
 
-        # Otherwise, extract from reference_point and direction_angle responses
-        reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        reference_points = content.get(RequestField.EXTERNAL_REFERENCE_POINT.value, {})
+        if not reference_points:
+            reference_points = content.get(RequestField.REFERENCE_POINT.value, {})
+        
         direction_angles = content.get(RequestField.DIRECTION_ANGLE.value, {})
-        mesh = content.get(RequestField.MESH.value, [])
 
         requests = []
         for window_name, ref_point in reference_points.items():
@@ -57,7 +49,7 @@ class ObstructionRequest(RemoteServiceRequest):
                 z=ref_point.get(RequestField.Z.value, 0.0),
                 direction_angle=direction_angle,
                 mesh=mesh,
-                window_name=window_name  # Preserve window name
+                window_name=window_name,
             ))
 
         return requests
@@ -69,7 +61,7 @@ class ObstructionRequest(RemoteServiceRequest):
             RequestField.Y.value: self.y,
             RequestField.Z.value: self.z,
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
-            RequestField.MESH.value: self.mesh
+            RequestField.MESH.value: self.mesh,
         }
 
 
@@ -88,16 +80,22 @@ class ObstructionMultiRequest(RemoteServiceRequest):
     start_angle: Optional[float] = None
     end_angle: Optional[float] = None
     num_directions: Optional[int] = None
+    horizon_mesh: Optional[List[List[float]]] = None
+    zenith_mesh: Optional[List[List[float]]] = None
 
     @property
     def to_dict(self) -> Dict[str, Any]:
+        if self.horizon_mesh is not None or self.zenith_mesh is not None:
+            mesh_value = {"horizon": self.horizon_mesh or [], "zenith": self.zenith_mesh or []}
+        else:
+            mesh_value = self.mesh
         return self._build_dict(
             **{
                 RequestField.X.value: self.x,
                 RequestField.Y.value: self.y,
                 RequestField.Z.value: self.z,
                 RequestField.DIRECTION_ANGLE.value: self.direction_angle,
-                RequestField.MESH.value: self.mesh,
+                RequestField.MESH.value: mesh_value,
                 RequestField.START_ANGLE.value: self.start_angle,
                 RequestField.END_ANGLE.value: self.end_angle,
                 RequestField.NUM_DIRECTIONS.value: self.num_directions
@@ -117,6 +115,8 @@ class ObstructionParallelRequest(RemoteServiceRequest):
     z: float
     direction_angle: float
     mesh: List[List[float]]
+    horizon_mesh: Optional[List[List[float]]] = None
+    zenith_mesh: Optional[List[List[float]]] = None
 
     @property
     def to_dict(self) -> Dict[str, Any]:
@@ -125,7 +125,7 @@ class ObstructionParallelRequest(RemoteServiceRequest):
             RequestField.Y.value: self.y,
             RequestField.Z.value: self.z,
             RequestField.DIRECTION_ANGLE.value: self.direction_angle,
-            RequestField.MESH.value: self.mesh
+            RequestField.MESH.value: self.mesh,
         }
 
 
@@ -142,14 +142,13 @@ class ObstructionResponse(RemoteServiceResponse):
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ObstructionResponse':
-        """Parse response data from obstruction service
+        """Parse response data from /obstruction_parallel endpoint
 
-        Expects the standardized data.results format from /obstruction_parallel.
-        Each result contains horizon/zenith with obstruction_angle_degrees.
+        Expects mesh_data.results[] with per-direction horizon/zenith angle objects.
         """
-        data = content.get(ResponseKey.DATA.value, {})
-        results = data.get(ResponseKey.RESULTS.value, [])
+        mesh_data = content.get(ResponseKey.DATA.value, {})
         status = content.get(ResponseKey.STATUS.value, 'success')
+        results = mesh_data.get(ResponseKey.RESULTS.value, [])
 
         horizon = [
             r.get(ResponseKey.HORIZON.value, {}).get(ResponseKey.OBSTRUCTION_ANGLE_DEGREES.value, 0.0)
