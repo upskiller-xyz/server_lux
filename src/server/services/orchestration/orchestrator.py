@@ -65,28 +65,24 @@ class Orchestrator(IOrchestrator):
         pre_calculated_angles = {}
         if service == DirectionAngleService:
             pre_calculated_angles = self._extract_pre_calculated_angles(params)
-        
+
         requests = self._parse_requests(service, endpoint, params)
 
-        # Use the original endpoint for single-endpoint services like obstruction
-        # Otherwise use the mapped service endpoint
-        service_endpoint = self._get_service_endpoint(service, endpoint)
+        # All windows had pre-calculated angles — skip remote call entirely
+        if service == DirectionAngleService and not requests:
+            return {ResponseKey.DIRECTION_ANGLE.value: pre_calculated_angles}
 
+        service_endpoint = self._get_service_endpoint(service, endpoint)
         executor = ExecutorFactory.create(len(requests))
         response = executor.execute(service, service_endpoint, requests, file)
-        
-        # Merge pre-calculated angles back into response for DirectionAngleService
+
+        # Merge pre-calculated angles with any remotely computed ones
         if service == DirectionAngleService and pre_calculated_angles:
-            # Convert response object to dict if needed
-            response_dict = response
-            if hasattr(response, 'to_dict'):
-                response_dict = response.to_dict
-            
-            if isinstance(response_dict, dict) and ResponseKey.DIRECTION_ANGLE.value in response_dict:
-                # Merge pre-calculated angles with computed ones
-                response_dict[ResponseKey.DIRECTION_ANGLE.value].update(pre_calculated_angles)
+            response_dict = response.to_dict if hasattr(response, 'to_dict') else response
+            if isinstance(response_dict, dict):
+                response_dict.setdefault(ResponseKey.DIRECTION_ANGLE.value, {}).update(pre_calculated_angles)
                 response = response_dict
-        
+
         return response
 
     def _get_service_endpoint(self, service: type, endpoint: EndpointType) -> EndpointType:

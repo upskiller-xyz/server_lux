@@ -6,7 +6,7 @@ from .enums import ErrorType
 from .response_builder import ErrorResponseBuilder
 from .auth_config import AuthConfig
 from .auth_factory import AuthenticationStrategyFactory
-from .auth_strategies import AuthenticationStrategy
+from .auth_strategies import AuthenticationStrategy, TokenAuthenticationStrategy
 
 
 class Authenticator:
@@ -58,9 +58,11 @@ class TokenAuthenticator(Authenticator):
     """
 
     def __init__(self, token_env_var: str = "API_TOKEN"):
-        # Force token-based authentication
-        os.environ['AUTH_TYPE'] = 'token'
-        super().__init__()
+        token = os.getenv(token_env_var)
+        self._config = None
+        self._factory = AuthenticationStrategyFactory()
+        self._strategy = TokenAuthenticationStrategy(token)
+        self._error_builder = ErrorResponseBuilder()
 
     def validate_token(self, provided_token: str) -> bool:
         """Validate a token (backward compatibility method)

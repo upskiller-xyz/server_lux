@@ -199,6 +199,9 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
 class NoAuthenticationStrategy(AuthenticationStrategy):
     """No authentication strategy (allows all requests)"""
 
+    def require_auth(self, f: Callable) -> Callable:
+        return f
+
     def is_configured(self) -> bool:
         """Always returns True as no configuration is needed"""
         return True
