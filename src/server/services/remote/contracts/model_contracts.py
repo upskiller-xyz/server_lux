@@ -35,9 +35,10 @@ class ModelRequest(RemoteServiceRequest):
         if not image_data:
             raise ValueError("Missing 'image' field in request data for ModelService")
 
+        model_name = content.get(RequestField.MODEL_NAME.value) or content.get(RequestField.MODEL_TYPE.value, "df_default_2.0.1")
         return [cls(
             image=image_data,
-            model_name=content.get(RequestField.MODEL_TYPE.value, "df_default_2.0.1"),
+            model_name=model_name,
             filename=content.get('filename', 'image.png')
         )]
 
