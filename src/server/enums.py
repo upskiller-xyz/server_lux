@@ -192,6 +192,7 @@ class RequestField(Enum):
     COLORSCALE = "colorscale"
     PARAMETERS = "parameters"
     MODEL_TYPE = "model_type"
+    MODEL_NAME = "model_name"
 
     # Coordinate fields
     X = "x"
