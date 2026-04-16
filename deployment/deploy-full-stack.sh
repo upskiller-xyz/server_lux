@@ -110,23 +110,27 @@ echo ""
 echo -e "${BLUE}Checking service health...${NC}"
 
 SERVICES=(
-    "server-lux:8080:host"
-    "obstruction-service:8081:internal"
-    "encoder-service:8082:internal"
-    "model-service:8083:internal"
-    "merger-service:8084:internal"
-    "stats-service:8085:internal"
+    "server-lux:8080:host:/"
+    "obstruction-service:8081:internal:/"
+    "encoder-service:8082:internal:/"
+    "model-service:8083:internal:/"
+    "merger-service:8084:internal:/"
+    "stats-service:8085:internal:/health"
 )
 
 ALL_HEALTHY=true
 for service_info in "${SERVICES[@]}"; do
-    IFS=':' read -r service_name port access <<< "$service_info"
+    IFS=':' read -r service_name port access health_path <<< "$service_info"
 
     if docker ps --format '{{.Names}}' | grep -q "^${service_name}$"; then
         if [ "$access" = "host" ]; then
-            python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}/', timeout=5)" 2>/dev/null && healthy="200" || healthy="000"
+            if command -v curl &>/dev/null; then
+                curl -s -o /dev/null -w "%{http_code}" "http://localhost:${port}${health_path}" 2>/dev/null | grep -q "200" && healthy="200" || healthy="000"
+            else
+                python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}${health_path}', timeout=5)" 2>/dev/null && healthy="200" || healthy="000"
+            fi
         else
-            docker exec "${service_name}" python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}/', timeout=5)" 2>/dev/null && healthy="200" || healthy="000"
+            docker exec "${service_name}" python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}${health_path}', timeout=5)" 2>/dev/null && healthy="200" || healthy="000"
         fi
 
         if [ "$healthy" = "200" ]; then
