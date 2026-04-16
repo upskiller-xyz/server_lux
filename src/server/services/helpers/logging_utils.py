@@ -223,12 +223,8 @@ class LoggingDictFormatter(ILoggingFormatter):
         formatted = {}
         for key, value in data.items():
             if LengthReplacementStrategy.should_trim(key):
-                # Direct trim keys - format as summary, but round if it's coordinate data
-                if LengthReplacementStrategy.should_round_coordinates(key):
-                    rounded_value = LengthReplacementStrategy._round_nested_floats(value)
-                    formatted[key] = LengthReplacementStrategy.format_value(rounded_value)
-                else:
-                    formatted[key] = LengthReplacementStrategy.format_value(value)
+                # Direct trim keys - format as summary (first element is already rounded in format_value)
+                formatted[key] = LengthReplacementStrategy.format_value(value)
             elif LengthReplacementStrategy.should_trim_list(key) and isinstance(value, (list, tuple)):
                 # Special keys like results - trim list to first item only
                 if len(value) > 0:
