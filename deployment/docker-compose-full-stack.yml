@@ -158,7 +158,7 @@ services:
     networks:
       - lux-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/health', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -172,7 +172,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
-      - AUTOHEAL_START_PERIOD=120
 
 networks:
   lux-network:
