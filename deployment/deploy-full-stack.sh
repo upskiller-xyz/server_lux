@@ -124,9 +124,9 @@ for service_info in "${SERVICES[@]}"; do
 
     if docker ps --format '{{.Names}}' | grep -q "^${service_name}$"; then
         if [ "$access" = "host" ]; then
-            healthy=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/ 2>/dev/null)
+            python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}/')" 2>/dev/null && healthy="200" || healthy="000"
         else
-            healthy=$(docker exec "${service_name}" curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/ 2>/dev/null)
+            docker exec "${service_name}" python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:${port}/')" 2>/dev/null && healthy="200" || healthy="000"
         fi
 
         if [ "$healthy" = "200" ]; then

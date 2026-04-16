@@ -6,6 +6,8 @@ services:
       dockerfile: Dockerfile
     container_name: server-lux
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     ports:
       - "8080:8080"
     environment:
@@ -23,11 +25,16 @@ services:
     env_file:
       - .env.full-stack
     depends_on:
-      - obstruction-service
-      - encoder-service
-      - model-service
-      - merger-service
-      - stats-service
+      obstruction-service:
+        condition: service_healthy
+      encoder-service:
+        condition: service_healthy
+      model-service:
+        condition: service_healthy
+      merger-service:
+        condition: service_healthy
+      stats-service:
+        condition: service_healthy
     networks:
       - lux-network
     healthcheck:
@@ -44,6 +51,8 @@ services:
       dockerfile: Dockerfile
     container_name: obstruction-service
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     environment:
       - PORT=8081
       - WORKERS=${WORKERS:-1}
@@ -65,6 +74,8 @@ services:
       dockerfile: Dockerfile
     container_name: encoder-service
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     environment:
       - PORT=8082
       - WORKERS=${WORKERS:-1}
@@ -86,6 +97,8 @@ services:
       dockerfile: Dockerfile
     container_name: model-service
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     environment:
       - PORT=8083
       - WORKERS=${WORKERS:-1}
@@ -112,6 +125,8 @@ services:
       dockerfile: Dockerfile
     container_name: merger-service
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     environment:
       - PORT=8084
       - WORKERS=${WORKERS:-1}
@@ -133,6 +148,8 @@ services:
       dockerfile: Dockerfile
     container_name: stats-service
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     environment:
       - PORT=8085
       - WORKERS=${WORKERS:-1}
@@ -154,7 +171,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - AUTOHEAL_CONTAINER_LABEL=all
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
 
 networks:
   lux-network:
