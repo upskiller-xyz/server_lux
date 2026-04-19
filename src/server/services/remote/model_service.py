@@ -1,5 +1,6 @@
 from typing import Any
 import io
+import json
 import logging
 
 from .contracts import RemoteServiceRequest, ModelRequest, RemoteServiceResponse
@@ -56,7 +57,11 @@ class ModelService(RemoteService):
         # Prepare file for multipart upload
         files = {RequestField.FILE.value: (request.filename, io.BytesIO(image_bytes), "image/png")}
 
-        response_dict = cls._http_client.post_multipart(url, files, {RequestField.MODEL.value: request.model_name})
+        form_data = {RequestField.MODEL.value: request.model_name}
+        if request.cond_vec is not None:
+            form_data[RequestField.COND_VEC.value] = json.dumps(request.cond_vec.tolist())
+
+        response_dict = cls._http_client.post_multipart(url, files, form_data)
 
         # Use provided response_class or fall back to service's default
         if response_class is None:
