@@ -20,11 +20,13 @@ class ModelSpecRequest(RemoteServiceRequest):
         return {"model": self.model_name}
 
 
-@dataclass
 class ModelSpecResponse(StandardResponse):
     """Response from /spec — carries encoding_scheme and encoder_model_type."""
-    encoding_scheme: Optional[str]
-    encoder_model_type: Optional[str]
+
+    def __init__(self, encoding_scheme: Optional[str], encoder_model_type: Optional[str]):
+        super().__init__({})
+        self.encoding_scheme = encoding_scheme
+        self.encoder_model_type = encoder_model_type
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> 'ModelSpecResponse':

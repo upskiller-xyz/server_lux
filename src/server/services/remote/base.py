@@ -114,7 +114,8 @@ class RemoteService:
         # Convert request to dict and log it
         request_dict = request.to_dict
 
-        # Debug: log window data being sent to encoder (especially horizon/zenith)
+        # Debug: log top-level request keys and window data being sent to encoder
+        logger.info(f"[DEBUG-ENCODE] Top-level request keys: {list(request_dict.keys())}")
         if 'parameters' in request_dict:
             params = request_dict['parameters']
             windows = params.get('windows', {})

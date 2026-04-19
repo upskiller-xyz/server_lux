@@ -1,5 +1,6 @@
-from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Any, List, Optional
+import math
 import numpy as np
 import base64
 import logging
@@ -8,6 +9,66 @@ from .base_contracts import RemoteServiceRequest, StandardResponse
 from ....enums import RequestField, ResponseKey
 
 logger = logging.getLogger('logger')
+
+
+class CondVecBuilder:
+    """Builds conditioning vector from request parameters based on encoding scheme.
+
+    Uses Strategy Pattern — each encoding scheme maps to its own builder function.
+    """
+
+    @classmethod
+    def build(cls, content: Dict[str, Any]) -> Optional[np.ndarray]:
+        """Return cond_vec for the given content, or None if not required."""
+        encoding_scheme = content.get(RequestField.ENCODING_SCHEME.value)
+        builder = cls._SCHEME_BUILDERS.get(encoding_scheme)
+        if builder is None:
+            return None
+
+        params = content.get(RequestField.PARAMETERS.value, {})
+        windows = params.get(RequestField.WINDOWS.value, {})
+        if not windows:
+            return None
+
+        window_id = next(iter(windows))
+        win = windows[window_id]
+
+        direction_angles = content.get(RequestField.DIRECTION_ANGLE.value, {})
+        if isinstance(direction_angles, dict):
+            dir_angle = float(direction_angles.get(window_id, 0.0))
+        else:
+            dir_angle = float(direction_angles or 0.0)
+
+        return builder(params, win, dir_angle)
+
+    @staticmethod
+    def _build_v5(params: Dict[str, Any], win: Dict[str, Any], dir_angle: float) -> np.ndarray:
+        height_roof = float(params.get(RequestField.ROOF_HEIGHT.value, 0.0))
+        floor_height = float(params.get(RequestField.FLOOR_HEIGHT.value, 0.0))
+        win_height = abs(
+            float(win.get(RequestField.Z2.value, 0.0)) - float(win.get(RequestField.Z1.value, 0.0))
+        )
+        win_width = math.sqrt(
+            (float(win.get(RequestField.X2.value, 0.0)) - float(win.get(RequestField.X1.value, 0.0))) ** 2 +
+            (float(win.get(RequestField.Y2.value, 0.0)) - float(win.get(RequestField.Y1.value, 0.0))) ** 2
+        )
+        frame_ratio = float(win.get(RequestField.WINDOW_FRAME_RATIO.value, 0.2))
+        return np.array([
+            np.clip(height_roof, 0.0, 30.0) / 30.0,
+            np.clip(floor_height, 0.0, 10.0) / 10.0,
+            1.0 - np.clip((win_height - 0.2) / 4.8, 0.0, 1.0),
+            np.clip(win_width, 0.5, 5.0) / 5.0,
+            1.0 - np.clip(frame_ratio, 0.0, 1.0),
+            np.clip(dir_angle, 0.0, 2 * math.pi) / (2 * math.pi),
+        ], dtype=np.float32)
+
+    # Strategy map: encoding scheme → cond_vec builder function
+    _SCHEME_BUILDERS: Dict[str, Callable] = {}
+
+
+CondVecBuilder._SCHEME_BUILDERS = {
+    "v5": CondVecBuilder._build_v5,
+}
 
 
 @dataclass
@@ -19,7 +80,7 @@ class ModelRequest(RemoteServiceRequest):
     image: bytes  # Binary image data from encoder
     model_name: str = "df_default_2.0.1"
     filename: str = "image.png"
-    invert_channels: bool = False
+    cond_vec: Optional[np.ndarray] = field(default=None)
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> List['ModelRequest']:
@@ -36,10 +97,15 @@ class ModelRequest(RemoteServiceRequest):
             raise ValueError("Missing 'image' field in request data for ModelService")
 
         model_name = content.get(RequestField.MODEL_NAME.value) or content.get(RequestField.MODEL_TYPE.value, "df_default_2.0.1")
+        cond_vec = CondVecBuilder.build(content)
+        if cond_vec is not None:
+            logger.info("[ModelRequest] Built cond_vec (dim=%d) for encoding_scheme='%s'",
+                        len(cond_vec), content.get(RequestField.ENCODING_SCHEME.value))
         return [cls(
             image=image_data,
             model_name=model_name,
-            filename=content.get('filename', 'image.png')
+            filename=content.get('filename', 'image.png'),
+            cond_vec=cond_vec,
         )]
 
     @property
