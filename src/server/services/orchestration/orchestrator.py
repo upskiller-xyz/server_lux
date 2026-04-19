@@ -43,7 +43,7 @@ class Orchestrator(IOrchestrator):
 
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
-            logger.info(f"[DEBUG-ORCH] After {service.__name__}: params keys={[k for k in params if not k in ('parameters', 'mesh')]}")
+            logger.debug(f"[DEBUG-ORCH] After {service.__name__}: params keys={[k for k in params if not k in ('parameters', 'mesh')]}")
 
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value

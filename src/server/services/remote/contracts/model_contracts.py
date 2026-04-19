@@ -63,12 +63,9 @@ class CondVecBuilder:
         ], dtype=np.float32)
 
     # Strategy map: encoding scheme → cond_vec builder function
-    _SCHEME_BUILDERS: Dict[str, Callable] = {}
-
-
-CondVecBuilder._SCHEME_BUILDERS = {
-    "v5": CondVecBuilder._build_v5,
-}
+    _SCHEME_BUILDERS: Dict[str, Callable] = {
+        "v5": _build_v5.__func__,  # type: ignore[attr-defined]
+    }
 
 
 @dataclass

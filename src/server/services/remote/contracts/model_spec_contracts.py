@@ -23,8 +23,9 @@ class ModelSpecRequest(RemoteServiceRequest):
 class ModelSpecResponse(StandardResponse):
     """Response from /spec — carries encoding_scheme and encoder_model_type."""
 
-    def __init__(self, encoding_scheme: Optional[str], encoder_model_type: Optional[str]):
-        super().__init__({})
+    def __init__(self, encoding_scheme: Optional[str], encoder_model_type: Optional[str],
+                 raw_response: Optional[Dict[str, Any]] = None):
+        super().__init__(raw_response or {})
         self.encoding_scheme = encoding_scheme
         self.encoder_model_type = encoder_model_type
 
@@ -33,6 +34,7 @@ class ModelSpecResponse(StandardResponse):
         return cls(
             encoding_scheme=content.get(RequestField.ENCODING_SCHEME.value),
             encoder_model_type=content.get(RequestField.ENCODER_MODEL_TYPE.value),
+            raw_response=content,
         )
 
     @property
