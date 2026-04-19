@@ -252,6 +252,9 @@ class RequestField(Enum):
     ENCODING_SCHEME = "encoding_scheme"
     ENCODER_MODEL_TYPE = "encoder_model_type"
 
+    # Conditioning vector for models that require parameter injection
+    COND_VEC = "cond_vec"
+
 
 class ImageMode(Enum):
     """Image mode identifiers for PIL Image"""
