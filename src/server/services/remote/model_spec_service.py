@@ -20,5 +20,9 @@ class ModelSpecService(RemoteService):
     def run(cls, endpoint: EndpointType, request: ModelSpecRequest, file: Any = None, response_class=None) -> ModelSpecResponse:
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
-        response_dict = cls._http_client.get(url, params=request.to_dict)
+        try:
+            response_dict = cls._http_client.get(url, params=request.to_dict)
+        except Exception:
+            logger.exception("Failed to fetch model spec from %s; falling back to empty spec.", url)
+            response_dict = {}
         return ModelSpecResponse.parse(response_dict or {})

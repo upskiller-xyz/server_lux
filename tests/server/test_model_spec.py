@@ -1,7 +1,6 @@
 """Unit tests for model spec pipeline components"""
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 from src.server.enums import RequestField
 from src.server.services.remote.contracts.model_spec_contracts import (

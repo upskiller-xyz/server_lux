@@ -19,7 +19,6 @@ from .contracts import (
     EncoderParameters,
 )
 
-from .contracts import ModelSpecRequest, ModelSpecResponse
 
 # Request classes
 from .contracts import (
@@ -62,6 +61,8 @@ __all__ = [
     'ExternalReferencePointService',
     'ModelService',
     'ModelSpecService',
+    'ModelSpecRequest',
+    'ModelSpecResponse',
     'MergerService',
     'StatsService',
     'ImageDataConverter',
