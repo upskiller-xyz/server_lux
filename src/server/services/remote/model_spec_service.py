@@ -4,6 +4,7 @@ import logging
 from .contracts import ModelSpecRequest, ModelSpecResponse
 from .base import RemoteService
 from ...enums import ServiceName, EndpointType
+from ...exceptions import ServiceResponseError
 
 logger = logging.getLogger("logger")
 
@@ -30,6 +31,12 @@ class ModelSpecService(RemoteService):
         cls._log_request(endpoint, url)
         try:
             response_dict = cls._http_client.get(url, params=request.to_dict)
+        except ServiceResponseError as e:
+            if e.status_code == 404:
+                logger.warning("spec.json not found for model '%s' — encoding_scheme and encoder_model_type will not be set.", request.model_name)
+            else:
+                logger.exception("Failed to fetch model spec from %s; falling back to empty spec.", url)
+            response_dict = {}
         except Exception:
             logger.exception("Failed to fetch model spec from %s; falling back to empty spec.", url)
             response_dict = {}
