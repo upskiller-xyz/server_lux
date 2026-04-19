@@ -155,6 +155,10 @@ celerybeat.pid
 # Environments
 .env
 .venv
+
+# Deployment env files (use .example versions instead)
+deployment/.env.*
+!deployment/.env.*.example
 env/
 venv/
 ENV/
