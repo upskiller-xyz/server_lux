@@ -47,6 +47,10 @@ from .stats_contracts import (
 from .main_request_contract import (
     MainRequest
 )
+from .model_spec_contracts import (
+    ModelSpecRequest,
+    ModelSpecResponse
+)
 
 __all__ = [
     # Base contracts
@@ -86,5 +90,8 @@ __all__ = [
     'StatsRequest',
     'StatsResponse',
     # Main
-    'MainRequest'
+    'MainRequest',
+    # Model spec
+    'ModelSpecRequest',
+    'ModelSpecResponse',
 ]

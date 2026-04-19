@@ -122,6 +122,7 @@ class EndpointType(ExtendedEnumMixin, Enum):
     EXTERNAL_REFERENCE_POINT = "get-external-reference-point"
     MERGE = "merge"
     STATS_CALCULATE = "calculate"
+    MODEL_SPEC = "spec"
 
 
 class ServicePort(Enum):
@@ -246,6 +247,10 @@ class RequestField(Enum):
 
     # Optimization flags
     USE_EARLY_EXIT_OPTIMIZATION = "use_early_exit_optimization"
+
+    # Model spec fields (resolved from spec.json before encoding)
+    ENCODING_SCHEME = "encoding_scheme"
+    ENCODER_MODEL_TYPE = "encoder_model_type"
 
 
 class ImageMode(Enum):

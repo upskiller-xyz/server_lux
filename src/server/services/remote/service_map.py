@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import Dict
 
-from .contracts import RemoteServiceRequest, ObstructionRequest, MergerRequest, StatsRequest, MainRequest, ModelRequest
+from .contracts import RemoteServiceRequest, ObstructionRequest, MergerRequest, StatsRequest, MainRequest, ModelRequest, ModelSpecRequest
 from ...maps import StandardMap
 from src.server.enums import ServiceName, EndpointType
 from .base import RemoteService
-from . import MergerService, EncoderService, DirectionAngleService, ReferencePointService, ExternalReferencePointService, ObstructionService, ModelService, StatsService
+from . import MergerService, EncoderService, DirectionAngleService, ReferencePointService, ExternalReferencePointService, ObstructionService, ModelService, StatsService, ModelSpecService
 
 
 
@@ -23,10 +23,10 @@ class ServiceRegistryMap(StandardMap):
 class EndpointServiceMap(StandardMap):
     """Maps endpoints to the sequence of services that should process them"""
     _content:Dict[EndpointType, list[type[RemoteService]]] = {
-        EndpointType.RUN: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
-        EndpointType.RUN_DETAILED: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN_DETAILED: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
         EndpointType.MERGE : [MergerService],
-        EndpointType.ENCODE: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService],
+        EndpointType.ENCODE: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService],
         EndpointType.ENCODE_RAW: [EncoderService],
 
         EndpointType.OBSTRUCTION: [ObstructionService],
@@ -70,6 +70,7 @@ class ServiceEndpointMap(StandardMap):
         EncoderService: EndpointType.ENCODE,
         MergerService: EndpointType.MERGE,
         ModelService: EndpointType.RUN,
+        ModelSpecService: EndpointType.MODEL_SPEC,
         StatsService: EndpointType.RUN
     }
     _default: EndpointType = EndpointType.RUN

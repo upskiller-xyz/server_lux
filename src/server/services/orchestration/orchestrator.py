@@ -127,12 +127,20 @@ class Orchestrator(IOrchestrator):
             True if service should be skipped, False otherwise
         """
         from ..remote import ObstructionService
+        from ..remote.model_spec_service import ModelSpecService
 
         # Skip ObstructionService if both horizon and zenith already exist
         if service == ObstructionService:
             has_horizon = ResponseKey.HORIZON.value in params
             has_zenith = ResponseKey.ZENITH.value in params
             return has_horizon and has_zenith
+
+        # Skip ModelSpecService if spec data already resolved
+        if service == ModelSpecService:
+            return (
+                RequestField.ENCODING_SCHEME.value in params
+                and RequestField.ENCODER_MODEL_TYPE.value in params
+            )
 
         return False
 
