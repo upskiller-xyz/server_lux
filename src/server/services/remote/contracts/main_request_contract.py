@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Dict, Any, List
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional
 
 from .base_contracts import RemoteServiceRequest
 from .encoder_contracts import Parameters
@@ -16,18 +16,28 @@ class MainRequest(RemoteServiceRequest):
     params: Parameters
     mesh: List[List[float]]
     result: Any = None
+    encoding_scheme: Optional[str] = field(default=None)
 
     @property
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             RequestField.MODEL_TYPE.value: self.model_type,
             RequestField.PARAMETERS.value: self.params.to_dict,
-            RequestField.MESH.value: self.mesh
+            RequestField.MESH.value: self.mesh,
         }
+        if self.encoding_scheme:
+            result[RequestField.ENCODING_SCHEME.value] = self.encoding_scheme
+        return result
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> List['MainRequest']:
-        model_type = content.get(RequestField.MODEL_TYPE.value, "df_default")
+        # Prefer encoder_model_type (resolved from spec.json) over the raw UUID model_type
+        model_type = (
+            content.get(RequestField.ENCODER_MODEL_TYPE.value)
+            or content.get(RequestField.MODEL_TYPE.value, "df_default")
+        )
+        encoding_scheme = content.get(RequestField.ENCODING_SCHEME.value)
+
         params_dict = content.get(RequestField.PARAMETERS.value, {})
 
         # Merge accumulated orchestration data (from top-level) with parameters
@@ -40,4 +50,4 @@ class MainRequest(RemoteServiceRequest):
 
         prms = Parameters.parse(merged_params)
         mesh = content.get(RequestField.MESH.value, [])
-        return [cls(model_type, p, mesh) for p in prms]
+        return [cls(model_type, p, mesh, encoding_scheme=encoding_scheme) for p in prms]

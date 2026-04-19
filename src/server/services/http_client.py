@@ -102,6 +102,22 @@ class HTTPClient:
             logger.error(error.get_log_message())
             raise error
 
+    def get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any] | None:
+        try:
+            if self._session is None:
+                self._session = self._create_session()
+            response = self._session.get(
+                url,
+                params=params,
+                timeout=(10, self._timeout)
+            )
+            response.raise_for_status()
+            logger.info(f"Response received from {url} (status: {response.status_code})")
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            self._handle_request_error(e, url)
+
     def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any] | None:
         try:
             if self._session is None:
