@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict
 import logging
 
 from .contracts import ModelSpecRequest, ModelSpecResponse
@@ -9,8 +9,12 @@ logger = logging.getLogger("logger")
 
 
 class ModelSpecService(RemoteService):
-    """Fetches model spec (encoding_scheme, encoder_model_type) from model-service /spec."""
+    """Fetches model spec (encoding_scheme, encoder_model_type) from model-service /spec.
+
+    Caches responses by model name — spec.json is immutable for a given UUID.
+    """
     name: ServiceName = ServiceName.MODEL
+    _cache: Dict[str, ModelSpecResponse] = {}
 
     @classmethod
     def _get_request(cls, endpoint: EndpointType) -> type[ModelSpecRequest]:
@@ -18,6 +22,10 @@ class ModelSpecService(RemoteService):
 
     @classmethod
     def run(cls, endpoint: EndpointType, request: ModelSpecRequest, file: Any = None, response_class=None) -> ModelSpecResponse:
+        if request.model_name in cls._cache:
+            logger.info("Model spec cache hit for '%s'", request.model_name)
+            return cls._cache[request.model_name]
+
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
         try:
@@ -25,4 +33,8 @@ class ModelSpecService(RemoteService):
         except Exception:
             logger.exception("Failed to fetch model spec from %s; falling back to empty spec.", url)
             response_dict = {}
-        return ModelSpecResponse.parse(response_dict or {})
+
+        result = ModelSpecResponse.parse(response_dict or {})
+        if request.model_name and result.encoding_scheme:
+            cls._cache[request.model_name] = result
+        return result
