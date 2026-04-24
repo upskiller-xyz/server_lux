@@ -117,6 +117,7 @@ class EndpointType(ExtendedEnumMixin, Enum):
     ENCODE_RAW = "encode_raw"
     RUN = "run"
     RUN_DETAILED = "run_detailed"
+    RUN_DIRECT = "run_direct"
     CALCULATE_DIRECTION = "calculate-direction"
     REFERENCE_POINT = "get-reference-point"
     EXTERNAL_REFERENCE_POINT = "get-external-reference-point"

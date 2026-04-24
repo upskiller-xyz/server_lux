@@ -814,6 +814,59 @@ class EndpointHandlers:
         """
         return self._request_handler.handle(request)
 
+    def handle_run_direct(self) -> Tuple[Response, int]:
+        """Run ML model inference with explicit encoding_scheme — skips /spec lookup
+
+        Same pipeline as /run but encoding_scheme is supplied directly in the request body
+        instead of being fetched from the model-service /spec endpoint.
+        Use this to test specific encoding versions without deploying a new model spec.
+        ---
+        tags:
+          - Model
+        parameters:
+          - in: body
+            name: body
+            required: true
+            schema:
+              type: object
+              required:
+                - model_type
+                - encoder_model_type
+                - encoding_scheme
+                - parameters
+                - mesh
+              properties:
+                model_type:
+                  type: string
+                  description: Model UUID or name passed to model-service to load the model
+                  example: "019db49f-6ed1-7bb6-9ddc-06ffdc2839c6"
+                encoder_model_type:
+                  type: string
+                  description: Model type sent to encoder-service (e.g. df_default). Found in spec.json.
+                  example: "df_default"
+                encoding_scheme:
+                  type: string
+                  description: Encoding scheme sent directly to encoder-service (e.g. v4, v7, v8, v10)
+                  example: "v8"
+                parameters:
+                  type: object
+                  required:
+                    - height_roof_over_floor
+                    - floor_height_above_terrain
+                    - room_polygon
+                    - windows
+                mesh:
+                  $ref: '#/definitions/Mesh'
+        responses:
+          200:
+            description: Daylight factor result as 128x128 RGB image
+          400:
+            description: Bad request (missing required fields)
+          500:
+            description: Internal server error
+        """
+        return self._request_handler.handle(request)
+
     def handle_merge(self) -> Tuple[Response, int]:
         """Merge multiple window simulation results
 

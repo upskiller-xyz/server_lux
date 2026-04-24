@@ -70,6 +70,26 @@ class EndpointRequestHandler:
         self._response_builder = ResponseBuilder()
         self._error_builder = ErrorResponseBuilder()
 
+    def handle_with_extra(self, request: Request, extra: Dict[str, Any]) -> Tuple[Response, int]:
+        """Like handle(), but merges extra into params before orchestration."""
+        endpoint = None
+        try:
+            endpoint = self._request_parser.extract_endpoint(request)
+            logger.info(f"Processing endpoint: {endpoint.value}")
+
+            params = self._request_parser.extract_params(request)
+            file = self._request_parser.extract_file(request)
+            params.update(extra)
+
+            result = self._endpoint_controller.run(endpoint, params, file)
+            return self._response_builder.build(result)
+
+        except Exception as e:
+            endpoint_str = endpoint.value if endpoint else "unknown"
+            logger.error(f"{endpoint_str} failed: {str(e)}")
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+            return self._error_builder.build_from_exception(e)
+
     def handle(self, request: Request) -> Tuple[Response, int]:
         """Handle a request to any endpoint
 

@@ -25,6 +25,7 @@ class EndpointServiceMap(StandardMap):
     _content:Dict[EndpointType, list[type[RemoteService]]] = {
         EndpointType.RUN: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
         EndpointType.RUN_DETAILED: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
+        EndpointType.RUN_DIRECT: [ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService, ModelService],
         EndpointType.MERGE : [MergerService],
         EndpointType.ENCODE: [ModelSpecService, ReferencePointService, DirectionAngleService, ExternalReferencePointService, ObstructionService, EncoderService],
         EndpointType.ENCODE_RAW: [EncoderService],

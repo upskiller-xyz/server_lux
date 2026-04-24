@@ -8,6 +8,7 @@ class FieldMap(StandardMap):
         EndpointType.SIMULATE: [],
         EndpointType.RUN: [RequestField.MODEL_TYPE, RequestField.PARAMETERS, RequestField.MESH],
         EndpointType.RUN_DETAILED: [RequestField.MODEL_TYPE, RequestField.PARAMETERS, RequestField.MESH],
+        EndpointType.RUN_DIRECT: [RequestField.MODEL_TYPE, RequestField.ENCODER_MODEL_TYPE, RequestField.PARAMETERS, RequestField.MESH, RequestField.ENCODING_SCHEME],
         EndpointType.OBSTRUCTION: [RequestField.X, RequestField.Y, RequestField.Z, RequestField.DIRECTION_ANGLE, RequestField.MESH],
         EndpointType.OBSTRUCTION_ALL: [RequestField.ROOM_POLYGON, RequestField.WINDOWS, RequestField.MESH],
         EndpointType.OBSTRUCTION_MULTI: [RequestField.X, RequestField.Y, RequestField.Z, RequestField.MESH],
@@ -29,6 +30,7 @@ class EndpointOrchestratorMap(StandardMap):
         EndpointType.SIMULATE: SimulationOrchestrator,
         EndpointType.RUN: SimulationOrchestrator,
         EndpointType.RUN_DETAILED: SimulationOrchestrator,
+        EndpointType.RUN_DIRECT: SimulationOrchestrator,
         EndpointType.ENCODE: EncodeOrchestrator,
         EndpointType.ENCODE_RAW: EncodeOrchestrator
     }

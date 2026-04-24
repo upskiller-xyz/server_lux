@@ -17,6 +17,7 @@ services:
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
       - FLASK_DEBUG=False
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENCODER_SERVICE_URL=http://encoder-service:8082
       - MODEL_SERVICE_URL=http://model-service:8083
       - MERGER_SERVICE_URL=http://merger-service:8084
@@ -58,6 +59,7 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - lux-network
     healthcheck:
@@ -81,6 +83,7 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - lux-network
     healthcheck:
@@ -104,6 +107,7 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MODEL_URL_TEMPLATE=${MODEL_URL_TEMPLATE}
       - SCW_ACCESS_KEY=${SCW_ACCESS_KEY}
       - SCW_SECRET_KEY=${SCW_SECRET_KEY}
@@ -132,6 +136,7 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - lux-network
     healthcheck:
@@ -155,6 +160,7 @@ services:
       - WORKERS=${WORKERS:-1}
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - lux-network
     healthcheck:

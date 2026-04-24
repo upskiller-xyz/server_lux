@@ -76,6 +76,11 @@ class WindowRequestBuilder:
                 .with_roof_height(params.get(RequestField.ROOF_HEIGHT.value))
                 .with_floor_height(params.get(RequestField.FLOOR_HEIGHT.value))).build()
 
+        # Propagate spec fields so ModelSpecService is skipped for pre-resolved requests
+        for field in (RequestField.ENCODING_SCHEME.value, RequestField.ENCODER_MODEL_TYPE.value):
+            if field in request_data:
+                built_request[field] = request_data[field]
+
         # Extract horizon, zenith and direction_angle from window_data if present.
         # horizon/zenith are wrapped in {window_name: value} so Parameters._normalize_to_dict()
         # can look up angles by window name. direction_angle is kept as a flat value.

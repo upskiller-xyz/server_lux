@@ -42,6 +42,8 @@ class ModelSpecService(RemoteService):
             response_dict = {}
 
         result = ModelSpecResponse.parse(response_dict or {})
+        logger.debug("[ModelSpecService] Parsed spec: encoding_scheme=%r, encoder_model_type=%r",
+                     result.encoding_scheme, result.encoder_model_type)
         if request.model_name and result.encoding_scheme:
             cls._cache[request.model_name] = result
         return result

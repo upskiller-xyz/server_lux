@@ -33,13 +33,14 @@ from src.__version__ import version
 
 import logging
 
+_log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
+    level=_log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("logger")
-logger.setLevel(logging.INFO)
+logger.setLevel(_log_level)
 
 
 class ServiceRegistry:
@@ -114,6 +115,7 @@ class ServerApplication:
             EndpointType.REFERENCE_POINT: auth(self._endpoint_handlers.handle_reference_point),
             EndpointType.RUN: auth(self._endpoint_handlers.handle_run),
             EndpointType.RUN_DETAILED: auth(self._endpoint_handlers.handle_run_detailed),
+            EndpointType.RUN_DIRECT: auth(self._endpoint_handlers.handle_run_direct),
             EndpointType.MERGE: auth(self._endpoint_handlers.handle_merge),
         }
 
