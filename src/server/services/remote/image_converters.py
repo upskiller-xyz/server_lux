@@ -135,6 +135,13 @@ class EncoderOutputConverter:
                     else:
                         image_array = image_array.astype(np.uint8)
 
+                    # cv2.imencode assumes BGR(A) input. The encoder returns RGBA,
+                    # so convert to BGRA first — mirrors encoding_service.encode_room_image().
+                    if image_array.ndim == 3 and image_array.shape[2] == 4:
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGBA2BGRA)
+                    elif image_array.ndim == 3 and image_array.shape[2] == 3:
+                        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+
                     # Convert to PNG using cv2
                     success, buffer = cv2.imencode('.png', image_array)
                     if not success:
