@@ -18,11 +18,15 @@ services:
       - FLASK_ENV=production
       - FLASK_DEBUG=False
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DEBUG_SAVE_IMAGES=${DEBUG_SAVE_IMAGES:-false}
+      - DEBUG_OUTPUT_DIR=/debug_output
       - ENCODER_SERVICE_URL=http://encoder-service:8082
       - MODEL_SERVICE_URL=http://model-service:8083
       - MERGER_SERVICE_URL=http://merger-service:8084
       - OBSTRUCTION_SERVICE_URL=http://obstruction-service:8081
       - STATS_SERVICE_URL=http://stats-service:8085
+    volumes:
+      - ./debug_output:/debug_output
     env_file:
       - .env.full-stack
     depends_on:
@@ -137,6 +141,10 @@ services:
       - THREADS=${THREADS:-8}
       - FLASK_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SAVE_IMAGES=${DEBUG_SAVE_IMAGES:-false}
+      - IMAGES_OUTPUT_DIR=/debug_output
+    volumes:
+      - ./debug_output:/debug_output
     networks:
       - lux-network
     healthcheck:
