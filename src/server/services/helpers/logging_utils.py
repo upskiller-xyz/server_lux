@@ -223,7 +223,7 @@ class LoggingDictFormatter(ILoggingFormatter):
         formatted = {}
         for key, value in data.items():
             if LengthReplacementStrategy.should_trim(key):
-                # Direct trim keys - format as summary (first element is already rounded in format_value)
+                # Direct trim keys - format as summary without traversing the full payload.
                 formatted[key] = LengthReplacementStrategy.format_value(value)
             elif LengthReplacementStrategy.should_trim_list(key) and isinstance(value, (list, tuple)):
                 # Special keys like results - trim list to first item only
