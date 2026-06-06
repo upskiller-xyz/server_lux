@@ -30,7 +30,7 @@ class ModelSpecService(RemoteService):
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
         try:
-            response_dict = cls._http_client.get(url, params=request.to_dict)
+            response_dict = cls._http_client.get(url, params=request.to_dict, headers=cls._auth_headers(url))
         except ServiceResponseError as e:
             if e.status_code == 404:
                 logger.warning("spec.json not found for model '%s' — encoding_scheme and encoder_model_type will not be set.", request.model_name)

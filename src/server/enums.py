@@ -305,3 +305,23 @@ class ServiceName(Enum):
     MERGER = "merger"
     STATS = "stats"
 
+
+class ServiceBackend(ExtendedEnumMixin, Enum):
+    """Backend hosting a remote service.
+
+    Resolved from the service URL: a Modal-hosted endpoint requires proxy-auth
+    headers, a container endpoint does not. The URL itself is the switch.
+    """
+    CONTAINER = "container"
+    MODAL = "modal"
+
+
+class ModalAuthHeader(Enum):
+    """Modal proxy-auth header names.
+
+    Modal web endpoints created with ``requires_proxy_auth=True`` expect a
+    proxy-auth token sent as these two headers.
+    """
+    KEY = "Modal-Key"
+    SECRET = "Modal-Secret"
+

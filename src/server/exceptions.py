@@ -77,6 +77,25 @@ class ServiceResponseError(ServiceException):
         return f"HTTP {self.status_code} - Service: {self.service_name}, Endpoint: {self.endpoint}, Error: {self.error_message}"
 
 
+class ModalCredentialsError(ServiceException):
+    """Exception raised when a service URL is Modal-hosted but proxy-auth
+    credentials (MODAL_KEY / MODAL_SECRET) are not configured."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = missing
+
+        message = (
+            "Modal proxy-auth credentials missing: "
+            f"{', '.join(missing)}. Set these environment variables to call a "
+            "Modal-hosted service."
+        )
+        super().__init__(message)
+
+    def get_log_message(self) -> str:
+        """Get concise log message for missing Modal credentials"""
+        return f"Modal credentials missing: {', '.join(self.missing)}"
+
+
 class ServiceAuthorizationError(ServiceException):
     """Exception raised when service returns 403 Forbidden (missing or invalid authorization)"""
 
