@@ -63,9 +63,13 @@ services:
       - MODEL_SERVICE_URL=${MODEL_SERVICE_URL}
       - MODAL_KEY=${MODAL_KEY}
       - MODAL_SECRET=${MODAL_SECRET}
-      # Optional inbound auth for the public API (set AUTH_TYPE=token + API_TOKEN)
-      - AUTH_TYPE=${AUTH_TYPE:-none}
+      # Inbound auth for the public API. auth0 (prod) needs the AUTH0_* values below;
+      # token needs API_TOKEN; none = open.
+      - AUTH_TYPE=${AUTH_TYPE:-auth0}
       - API_TOKEN=${API_TOKEN:-}
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}
+      - AUTH0_ALGORITHMS=${AUTH0_ALGORITHMS:-RS256}
     env_file:
       - .env.scaleway
     depends_on:

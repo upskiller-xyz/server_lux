@@ -76,13 +76,23 @@ declare -a REPOS=(
   "server_merger:https://github.com/upskiller-xyz/server_merger.git"
   "server_stats:https://github.com/upskiller-xyz/server_stats.git"
 )
+# Private repos: GitHub no longer accepts login/password. Use GITHUB_TOKEN if set
+# (injected per-call so it is never written into .git/config). Otherwise rely on
+# whatever git credential is configured (e.g. `gh auth login` + `gh auth setup-git`,
+# or an SSH key).
+GIT_AUTH=()
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  basic=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+  GIT_AUTH=(-c "http.https://github.com/.extraheader=Authorization: Basic ${basic}")
+fi
+
 echo -e "${BLUE}Cloning/updating microservices...${NC}"
 for repo_info in "${REPOS[@]}"; do
   name="${repo_info%%:*}"; url="${repo_info#*:}"
   if [[ -d "services/$name/.git" ]]; then
-    echo "  updating $name"; git -C "services/$name" pull --ff-only
+    echo "  updating $name"; git "${GIT_AUTH[@]}" -C "services/$name" pull --ff-only
   else
-    echo "  cloning $name"; git clone --depth 1 "$url" "services/$name"
+    echo "  cloning $name"; git "${GIT_AUTH[@]}" clone --depth 1 "$url" "services/$name"
   fi
 done
 

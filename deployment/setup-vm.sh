@@ -20,7 +20,7 @@ echo -e "${GREEN}=== VM bootstrap: Docker + Compose + git ===${NC}"
 # 1. Base packages
 echo -e "${BLUE}Installing base packages...${NC}"
 $SUDO apt-get update -y
-$SUDO apt-get install -y ca-certificates curl gnupg git ufw
+$SUDO apt-get install -y ca-certificates curl gnupg git ufw jq openssl
 
 # 2. Docker Engine + Compose plugin (official repo)
 if ! command -v docker >/dev/null 2>&1; then
