@@ -15,8 +15,8 @@ internet ──▶ nginx  (the ONLY published service: 80/443)
 Only **nginx** binds host ports. Every app service — *including server-lux* — is
 reachable only on the internal `lux-network` bridge, never from the host or the
 internet. server-lux is exposed to the world solely through the nginx gateway
-([nginx-docker.conf](nginx-docker.conf), which proxies `/`, `/v1/`, `/docs/` and
-drops everything else).
+([nginx-scaleway.conf](nginx-scaleway.conf), which terminates TLS, proxies `/`,
+`/v1/`, `/docs/` and drops everything else).
 
 ## Why this shape
 
@@ -36,21 +36,29 @@ drops everything else).
 | [docker-compose.scaleway.yml](docker-compose.scaleway.yml) | The stack: nginx + 4 CPU services, per-service resource limits. |
 | [.env.scaleway.example](.env.scaleway.example) | Modal URL + creds, per-service workers/CPU/RAM. |
 | [deploy-scaleway.sh](deploy-scaleway.sh) | Clone CPU services, sanity-check Modal wiring, bring the stack up. |
-| [nginx-docker.conf](nginx-docker.conf) | The public gateway (reused as-is). |
+| [nginx-scaleway.conf](nginx-scaleway.conf) | The public gateway: TLS + Cloudflare real-IP + rate limiting. |
+| [certs/](certs/) | Cloudflare Origin cert (`origin.pem` + `origin.key`) — git-ignored. |
 
 ## Deploy
 
-On a Scaleway CPU Instance with Docker + Compose v2 installed:
+On a fresh Scaleway CPU Instance (Ubuntu/Debian, fr-par). Recommended type:
+POP2-HC-8C-16G (~€155/mo) or STANDARD2-A4C-16G (~€85/mo for low traffic). Open
+only 22/80/443 in the security group.
 
 ```bash
+ssh root@<instance-ip>
 git clone https://github.com/upskiller-xyz/server_lux.git
 cd server_lux/deployment
+
+bash setup-vm.sh               # one-time: installs Docker + Compose v2 + git + ufw
+
 cp .env.scaleway.example .env.scaleway
 $EDITOR .env.scaleway          # set MODEL_SERVICE_URL (the *.modal.run URL) + MODAL_KEY/MODAL_SECRET
 bash deploy-scaleway.sh --build --firewall
 ```
 
-`--build` rebuilds images; `--firewall` configures `ufw` to allow only 22/80/443.
+`setup-vm.sh` is idempotent (skip if Docker is already installed). `--build`
+rebuilds images; `--firewall` configures `ufw` to allow only 22/80/443.
 
 ## Instance sizing
 
@@ -62,11 +70,34 @@ Watch it under real load and adjust `OBSTRUCTION_WORKERS` / `OBSTRUCTION_CPUS` /
 `OBSTRUCTION_MEM` (prod has run `WORKERS=32` for high concurrency). Workers above
 the core count don't help — ray casting is CPU-bound.
 
-## TLS (optional)
+## Domain + TLS (Cloudflare)
 
-`nginx-docker.conf` listens on 80. For HTTPS, mount certs into the nginx service
-(commented volume in the compose) and add a `listen 443 ssl;` server block, or
-front the instance with a Scaleway Load Balancer that terminates TLS.
+The gateway ([nginx-scaleway.conf](nginx-scaleway.conf)) terminates TLS on the
+instance behind Cloudflare and restores the real client IP from
+`CF-Connecting-IP`. Pattern: **Cloudflare proxied → origin over HTTPS with a
+Cloudflare Origin Certificate** (15-year, free — no certbot/ACME in the container).
+
+1. **DNS.** In Cloudflare, add an **A record** for your subdomain (e.g.
+   `api.yourdomain.com`) → the instance's public IP, **Proxy status: Proxied**
+   (orange cloud).
+2. **Origin cert.** Cloudflare ▶ SSL/TLS ▶ **Origin Server** ▶ *Create Certificate*
+   (cover `yourdomain.com` and `*.yourdomain.com`). Save the two PEM blocks on the
+   instance as:
+   - `deployment/certs/origin.pem` (the certificate)
+   - `deployment/certs/origin.key` (the private key)
+
+   (`deployment/certs/` is git-ignored — the key is never committed.)
+3. **SSL/TLS mode.** Cloudflare ▶ SSL/TLS ▶ Overview ▶ set **Full (strict)**.
+4. **Deploy.** `deploy-scaleway.sh` checks the cert exists before starting and
+   nginx serves 443 with it; port 80 redirects to 443.
+
+To rotate or move the domain later, just replace the files in `certs/` and
+`docker compose -f docker-compose.scaleway.yml restart nginx`. `server_name` is a
+catch-all (`_`), so no per-domain nginx edit is needed — Cloudflare routes by Host.
+
+> Alternative (no Cloudflare): use Let's Encrypt via certbot like the legacy host
+> deployment ([deploy.sh](deploy.sh)), or front the instance with a Scaleway Load
+> Balancer that terminates TLS.
 
 ## Notes
 

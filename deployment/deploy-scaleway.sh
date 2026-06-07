@@ -57,6 +57,17 @@ else
   echo -e "${YELLOW}Inference: MODEL_SERVICE_URL is not a *.modal.run URL — no proxy-auth will be attached.${NC}"
 fi
 
+# ── 1b. TLS: Cloudflare Origin Certificate ───────────────────────────────────
+mkdir -p certs
+if [[ ! -f certs/origin.pem || ! -f certs/origin.key ]]; then
+  echo -e "${RED}Missing TLS cert${NC} (certs/origin.pem + certs/origin.key)."
+  echo "Create a Cloudflare Origin Certificate (SSL/TLS ▶ Origin Server ▶ Create) and save:"
+  echo "  - the certificate to deployment/certs/origin.pem"
+  echo "  - the private key to deployment/certs/origin.key"
+  echo "Then set Cloudflare SSL/TLS mode to 'Full (strict)'. See SCALEWAY_DEPLOYMENT.md."
+  exit 1
+fi
+
 # ── 2. Clone/update the CPU microservices (no server_model — that's on Modal) ─
 mkdir -p services
 declare -a REPOS=(
