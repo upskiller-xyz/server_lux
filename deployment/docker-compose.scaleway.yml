@@ -1,0 +1,219 @@
+# Scaleway deployment — Modal inference + internal-only microservices.
+#
+# Topology:
+#   internet ──▶ nginx (the ONLY published service: 80/443)
+#                  └─▶ server-lux ──▶ encoder / obstruction / merger / stats   (internal network only)
+#                                 └─▶ MODEL_SERVICE_URL ──▶ Modal (GPU inference, off-box)
+#
+# Only nginx binds host ports. Every app service (including server-lux) is reachable
+# ONLY on the internal `lux-network` bridge — never from the host or internet.
+# Inference is no longer a container here; server-lux calls Modal over HTTPS and the
+# proxy-auth headers are attached automatically (host ends in .modal.run).
+#
+# Usage:
+#   cp .env.scaleway.example .env.scaleway   # fill in MODAL_* and SCW_* values
+#   bash deploy-scaleway.sh --build
+#
+# Per-service resources are env-overridable. Obstruction is sized up: server-lux
+# sends one request per window and the obstruction service computes all 64
+# directions internally (vectorized CPU ray casting) — the heaviest CPU service.
+
+services:
+  # ── Public gateway: the only service with published ports ──────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: lux-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-docker.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mount TLS certs here and add a 443 server block to nginx-docker.conf:
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      server-lux:
+        condition: service_healthy
+    networks:
+      - lux-network
+
+  # ── Orchestrator: internal only, reached via nginx ─────────────────────────
+  server-lux:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: server-lux
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    # NOTE: no `ports:` — server-lux is internal; nginx is the public entrypoint.
+    environment:
+      - PORT=8080
+      - DEPLOYMENT_MODE=production
+      - WORKERS=${LUX_WORKERS:-2}
+      - THREADS=${LUX_THREADS:-8}
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False
+      # Internal service URLs (docker DNS names on lux-network)
+      - ENCODER_SERVICE_URL=http://encoder-service:8082
+      - OBSTRUCTION_SERVICE_URL=http://obstruction-service:8081
+      - MERGER_SERVICE_URL=http://merger-service:8084
+      - STATS_SERVICE_URL=http://stats-service:8085
+      # Inference on Modal — *.modal.run is auto-detected and gets proxy-auth.
+      - MODEL_SERVICE_URL=${MODEL_SERVICE_URL}
+      - MODAL_KEY=${MODAL_KEY}
+      - MODAL_SECRET=${MODAL_SECRET}
+      # Optional inbound auth for the public API (set AUTH_TYPE=token + API_TOKEN)
+      - AUTH_TYPE=${AUTH_TYPE:-none}
+      - API_TOKEN=${API_TOKEN:-}
+    env_file:
+      - .env.scaleway
+    depends_on:
+      obstruction-service:
+        condition: service_healthy
+      encoder-service:
+        condition: service_healthy
+      merger-service:
+        condition: service_healthy
+      stats-service:
+        condition: service_healthy
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "${LUX_CPUS:-2}"
+          memory: ${LUX_MEM:-2g}
+
+  # ── Obstruction: heaviest CPU service (64 directions per window, vectorized) ─
+  obstruction-service:
+    build:
+      context: ./services/server_obstruction
+      dockerfile: Dockerfile
+    container_name: obstruction-service
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    environment:
+      - PORT=8081
+      - WORKERS=${OBSTRUCTION_WORKERS:-4}
+      - THREADS=${OBSTRUCTION_THREADS:-2}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "${OBSTRUCTION_CPUS:-4}"
+          memory: ${OBSTRUCTION_MEM:-4g}
+
+  # ── Encoder: CPU rasterization ─────────────────────────────────────────────
+  encoder-service:
+    build:
+      context: ./services/server_encoder
+      dockerfile: Dockerfile
+    container_name: encoder-service
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    environment:
+      - PORT=8082
+      - WORKERS=${ENCODER_WORKERS:-2}
+      - THREADS=${ENCODER_THREADS:-4}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "${ENCODER_CPUS:-2}"
+          memory: ${ENCODER_MEM:-2g}
+
+  # ── Merger ─────────────────────────────────────────────────────────────────
+  merger-service:
+    build:
+      context: ./services/server_merger
+      dockerfile: Dockerfile
+    container_name: merger-service
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    environment:
+      - PORT=8084
+      - WORKERS=${MERGER_WORKERS:-2}
+      - THREADS=${MERGER_THREADS:-4}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8084/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "${MERGER_CPUS:-1}"
+          memory: ${MERGER_MEM:-1g}
+
+  # ── Stats ──────────────────────────────────────────────────────────────────
+  stats-service:
+    build:
+      context: ./services/server_stats
+      dockerfile: Dockerfile
+    container_name: stats-service
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    environment:
+      - PORT=8085
+      - WORKERS=${STATS_WORKERS:-1}
+      - THREADS=${STATS_THREADS:-4}
+      - FLASK_ENV=production
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8085/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "${STATS_CPUS:-1}"
+          memory: ${STATS_MEM:-1g}
+
+  # ── Restart unhealthy containers automatically ─────────────────────────────
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: autoheal
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_START_PERIOD=120
+
+networks:
+  lux-network:
+    driver: bridge

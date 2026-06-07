@@ -34,5 +34,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Expose port
 EXPOSE 8080
 
-# Run with gunicorn
-CMD exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 900 --chdir src main:app
+# Run with gunicorn (WORKERS/THREADS overridable via env; defaults match prior behavior)
+CMD exec gunicorn --bind 0.0.0.0:$PORT --workers ${WORKERS:-1} --threads ${THREADS:-8} --timeout 900 --chdir src main:app
