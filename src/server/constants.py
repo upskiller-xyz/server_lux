@@ -38,3 +38,15 @@ class DeploymentMode:
 class DefaultMaskValue:
     """Default mask value when creating masks"""
     FILL_VALUE: int = 1
+
+
+class ModalBackend:
+    """Constants for detecting and authenticating against Modal-hosted services.
+
+    A remote service is treated as Modal-hosted when its URL host ends with
+    ``HOST_SUFFIX``; outgoing calls then carry proxy-auth headers read from the
+    credential environment variables below.
+    """
+    HOST_SUFFIX: str = ".modal.run"
+    KEY_ENV: str = "MODAL_KEY"
+    SECRET_ENV: str = "MODAL_SECRET"

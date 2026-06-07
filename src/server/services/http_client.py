@@ -102,13 +102,19 @@ class HTTPClient:
             logger.error(error.get_log_message())
             raise error
 
-    def get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any] | None:
+    def get(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any] | None:
         try:
             if self._session is None:
                 self._session = self._create_session()
             response = self._session.get(
                 url,
                 params=params,
+                headers=headers or None,
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
@@ -118,14 +124,19 @@ class HTTPClient:
         except requests.exceptions.RequestException as e:
             self._handle_request_error(e, url)
 
-    def post(self, url: str, data: Dict[str, Any]) -> Dict[str, Any] | None:
+    def post(
+        self,
+        url: str,
+        data: Dict[str, Any],
+        headers: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any] | None:
         try:
             if self._session is None:
                 self._session = self._create_session()
             response = self._session.post(
                 url,
                 json=data,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", **(headers or {})},
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
@@ -142,7 +153,8 @@ class HTTPClient:
         self,
         url: str,
         files: Dict[str, Any],
-        data: Optional[Dict[str, Any]] = None
+        data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any] | None:
         try:
             logger.info(f"POST multipart request to {url} (timeout: {self._timeout}s)")
@@ -154,6 +166,7 @@ class HTTPClient:
                 url,
                 files=files,
                 data=data,
+                headers=headers or None,
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
@@ -163,14 +176,19 @@ class HTTPClient:
         except requests.exceptions.RequestException as e:
             self._handle_request_error(e, url)
 
-    def post_binary(self, url: str, data: Dict[str, Any]) -> bytes | None:
+    def post_binary(
+        self,
+        url: str,
+        data: Dict[str, Any],
+        headers: Optional[Dict[str, str]] = None
+    ) -> bytes | None:
         try:
             if self._session is None:
                 self._session = self._create_session()
             response = self._session.post(
                 url,
                 json=data,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", **(headers or {})},
                 timeout=(10, self._timeout)
             )
 

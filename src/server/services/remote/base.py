@@ -6,6 +6,7 @@ from src.server.services.http_client import HTTPClient
 from src.server.services.helpers.logging_utils import LoggingFormatter
 from .contracts import RemoteServiceRequest
 from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse, BinaryResponse
+from .outbound_auth import BackendResolver, BackendAuthMap
 from ...enums import ServiceName, EndpointType
 from ...maps import  PortMap, StandardMap
 
@@ -48,6 +49,17 @@ class RemoteService:
         """Log request being made"""
         logger.info(f"Calling {cls.name.value} service: {url}")
 
+    @classmethod
+    def _auth_headers(cls, url: str) -> Dict[str, str]:
+        """Resolve outbound auth headers for a service URL.
+
+        Modal-hosted endpoints (``*.modal.run``) get proxy-auth headers; container
+        endpoints get none. Driven entirely by the URL, so pointing a service's URL
+        at Modal is the only change required to authenticate against it.
+        """
+        backend = BackendResolver.resolve(url)
+        return BackendAuthMap.get(backend).headers()
+
 
     @classmethod
     def run(
@@ -77,7 +89,7 @@ class RemoteService:
         formatted_request = LoggingFormatter.format_for_logging(request_dict)
         logger.info(f"[{cls.name.value}] Request data: {formatted_request}")
 
-        response_dict = cls._http_client.post(url, request_dict)
+        response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
 
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
         logger.info(f"[{cls.name.value}] Response received: {formatted_response}")
@@ -126,7 +138,7 @@ class RemoteService:
                 z_len = len(wdata.get('zenith', [])) if has_z else 0
                 logger.debug(f"[DEBUG-ENCODE] Window {wname}: horizon={has_h}(len={h_len}), zenith={has_z}(len={z_len}), keys={list(wdata.keys()) if isinstance(wdata, dict) else 'N/A'}")
 
-        binary_data = cls._http_client.post_binary(url, request_dict)
+        binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
         
         # Factory Pattern: Check for explicit marker
         
