@@ -77,6 +77,22 @@ class ServiceResponseError(ServiceException):
         return f"HTTP {self.status_code} - Service: {self.service_name}, Endpoint: {self.endpoint}, Error: {self.error_message}"
 
 
+class MergeValidationError(ServiceException):
+    """Exception raised when the per-window data assembled for the merge step is
+    inconsistent (e.g. a window is missing its simulation, or a mask has an
+    unexpected shape such as a 4-channel encoder image instead of a 2D mask).
+
+    Indicates corrupted intermediate state (e.g. from a concurrency defect) -
+    we fail loudly instead of silently producing a wrong daylight field.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, service_name="main")
+
+    def get_log_message(self) -> str:
+        return f"Merge input validation failed: {self.message}"
+
+
 class ServiceAuthorizationError(ServiceException):
     """Exception raised when service returns 403 Forbidden (missing or invalid authorization)"""
 

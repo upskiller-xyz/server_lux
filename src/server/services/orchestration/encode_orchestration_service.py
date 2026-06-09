@@ -1,5 +1,6 @@
 from typing import Dict, Any
 import logging
+import numpy as np
 
 from src.server.services.remote.contracts import MergerRequest
 from src.server.services.remote.contracts.merger_contracts import MergerResponse
@@ -12,6 +13,9 @@ from ...enums import EndpointType, RequestField, ResponseKey
 from ..remote.service_map import ServiceEndpointMap
 from ...maps import StandardMap
 from ...interfaces.orchestration_interfaces import IOrchestrator
+from ...exceptions import MergeValidationError
+
+logger = logging.getLogger("logger")
 
 
 class SimulationOrchestrator(IOrchestrator):
@@ -43,6 +47,8 @@ class SimulationOrchestrator(IOrchestrator):
 
         merged_data = self._merge_window_results(request_data, window_results)
 
+        self._validate_merge_inputs(merged_data)
+
         merger_result = self._call_merger_service(merged_data, file)
 
         detailed = endpoint == EndpointType.RUN_DETAILED
@@ -53,6 +59,41 @@ class SimulationOrchestrator(IOrchestrator):
         """Merge results from all window processing"""
         merger = ResultMerger(request_data)
         return merger.merge_window_results(window_results)
+
+    def _validate_merge_inputs(self, merged_data: Dict[str, Any]) -> None:
+        """Validate the per-window data assembled for the merge step.
+
+        Guards against corrupted intermediate state (e.g. caused by a
+        concurrency defect mixing data between requests/windows): every window
+        must have a non-empty simulation and a 2D mask. On any violation we
+        raise MergeValidationError instead of silently sending a malformed
+        request to the merger (which would produce a wrong/degraded field or a
+        downstream 400).
+        """
+        params = merged_data.get(RequestField.PARAMETERS.value, {})
+        windows = params.get(RequestField.WINDOWS.value, {})
+        simulations = merged_data.get('simulations', {})
+        masks = merged_data.get(RequestField.MASK.value, {})
+
+        for window_name in windows:
+            simulation = simulations.get(window_name)
+            sim_arr = np.asarray(simulation) if simulation is not None else None
+            if sim_arr is None or sim_arr.size == 0:
+                raise MergeValidationError(
+                    f"window '{window_name}' has no simulation result"
+                )
+
+            mask = masks.get(window_name)
+            if mask is None:
+                raise MergeValidationError(
+                    f"window '{window_name}' has no mask"
+                )
+            mask_arr = np.asarray(mask)
+            if mask_arr.ndim != 2:
+                raise MergeValidationError(
+                    f"window '{window_name}' mask must be 2D, got "
+                    f"{mask_arr.ndim}D with shape {mask_arr.shape}"
+                )
 
     def _call_merger_service(self, merged_data: Dict[str, Any], file: Any) -> 'MergerResponse':
         """Call merger service with merged window data"""
