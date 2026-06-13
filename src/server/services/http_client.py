@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
 import logging
+import threading
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -15,7 +16,18 @@ class HTTPClient:
         self._timeout = timeout
         self._max_retries = max_retries
         self._backoff_factor = backoff_factor
-        self._session: requests.Session | None = None
+        # Sessions are thread-local: a requests.Session is not safe to share
+        # across threads. Under gunicorn (--threads N) and the per-window
+        # fan-out, a single shared session caused cross-request/window data
+        # contamination. Each thread gets its own session (keep-alive preserved).
+        self._local = threading.local()
+
+    def _get_session(self) -> requests.Session:
+        session = getattr(self._local, "session", None)
+        if session is None:
+            session = self._create_session()
+            self._local.session = session
+        return session
 
     def _create_session(self) -> requests.Session:
         session = requests.Session()
@@ -109,9 +121,8 @@ class HTTPClient:
         headers: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any] | None:
         try:
-            if self._session is None:
-                self._session = self._create_session()
-            response = self._session.get(
+            session = self._get_session()
+            response = session.get(
                 url,
                 params=params,
                 headers=headers or None,
@@ -131,9 +142,8 @@ class HTTPClient:
         headers: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any] | None:
         try:
-            if self._session is None:
-                self._session = self._create_session()
-            response = self._session.post(
+            session = self._get_session()
+            response = session.post(
                 url,
                 json=data,
                 headers={"Content-Type": "application/json", **(headers or {})},
@@ -159,10 +169,9 @@ class HTTPClient:
         try:
             logger.info(f"POST multipart request to {url} (timeout: {self._timeout}s)")
 
-            if self._session is None:
-                self._session = self._create_session()
+            session = self._get_session()
 
-            response = self._session.post(
+            response = session.post(
                 url,
                 files=files,
                 data=data,
@@ -183,9 +192,8 @@ class HTTPClient:
         headers: Optional[Dict[str, str]] = None
     ) -> bytes | None:
         try:
-            if self._session is None:
-                self._session = self._create_session()
-            response = self._session.post(
+            session = self._get_session()
+            response = session.post(
                 url,
                 json=data,
                 headers={"Content-Type": "application/json", **(headers or {})},
