@@ -11,8 +11,15 @@ from .services.remote.model_prewarmer import ModelPrewarmer
 
 logger = logging.getLogger("logger")
 
-# Endpoints whose pipeline hits the GPU model — warm it the moment they arrive.
-_INFERENCE_ENDPOINTS = frozenset({EndpointType.RUN, EndpointType.RUN_DETAILED})
+# Endpoints whose pipeline runs GPU inference (call ModelService) — warm the model
+# the moment they arrive. /spec-only endpoints (e.g. ENCODE, which calls
+# ModelSpecService but not ModelService) are intentionally excluded: spec is cached
+# metadata, not inference, so there is nothing to prewarm for.
+_INFERENCE_ENDPOINTS = frozenset({
+    EndpointType.RUN,
+    EndpointType.RUN_DETAILED,
+    EndpointType.SIMULATE,
+})
 
 
 class RequestParser:

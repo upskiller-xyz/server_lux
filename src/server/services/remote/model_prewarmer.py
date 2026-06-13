@@ -22,22 +22,30 @@ logger = logging.getLogger("logger")
 
 
 class ModelPrewarmer:
-    """Triggers a non-blocking warm of the model backend (Strategy via backend)."""
+    """Triggers a non-blocking, single-in-flight warm of the model backend."""
 
     _WARM_PATH = "/warm"
-    # Longer than a cold start so the warm completes; runs in a daemon thread so it
-    # never blocks the request regardless.
-    _TIMEOUT = 60
+    _TIMEOUT = 60  # > cold start; daemon thread never blocks the request
+
+    # In-flight guard: only one warm ping runs at a time, so a burst of inference
+    # requests can't pile up threads or flood the backend with redundant /warm calls.
+    _lock = threading.Lock()
+    _in_flight = False
 
     @classmethod
     def prewarm(cls) -> None:
-        """Fire a fire-and-forget /warm ping iff the model is on a Modal backend."""
+        """Fire a fire-and-forget /warm ping iff the model is on a Modal backend and
+        no warm ping is already running."""
         try:
             base_url = get_service_config().get_service_url(ServiceName.MODEL.value)
         except Exception:  # config lookup must never break the request
             return
         if BackendResolver.resolve(base_url) is not ServiceBackend.MODAL:
             return  # container/VM backend is always on — nothing to prewarm
+        with cls._lock:
+            if cls._in_flight:
+                return  # a warm ping is already running — don't pile up threads
+            cls._in_flight = True
         threading.Thread(
             target=cls._ping,
             args=(f"{base_url}{cls._WARM_PATH}",),
@@ -52,3 +60,6 @@ class ModelPrewarmer:
             logger.debug(f"Prewarm ping sent to {warm_url}")
         except Exception as e:  # best-effort — swallow everything (incl. missing creds)
             logger.debug(f"Prewarm ping failed (ignored): {e}")
+        finally:
+            with cls._lock:
+                cls._in_flight = False

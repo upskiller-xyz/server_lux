@@ -23,6 +23,7 @@ class _FakeThread:
 @pytest.fixture(autouse=True)
 def _no_threads(monkeypatch):
     _FakeThread.instances = []
+    ModelPrewarmer._in_flight = False  # _FakeThread never runs _ping that would reset it
     monkeypatch.setattr(model_prewarmer.threading, "Thread", _FakeThread)
 
 
@@ -45,6 +46,16 @@ class TestPrewarmGating:
         assert thread.daemon is True
         assert thread.started is True
         assert thread.args[0].endswith("/warm")
+
+    def test_in_flight_guard_prevents_thread_pile_up(self, monkeypatch):
+        # A second request while a warm ping is still running must not spawn another.
+        monkeypatch.setenv(
+            "MODEL_SERVICE_URL",
+            "https://acme--upskiller-model-inferenceservice-web.modal.run",
+        )
+        ModelPrewarmer.prewarm()  # spawns; _FakeThread doesn't run _ping → stays in-flight
+        ModelPrewarmer.prewarm()  # guarded → no second thread
+        assert len(_FakeThread.instances) == 1
 
 
 class TestPrewarmNeverRaises:
