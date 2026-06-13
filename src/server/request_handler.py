@@ -7,8 +7,12 @@ from flask import Request, Response, jsonify
 from .enums import EndpointType, HTTPStatus
 from .controllers.endpoint_controller import EndpointController
 from .response_builder import ErrorResponseBuilder
+from .services.remote.model_prewarmer import ModelPrewarmer
 
 logger = logging.getLogger("logger")
+
+# Endpoints whose pipeline hits the GPU model — warm it the moment they arrive.
+_INFERENCE_ENDPOINTS = frozenset({EndpointType.RUN, EndpointType.RUN_DETAILED})
 
 
 class RequestParser:
@@ -83,6 +87,11 @@ class EndpointRequestHandler:
         try:
             endpoint = self._request_parser.extract_endpoint(request)
             logger.info(f"Processing endpoint: {endpoint.value}")
+
+            # Fire-and-forget GPU prewarm at the earliest point so the model's cold
+            # start overlaps the CPU stages instead of stacking on /spec or /run.
+            if endpoint in _INFERENCE_ENDPOINTS:
+                ModelPrewarmer.prewarm()
 
             params = self._request_parser.extract_params(request)
             file = self._request_parser.extract_file(request)
