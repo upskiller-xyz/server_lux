@@ -20,12 +20,12 @@ permissions:
   contents: read
 
 concurrency:
-  # Serialize builds that move a shared tag (latest on tag pushes, edge on master)
-  # so two releases can't race and leave latest/edge on the wrong image. Feature /
-  # dispatch builds only touch immutable branch-sha tags → key per-ref and cancel
-  # superseded runs.
-  group: release-${{ (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master') && 'shared' || github.ref }}
-  cancel-in-progress: ${{ !(startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master') }}
+  # Serialize PUSH builds that move a shared tag (latest on tag pushes, edge on
+  # master) so two releases can't race and leave latest/edge on the wrong image.
+  # workflow_dispatch (even on master) and feature builds only produce immutable
+  # branch-sha tags → key per-ref and cancel superseded runs.
+  group: release-${{ (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master')) && 'shared' || github.ref }}
+  cancel-in-progress: ${{ !(github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master')) }}
 
 jobs:
   release:
