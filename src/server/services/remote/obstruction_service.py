@@ -4,6 +4,8 @@ import time
 import math
 import logging
 
+import orjson
+
 from src.server.services.helpers.parallel import ParallelRequest
 from src.server.services.remote.contracts.obstruction_contracts import ObstructionResponse
 logger = logging.getLogger("logger")
@@ -18,6 +20,9 @@ class ObstructionService(RemoteService):
     """Service for obstruction angle calculations"""
     name: ServiceName = ServiceName.OBSTRUCTION
 
+    # Suffix of the binary (multipart) transport endpoint on obstruction.
+    _BIN_SUFFIX: str = "_bin"
+
     @classmethod
     def _get_request(cls, endpoint: EndpointType) -> type[RemoteServiceRequest]:
         """Get request class for endpoint
@@ -29,11 +34,17 @@ class ObstructionService(RemoteService):
     @classmethod
     def run(cls, endpoint: EndpointType, request: RemoteServiceRequest, file: Any = None, response_class: type[RemoteServiceResponse] = ObstructionResponse) -> Dict[str, Any]:
         """Calculate obstruction angles and format response for orchestration"""
-        # response is now an ObstructionResponse object
-        response = super().run(endpoint, request, file, response_class)
-
         # Cast to ObstructionRequest since _get_request returns ObstructionRequest
         obstruction_request = cast(ObstructionRequest, request)
+
+        # A binary mesh (.npy / gzip) is forwarded untouched to obstruction's
+        # binary endpoint as multipart — lux never parses it. A JSON (list) mesh
+        # takes the standard JSON path.
+        if isinstance(obstruction_request.mesh, (bytes, bytearray)):
+            response = cls._run_binary(endpoint, obstruction_request, response_class)
+        else:
+            response = super().run(endpoint, request, file, response_class)
+
         window_name = obstruction_request.window_name
 
         # Access attributes directly from the dataclass/object
@@ -54,5 +65,34 @@ class ObstructionService(RemoteService):
             ResponseKey.HORIZON.value: horizon_params,
             ResponseKey.ZENITH.value: zenith_params
         }
+
+    @classmethod
+    def _run_binary(
+        cls,
+        endpoint: EndpointType,
+        request: ObstructionRequest,
+        response_class: type[RemoteServiceResponse],
+    ) -> RemoteServiceResponse:
+        """Forward a binary mesh to obstruction's binary endpoint as multipart.
+
+        lux never parses the mesh: the raw .npy/gzip bytes are streamed straight
+        through as a file, with the small window fields in a JSON ``params`` form
+        field. Reuses the same response parsing as the JSON path.
+        """
+        url = cls._get_url(endpoint) + cls._BIN_SUFFIX
+        params = {
+            k: v for k, v in request.to_dict.items() if k != RequestField.MESH.value
+        }
+        files = {
+            RequestField.MESH.value: ("mesh.npy", bytes(request.mesh), "application/octet-stream")
+        }
+        logger.info(f"[{cls.name.value}] Calling binary endpoint: {url}")
+        response_dict = cls._http_client.post_multipart(
+            url,
+            files=files,
+            data={"params": orjson.dumps(params).decode()},
+            headers=cls._auth_headers(url),
+        )
+        return response_class.parse(response_dict)
     
 

@@ -48,6 +48,11 @@ class Orchestrator(IOrchestrator):
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value
 
+        # A binary mesh is transport-only (forwarded to obstruction as raw
+        # bytes) and is not JSON-serializable — drop it from the response.
+        if isinstance(params.get(RequestField.MESH.value), (bytes, bytearray)):
+            params.pop(RequestField.MESH.value, None)
+
         # Remove mask and result from final response for stats endpoint
         if endpoint == EndpointType.STATS_CALCULATE:
             params.pop(RequestField.MASK.value, None)

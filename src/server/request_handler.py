@@ -52,9 +52,11 @@ class RequestParser:
         - **JSON** (original): the whole body parsed with orjson (~faster than the
           stdlib json behind Flask's get_json).
         - **Multipart pass-through**: a small ``params`` JSON field parsed always; the
-          large ``mesh`` field is parsed **only when obstruction will run** (its sole
-          consumer). Requests with pre-calculated horizon+zenith skip obstruction, so
-          the multi-MB mesh parse (~3-4s) is avoided entirely.
+          large ``mesh`` field is never parsed by lux — obstruction is its sole
+          consumer. A binary mesh (.npy / gzip) is kept as raw bytes and forwarded
+          untouched to obstruction's binary endpoint; a JSON mesh is parsed only when
+          obstruction will run. Requests with pre-calculated horizon+zenith skip
+          obstruction, so the multi-MB mesh is dropped entirely.
         """
         if request.is_json:
             try:
@@ -70,15 +72,29 @@ class RequestParser:
         mesh_file = request.files.get("mesh")
         if mesh_file is not None:
             # Obstruction is skipped when horizon+zenith are pre-calculated (see
-            # Orchestrator._should_skip_service) — then the mesh is never used, so
-            # don't pay to parse it.
+            # Orchestrator._should_skip_service) — then the mesh is never used.
             obstruction_skipped = (
                 ResponseKey.HORIZON.value in params and ResponseKey.ZENITH.value in params
             )
-            params[RequestField.MESH.value] = (
-                [] if obstruction_skipped else orjson.loads(mesh_file.read())
-            )
+            if obstruction_skipped:
+                params[RequestField.MESH.value] = []
+            else:
+                raw = mesh_file.read()
+                # Binary mesh (.npy, optionally gzipped) is forwarded to obstruction
+                # as raw bytes — lux never parses it. Only a JSON mesh is parsed.
+                params[RequestField.MESH.value] = (
+                    raw if RequestParser._is_binary_mesh(raw) else orjson.loads(raw)
+                )
         return params
+
+    # Magic bytes identifying a binary mesh payload that lux forwards untouched.
+    _NPY_MAGIC = b"\x93NUMPY"
+    _GZIP_MAGIC = b"\x1f\x8b"
+
+    @staticmethod
+    def _is_binary_mesh(raw: bytes) -> bool:
+        """True if the payload is a NumPy .npy (optionally gzipped) mesh."""
+        return raw[:6] == RequestParser._NPY_MAGIC or raw[:2] == RequestParser._GZIP_MAGIC
 
     @staticmethod
     def extract_file(request: Request) -> Any:
