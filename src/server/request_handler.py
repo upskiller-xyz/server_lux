@@ -8,6 +8,7 @@ from .enums import EndpointType, HTTPStatus
 from .controllers.endpoint_controller import EndpointController
 from .response_builder import ErrorResponseBuilder
 from .services.remote.model_prewarmer import ModelPrewarmer
+from .services.helpers.timing import StageTimer
 
 logger = logging.getLogger("logger")
 
@@ -100,10 +101,13 @@ class EndpointRequestHandler:
             if endpoint in _INFERENCE_ENDPOINTS:
                 ModelPrewarmer.prewarm()
 
-            params = self._request_parser.extract_params(request)
-            file = self._request_parser.extract_file(request)
+            with StageTimer("extract_params", logger):
+                params = self._request_parser.extract_params(request)
+            with StageTimer("extract_file", logger):
+                file = self._request_parser.extract_file(request)
 
-            result = self._endpoint_controller.run(endpoint, params, file)
+            with StageTimer("controller.run", logger):
+                result = self._endpoint_controller.run(endpoint, params, file)
 
             return self._response_builder.build(result)
 
