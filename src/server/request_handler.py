@@ -5,7 +5,7 @@ import traceback
 import orjson
 from flask import Request, Response, jsonify
 
-from .enums import EndpointType, HTTPStatus
+from .enums import EndpointType, HTTPStatus, RequestField, ResponseKey
 from .controllers.endpoint_controller import EndpointController
 from .response_builder import ErrorResponseBuilder
 from .services.remote.model_prewarmer import ModelPrewarmer
@@ -47,17 +47,38 @@ class RequestParser:
     def extract_params(request: Request) -> Dict[str, Any]:
         """Extract parameters from the request body.
 
-        Uses orjson (~10x faster than the stdlib json behind Flask's get_json).
-        Parsing the body dominates latency for large payloads — the mesh can be
-        several MB (parsing was ~4s with get_json). Falls back to form data for
-        non-JSON requests; ``is_json`` gates so we never consume a multipart stream.
+        Two intake modes (the original endpoint is unchanged — JSON still works):
+
+        - **JSON** (original): the whole body parsed with orjson (~faster than the
+          stdlib json behind Flask's get_json).
+        - **Multipart pass-through**: a small ``params`` JSON field parsed always; the
+          large ``mesh`` field is parsed **only when obstruction will run** (its sole
+          consumer). Requests with pre-calculated horizon+zenith skip obstruction, so
+          the multi-MB mesh parse (~3-4s) is avoided entirely.
         """
         if request.is_json:
             try:
                 return orjson.loads(request.get_data())
             except Exception:
-                pass
-        return request.form.to_dict()
+                return request.form.to_dict()
+
+        raw_params = request.form.get("params")
+        if raw_params is None:
+            return request.form.to_dict()
+        params = orjson.loads(raw_params)
+
+        mesh_file = request.files.get("mesh")
+        if mesh_file is not None:
+            # Obstruction is skipped when horizon+zenith are pre-calculated (see
+            # Orchestrator._should_skip_service) — then the mesh is never used, so
+            # don't pay to parse it.
+            obstruction_skipped = (
+                ResponseKey.HORIZON.value in params and ResponseKey.ZENITH.value in params
+            )
+            params[RequestField.MESH.value] = (
+                [] if obstruction_skipped else orjson.loads(mesh_file.read())
+            )
+        return params
 
     @staticmethod
     def extract_file(request: Request) -> Any:
