@@ -39,10 +39,12 @@ class Orchestrator(IOrchestrator):
                 if 'horizon' in params:
                     h_val = params['horizon']
                     logger.info(f"[DEBUG-SKIP] horizon type={type(h_val).__name__}, value_preview={str(h_val)[:200]}")
+                self._drop_binary_mesh(service, params)
                 continue
 
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
+            self._drop_binary_mesh(service, params)
             logger.debug(f"[DEBUG-ORCH] After {service.__name__}: params keys={[k for k in params if not k in ('parameters', 'mesh')]}")
 
         if ResponseKey.STATUS.value not in params:
@@ -121,6 +123,22 @@ class Orchestrator(IOrchestrator):
             requests = [request_class(**params)]
 
         return requests if isinstance(requests, list) else [requests]
+
+    def _drop_binary_mesh(self, service: type, params: Dict[str, Any]) -> None:
+        """Drop the raw binary mesh once obstruction (its only consumer) is done.
+
+        The binary mesh is forwarded to obstruction as raw bytes and is never used
+        by any other service. Left in ``params`` it would leak into the encoder/
+        model/merger requests and break JSON serialization (bytes aren't JSON
+        serializable). Only affects the binary path — a JSON (list) mesh is left
+        untouched for backward compatibility.
+        """
+        from ..remote import ObstructionService
+
+        if service is ObstructionService and isinstance(
+            params.get(RequestField.MESH.value), (bytes, bytearray)
+        ):
+            params.pop(RequestField.MESH.value, None)
 
     def _should_skip_service(self, service: type, params: Dict[str, Any]) -> bool:
         """Determine if a service should be skipped based on existing data

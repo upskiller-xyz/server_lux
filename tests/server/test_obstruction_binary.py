@@ -74,3 +74,29 @@ def test_list_mesh_still_uses_json_path():
     # JSON (list) mesh takes the standard path; multipart is never used.
     post_mp.assert_not_called()
     super_run.assert_called_once()
+
+
+def test_orchestrator_drops_binary_mesh_after_obstruction():
+    """Once obstruction has run, the raw binary mesh must be removed from params
+    so it never leaks into the encoder/model/merger requests (bytes aren't JSON
+    serializable). A JSON (list) mesh is left untouched."""
+    from src.server.services.orchestration.orchestrator import Orchestrator
+    from src.server.services.remote import EncoderService
+    from src.server.enums import RequestField
+
+    orch = Orchestrator()
+
+    # After ObstructionService: bytes mesh dropped.
+    params = {RequestField.MESH.value: b"\x93NUMPY-bytes", "horizon": [1], "zenith": [2]}
+    orch._drop_binary_mesh(ObstructionService, params)
+    assert RequestField.MESH.value not in params
+
+    # Before obstruction (any other service): bytes mesh kept (obstruction needs it).
+    params = {RequestField.MESH.value: b"\x93NUMPY-bytes"}
+    orch._drop_binary_mesh(EncoderService, params)
+    assert RequestField.MESH.value in params
+
+    # JSON list mesh: untouched even after obstruction (backward compatible).
+    params = {RequestField.MESH.value: [[0, 0, 0]]}
+    orch._drop_binary_mesh(ObstructionService, params)
+    assert RequestField.MESH.value in params
