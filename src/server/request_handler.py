@@ -2,6 +2,7 @@ from typing import Dict, Any, Tuple
 import logging
 import traceback
 
+import orjson
 from flask import Request, Response, jsonify
 
 from .enums import EndpointType, HTTPStatus
@@ -44,11 +45,19 @@ class RequestParser:
 
     @staticmethod
     def extract_params(request: Request) -> Dict[str, Any]:
-        """Extract parameters from request"""
-        try:
-            return request.get_json()
-        except Exception:
-            return request.form.to_dict()
+        """Extract parameters from the request body.
+
+        Uses orjson (~10x faster than the stdlib json behind Flask's get_json).
+        Parsing the body dominates latency for large payloads — the mesh can be
+        several MB (parsing was ~4s with get_json). Falls back to form data for
+        non-JSON requests; ``is_json`` gates so we never consume a multipart stream.
+        """
+        if request.is_json:
+            try:
+                return orjson.loads(request.get_data())
+            except Exception:
+                pass
+        return request.form.to_dict()
 
     @staticmethod
     def extract_file(request: Request) -> Any:
