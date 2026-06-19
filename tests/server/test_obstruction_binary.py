@@ -100,3 +100,20 @@ def test_orchestrator_drops_binary_mesh_after_obstruction():
     params = {RequestField.MESH.value: [[0, 0, 0]]}
     orch._drop_binary_mesh(ObstructionService, params)
     assert RequestField.MESH.value in params
+
+
+def test_obstruction_all_uses_parallel_remote_endpoint():
+    """Lux resolves /obstruction_all prework itself, then calls obstruction_parallel.
+
+    The obstruction service only exposes a binary transport route for
+    obstruction_parallel, so /obstruction_all must not become
+    /obstruction_all_bin when the mesh is binary.
+    """
+    from src.server.services.orchestration.orchestrator import Orchestrator
+
+    orch = Orchestrator()
+
+    assert (
+        orch._get_service_endpoint(ObstructionService, EndpointType.OBSTRUCTION_ALL)
+        == EndpointType.OBSTRUCTION_PARALLEL
+    )

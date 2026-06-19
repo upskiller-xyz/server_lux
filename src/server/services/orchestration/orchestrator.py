@@ -101,10 +101,16 @@ class Orchestrator(IOrchestrator):
         """
         from ..remote import ObstructionService
 
-        # For obstruction endpoints, use the original endpoint
+        # /obstruction_all is orchestrated in lux: reference point, direction,
+        # and external reference point are resolved first, then the remote
+        # obstruction service receives the standard parallel obstruction request.
+        if service == ObstructionService and endpoint == EndpointType.OBSTRUCTION_ALL:
+            return EndpointType.OBSTRUCTION_PARALLEL
+
+        # Direct obstruction endpoints keep their original remote endpoint.
         if service == ObstructionService and endpoint in [
             EndpointType.ZENITH, EndpointType.HORIZON,
-            EndpointType.OBSTRUCTION, EndpointType.OBSTRUCTION_ALL,
+            EndpointType.OBSTRUCTION,
             EndpointType.OBSTRUCTION_MULTI, EndpointType.OBSTRUCTION_PARALLEL
         ]:
             return endpoint
