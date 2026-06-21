@@ -38,15 +38,44 @@ drops everything else).
 | [deploy-scaleway.sh](deploy-scaleway.sh) | Clone CPU services, sanity-check Modal wiring, bring the stack up. |
 | [nginx-docker.conf](nginx-docker.conf) | The public gateway (reused as-is). |
 
-## Deploy
+## Deploy (CI-driven)
 
-On a Scaleway CPU Instance with Docker + Compose v2 installed:
+Deploys run from GitHub Actions — [deploy-scaleway.yml](../.github/workflows/deploy-scaleway.yml).
+**Secrets live in GitHub Secrets** (the single source of truth); the workflow
+renders them into the runtime `.env.scaleway` on the box and runs the deploy over
+SSH. Nothing secret is committed, and nobody edits env files by hand on the box.
+
+Trigger it manually: **Actions → Deploy to Scaleway → Run workflow** (tick
+*build* to rebuild images).
+
+### One-time GitHub configuration
+
+Settings → Secrets and variables → Actions (under the `production` environment):
+
+| Kind | Name | Purpose |
+|------|------|---------|
+| Secret | `MODAL_KEY`, `MODAL_SECRET` | Modal proxy-auth tokens |
+| Secret | `API_TOKEN` | Public-API bearer token (when `AUTH_TYPE=token`) |
+| Secret | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | Scaleway creds (private bucket / registry) |
+| Secret | `SCALEWAY_SSH_KEY` | Private SSH key authorized on the instance |
+| Variable | `SCALEWAY_HOST`, `SCALEWAY_USER` | Instance address + SSH user |
+| Variable | `DEPLOY_PATH` | server_lux checkout path on the box |
+| Variable | `DEPLOY_REF` | Git ref to deploy (default `master`) |
+| Variable | `MODEL_SERVICE_URL`, `AUTH_TYPE` | Non-secret runtime config |
+
+Non-secret tunables (workers/CPUs/RAM) stay in the committed
+[.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
+on top of it.
+
+### Manual deploy (fallback)
+
+On a Scaleway CPU Instance with Docker + Compose v2:
 
 ```bash
 git clone https://github.com/upskiller-xyz/server_lux.git
 cd server_lux/deployment
 cp .env.scaleway.example .env.scaleway
-$EDITOR .env.scaleway          # set MODEL_SERVICE_URL (the *.modal.run URL) + MODAL_KEY/MODAL_SECRET
+$EDITOR .env.scaleway          # set MODEL_SERVICE_URL + add the secrets yourself
 bash deploy-scaleway.sh --build --firewall
 ```
 
