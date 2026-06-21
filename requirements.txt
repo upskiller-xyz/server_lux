@@ -28,3 +28,6 @@ matplotlib>=3.7.0,<4.0.0
 # Production Server (optional for Docker deployment)
 gunicorn>=21.0.0,<23.0.0
 flasgger
+
+# Fast JSON parsing (request body / mesh can be several MB)
+orjson>=3.9.0,<4.0.0
