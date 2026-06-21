@@ -39,14 +39,21 @@ class Orchestrator(IOrchestrator):
                 if 'horizon' in params:
                     h_val = params['horizon']
                     logger.info(f"[DEBUG-SKIP] horizon type={type(h_val).__name__}, value_preview={str(h_val)[:200]}")
+                self._drop_binary_mesh(service, params)
                 continue
 
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
+            self._drop_binary_mesh(service, params)
             logger.debug(f"[DEBUG-ORCH] After {service.__name__}: params keys={[k for k in params if not k in ('parameters', 'mesh')]}")
 
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value
+
+        # A binary mesh is transport-only (forwarded to obstruction as raw
+        # bytes) and is not JSON-serializable — drop it from the response.
+        if isinstance(params.get(RequestField.MESH.value), (bytes, bytearray)):
+            params.pop(RequestField.MESH.value, None)
 
         # Remove mask and result from final response for stats endpoint
         if endpoint == EndpointType.STATS_CALCULATE:
@@ -94,10 +101,16 @@ class Orchestrator(IOrchestrator):
         """
         from ..remote import ObstructionService
 
-        # For obstruction endpoints, use the original endpoint
+        # /obstruction_all is orchestrated in lux: reference point, direction,
+        # and external reference point are resolved first, then the remote
+        # obstruction service receives the standard parallel obstruction request.
+        if service == ObstructionService and endpoint == EndpointType.OBSTRUCTION_ALL:
+            return EndpointType.OBSTRUCTION_PARALLEL
+
+        # Direct obstruction endpoints keep their original remote endpoint.
         if service == ObstructionService and endpoint in [
             EndpointType.ZENITH, EndpointType.HORIZON,
-            EndpointType.OBSTRUCTION, EndpointType.OBSTRUCTION_ALL,
+            EndpointType.OBSTRUCTION,
             EndpointType.OBSTRUCTION_MULTI, EndpointType.OBSTRUCTION_PARALLEL
         ]:
             return endpoint
@@ -116,6 +129,22 @@ class Orchestrator(IOrchestrator):
             requests = [request_class(**params)]
 
         return requests if isinstance(requests, list) else [requests]
+
+    def _drop_binary_mesh(self, service: type, params: Dict[str, Any]) -> None:
+        """Drop the raw binary mesh once obstruction (its only consumer) is done.
+
+        The binary mesh is forwarded to obstruction as raw bytes and is never used
+        by any other service. Left in ``params`` it would leak into the encoder/
+        model/merger requests and break JSON serialization (bytes aren't JSON
+        serializable). Only affects the binary path — a JSON (list) mesh is left
+        untouched for backward compatibility.
+        """
+        from ..remote import ObstructionService
+
+        if service is ObstructionService and isinstance(
+            params.get(RequestField.MESH.value), (bytes, bytearray)
+        ):
+            params.pop(RequestField.MESH.value, None)
 
     def _should_skip_service(self, service: type, params: Dict[str, Any]) -> bool:
         """Determine if a service should be skipped based on existing data

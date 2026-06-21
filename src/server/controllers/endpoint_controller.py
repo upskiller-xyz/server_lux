@@ -5,6 +5,7 @@ from src.server.controllers.field_map import EndpointOrchestratorMap, FieldMap
 from src.server.controllers.validation_strategy import ValidationStrategy
 from ..enums import EndpointType
 from ..response_builder import ErrorResponseBuilder
+from ..services.helpers.timing import StageTimer
 
 logger = logging.getLogger("logger")
 
@@ -31,7 +32,8 @@ class EndpointController:
 
         # Validate required fields using Strategy pattern
         required_fields = FieldMap.get(endpoint)
-        validation_error = self._validator.validate_fields(request_data, required_fields)
+        with StageTimer("validate_fields", logger):
+            validation_error = self._validator.validate_fields(request_data, required_fields)
         if validation_error:
             return validation_error
 
@@ -39,4 +41,5 @@ class EndpointController:
         orchestrator_class = EndpointOrchestratorMap.get(endpoint)
         orchestrator = orchestrator_class()
 
-        return orchestrator.run(endpoint, request_data, file)
+        with StageTimer("orchestrator.run", logger):
+            return orchestrator.run(endpoint, request_data, file)

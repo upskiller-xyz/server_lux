@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import logging
 
 from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
@@ -11,13 +11,18 @@ class ObstructionRequest(RemoteServiceRequest):
     """Request for obstruction angle calculations (single point and direction)
 
     Used for /horizon, /zenith, and /obstruction endpoints.
-    Supports split meshes (horizon_mesh + zenith_mesh) or legacy single mesh.
+
+    ``mesh`` carries either format:
+    - the **new binary format** — raw ``.npy`` / gzip ``bytes`` forwarded untouched
+      to obstruction's binary endpoint (lux never parses it), or
+    - the **legacy format** — a JSON list (single mesh) or dict
+      (``{"horizon": ..., "zenith": ...}`` split mesh) sent via the JSON path.
     """
     x: float
     y: float
     z: float
     direction_angle: float
-    mesh: List[List[float]]
+    mesh: Union[List[List[float]], Dict[str, Any], bytes, bytearray]
     window_name: str = "window"
 
     @classmethod

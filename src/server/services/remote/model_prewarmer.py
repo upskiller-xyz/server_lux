@@ -46,11 +46,9 @@ class ModelPrewarmer:
             if cls._in_flight:
                 return  # a warm ping is already running — don't pile up threads
             cls._in_flight = True
-        threading.Thread(
-            target=cls._ping,
-            args=(f"{base_url}{cls._WARM_PATH}",),
-            daemon=True,
-        ).start()
+        warm_url = f"{base_url}{cls._WARM_PATH}"
+        logger.info(f"Prewarming model backend (fire-and-forget): {warm_url}")
+        threading.Thread(target=cls._ping, args=(warm_url,), daemon=True).start()
 
     @classmethod
     def _ping(cls, warm_url: str) -> None:

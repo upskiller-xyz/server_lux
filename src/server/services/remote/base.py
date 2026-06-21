@@ -87,12 +87,12 @@ class RemoteService:
 
         request_dict = request.to_dict
         formatted_request = LoggingFormatter.format_for_logging(request_dict)
-        logger.info(f"[{cls.name.value}] Request data: {formatted_request}")
+        logger.debug(f"[{cls.name.value}] Request data: {formatted_request}")
 
         response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
 
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
-        logger.info(f"[{cls.name.value}] Response received: {formatted_response}")
+        logger.debug(f"[{cls.name.value}] Response received: {formatted_response}")
 
 
         if response_class is None:
@@ -123,20 +123,8 @@ class RemoteService:
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url)
 
-        # Convert request to dict and log it
+        # Convert request to dict
         request_dict = request.to_dict
-
-        # Debug: log top-level request keys and window data being sent to encoder
-        logger.debug(f"[DEBUG-ENCODE] Top-level request keys: {list(request_dict.keys())}")
-        if 'parameters' in request_dict:
-            params = request_dict['parameters']
-            windows = params.get('windows', {})
-            for wname, wdata in windows.items():
-                has_h = 'horizon' in wdata if isinstance(wdata, dict) else False
-                has_z = 'zenith' in wdata if isinstance(wdata, dict) else False
-                h_len = len(wdata.get('horizon', [])) if has_h else 0
-                z_len = len(wdata.get('zenith', [])) if has_z else 0
-                logger.debug(f"[DEBUG-ENCODE] Window {wname}: horizon={has_h}(len={h_len}), zenith={has_z}(len={z_len}), keys={list(wdata.keys()) if isinstance(wdata, dict) else 'N/A'}")
 
         binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
         

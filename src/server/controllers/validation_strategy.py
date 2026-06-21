@@ -50,13 +50,28 @@ class ListTypeValidator(IFieldValidator):
         return None
 
 
+class MeshTypeValidator(IFieldValidator):
+    """Validates the mesh field.
+
+    The mesh may arrive as a JSON list of ``[x, y, z]`` vertices, or as a raw
+    binary payload (.npy / gzip) that lux forwards untouched to obstruction's
+    binary endpoint without ever parsing it. Both are accepted here.
+    """
+
+    def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
+        value = request_data.get(field.value)
+        if value is not None and not isinstance(value, (list, bytes, bytearray)):
+            return f"Field '{field.value}' must be a list or a binary mesh payload"
+        return None
+
+
 class ValidationStrategy:
     """Strategy for validating request fields using validator chain"""
 
     # Map fields to their specific validators
     FIELD_VALIDATORS: Dict[RequestField, List[IFieldValidator]] = {
         RequestField.PARAMETERS: [PresenceValidator(), DictTypeValidator()],
-        RequestField.MESH: [PresenceValidator(), ListTypeValidator()],
+        RequestField.MESH: [PresenceValidator(), MeshTypeValidator()],
     }
 
     @classmethod

@@ -1,0 +1,146 @@
+"""Tests for ObstructionService binary (multipart) mesh forwarding.
+
+When the mesh arrives as raw bytes (.npy / gzip), lux forwards it untouched to
+obstruction's ``*_bin`` endpoint as a multipart file instead of embedding it in
+a JSON body — so lux never parses the multi-MB mesh.
+"""
+
+import io
+
+import numpy as np
+from unittest.mock import patch
+
+from src.server.services.remote.obstruction_service import ObstructionService
+from src.server.services.remote.contracts import ObstructionRequest
+from src.server.enums import EndpointType
+
+
+def _npy_bytes() -> bytes:
+    buf = io.BytesIO()
+    np.save(buf, np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32))
+    return buf.getvalue()
+
+
+_FAKE_RESPONSE = {
+    "status": "success",
+    "data": {"results": [{
+        "horizon": {"obstruction_angle_degrees": 12.0},
+        "zenith": {"obstruction_angle_degrees": 80.0},
+    }]},
+}
+
+
+def test_binary_mesh_forwarded_as_multipart_to_bin_endpoint():
+    raw = _npy_bytes()
+    request = ObstructionRequest(
+        x=0.5, y=0.5, z=10.0, direction_angle=90.0, mesh=raw, window_name="window"
+    )
+
+    captured = {}
+
+    def fake_post_multipart(url, files=None, data=None, headers=None):
+        captured.update(url=url, files=files, data=data, headers=headers)
+        return _FAKE_RESPONSE
+
+    with patch.object(ObstructionService._http_client, "post_multipart", side_effect=fake_post_multipart), \
+         patch.object(ObstructionService, "_get_url", return_value="http://obstruction:8080/obstruction_parallel"), \
+         patch.object(ObstructionService, "_auth_headers", return_value={}):
+        out = ObstructionService.run(EndpointType.OBSTRUCTION_PARALLEL, request)
+
+    # Routed to the binary endpoint, mesh sent as a file (not in the JSON body).
+    assert captured["url"].endswith("/obstruction_parallel_bin")
+    assert "mesh" not in captured["data"]
+    assert "params" in captured["data"]
+    assert bytes(captured["files"]["mesh"][1]) == raw
+    # Response parsed exactly like the JSON path.
+    assert "horizon" in out and "zenith" in out
+
+
+def test_binary_mesh_routed_to_parallel_bin_even_for_non_parallel_endpoint():
+    # A client may send a binary mesh to a direct obstruction endpoint
+    # (/obstruction, /obstruction_multi, /horizon, /zenith). Binary transport
+    # exists only on the parallel endpoint, so it must still go to
+    # /obstruction_parallel_bin — not the non-existent /obstruction_bin etc.
+    raw = _npy_bytes()
+    request = ObstructionRequest(
+        x=0.5, y=0.5, z=10.0, direction_angle=90.0, mesh=raw, window_name="window"
+    )
+
+    captured = {}
+
+    def fake_post_multipart(url, files=None, data=None, headers=None):
+        captured.update(url=url)
+        return _FAKE_RESPONSE
+
+    # _get_url reflects the endpoint it is given, so the asserted URL proves the
+    # routing decision (not a hard-coded mock return value).
+    with patch.object(ObstructionService._http_client, "post_multipart", side_effect=fake_post_multipart), \
+         patch.object(ObstructionService, "_get_url",
+                      side_effect=lambda ep: f"http://obstruction:8080/{ep.value}"), \
+         patch.object(ObstructionService, "_auth_headers", return_value={}):
+        ObstructionService.run(EndpointType.OBSTRUCTION, request)
+
+    assert captured["url"].endswith("/obstruction_parallel_bin")
+
+
+class _DummyResponse:
+    horizon = [1.0]
+    zenith = [2.0]
+
+
+def test_list_mesh_still_uses_json_path():
+    request = ObstructionRequest(
+        x=0.5, y=0.5, z=10.0, direction_angle=90.0,
+        mesh=[[0, 0, 0], [1, 0, 0], [0, 1, 0]], window_name="window",
+    )
+
+    with patch("src.server.services.remote.base.RemoteService.run", return_value=_DummyResponse()) as super_run, \
+         patch.object(ObstructionService._http_client, "post_multipart") as post_mp:
+        ObstructionService.run(EndpointType.OBSTRUCTION_PARALLEL, request)
+
+    # JSON (list) mesh takes the standard path; multipart is never used.
+    post_mp.assert_not_called()
+    super_run.assert_called_once()
+
+
+def test_orchestrator_drops_binary_mesh_after_obstruction():
+    """Once obstruction has run, the raw binary mesh must be removed from params
+    so it never leaks into the encoder/model/merger requests (bytes aren't JSON
+    serializable). A JSON (list) mesh is left untouched."""
+    from src.server.services.orchestration.orchestrator import Orchestrator
+    from src.server.services.remote import EncoderService
+    from src.server.enums import RequestField
+
+    orch = Orchestrator()
+
+    # After ObstructionService: bytes mesh dropped.
+    params = {RequestField.MESH.value: b"\x93NUMPY-bytes", "horizon": [1], "zenith": [2]}
+    orch._drop_binary_mesh(ObstructionService, params)
+    assert RequestField.MESH.value not in params
+
+    # Before obstruction (any other service): bytes mesh kept (obstruction needs it).
+    params = {RequestField.MESH.value: b"\x93NUMPY-bytes"}
+    orch._drop_binary_mesh(EncoderService, params)
+    assert RequestField.MESH.value in params
+
+    # JSON list mesh: untouched even after obstruction (backward compatible).
+    params = {RequestField.MESH.value: [[0, 0, 0]]}
+    orch._drop_binary_mesh(ObstructionService, params)
+    assert RequestField.MESH.value in params
+
+
+def test_obstruction_all_uses_parallel_remote_endpoint():
+    """Lux resolves /obstruction_all prework itself, then calls obstruction_parallel.
+
+    The obstruction service only exposes a binary transport route for
+    obstruction_parallel, so /obstruction_all must not become
+    /obstruction_all_bin when the mesh is binary.
+    """
+    from src.server.services.orchestration.orchestrator import Orchestrator
+
+    orch = Orchestrator()
+
+    assert (
+        orch._get_service_endpoint(ObstructionService, EndpointType.OBSTRUCTION_ALL)
+        == EndpointType.OBSTRUCTION_PARALLEL
+    )
