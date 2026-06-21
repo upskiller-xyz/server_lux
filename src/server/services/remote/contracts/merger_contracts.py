@@ -30,8 +30,6 @@ class MergerRequest(RemoteServiceRequest):
         windows_dict = params.get(RequestField.WINDOWS.value, {})
         direction_angles_dict = content.get(RequestField.DIRECTION_ANGLE.value, {})
 
-        print(direction_angles_dict)
-
         windows = {}
         for window_name, window_data in windows_dict.items():
             window_geom = WindowGeometry.from_dict(window_data)
