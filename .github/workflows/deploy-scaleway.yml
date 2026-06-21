@@ -81,9 +81,10 @@ jobs:
             echo "::error::MODEL_SERVICE_URL variable is not set — refusing to deploy against the placeholder endpoint."
             exit 1
           fi
-          # AUTH_TYPE=token with an empty API_TOKEN silently allows all requests
-          # (TokenAuthenticationStrategy: "no token configured → allow all"), a
-          # false sense of protection. Require the token when token auth is on.
+          # AUTH_TYPE=token with an empty API_TOKEN doesn't validate the token value:
+          # a missing/malformed Authorization header is still rejected, but ANY
+          # `Bearer <anything>` is accepted — a false sense of protection. Require
+          # the token when token auth is on.
           if [ "${AUTH_TYPE:-none}" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
             echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN or use AUTH_TYPE=none."
             exit 1
@@ -119,7 +120,10 @@ jobs:
         run: |
           set -euo pipefail
           # $HOME (not ~) so the path stays absolute after variable expansion.
-          ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes"
+          # BatchMode=yes: never prompt (a bad key fails fast instead of hanging CI).
+          # IdentitiesOnly=yes: use only id_deploy, don't try other identities and
+          # trip the server's auth-attempt limit.
+          ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes"
           # 1. Stream the rendered secrets to the box. Writing via the remote shell
           #    with `umask 077` creates the file 600 from the start — `scp` would
           #    create it with the remote login umask (often 644), briefly exposing
