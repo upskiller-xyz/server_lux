@@ -67,7 +67,13 @@ class RequestParser:
         raw_params = request.form.get("params")
         if raw_params is None:
             return request.form.to_dict()
-        params = orjson.loads(raw_params)
+        try:
+            params = orjson.loads(raw_params)
+        except orjson.JSONDecodeError:
+            # Malformed params JSON falls back to flat form parsing (mirrors the
+            # JSON-body path above) so bad input yields a controlled validation
+            # error downstream instead of a 500.
+            return request.form.to_dict()
 
         mesh_file = request.files.get("mesh")
         if mesh_file is not None:

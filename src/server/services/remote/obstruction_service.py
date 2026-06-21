@@ -75,9 +75,8 @@ class ObstructionService(RemoteService):
     ) -> RemoteServiceResponse:
         """Forward a binary mesh to obstruction's binary endpoint as multipart.
 
-        lux never parses the mesh: the raw .npy/gzip bytes are streamed straight
-        through as a file, with the small window fields in a JSON ``params`` form
-        field. Reuses the same response parsing as the JSON path.
+        lux never parses the mesh: the raw .npy/gzip bytes are forwarded through
+        as a multipart file, with the small window fields in a JSON ``params`` form field. Reuses the same response parsing as the JSON path.
         """
         url = cls._get_url(endpoint) + cls._BIN_SUFFIX
         params = {
