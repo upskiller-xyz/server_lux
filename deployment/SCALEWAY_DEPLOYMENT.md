@@ -38,15 +38,47 @@ drops everything else).
 | [deploy-scaleway.sh](deploy-scaleway.sh) | Clone CPU services, sanity-check Modal wiring, bring the stack up. |
 | [nginx-docker.conf](nginx-docker.conf) | The public gateway (reused as-is). |
 
-## Deploy
+## Deploy (CI-driven)
 
-On a Scaleway CPU Instance with Docker + Compose v2 installed:
+Deploys run from GitHub Actions — [deploy-scaleway.yml](../.github/workflows/deploy-scaleway.yml).
+**Secrets live in GitHub Secrets** (the single source of truth); the workflow
+renders them into the runtime `.env.scaleway` on the box and runs the deploy over
+SSH. Nothing secret is committed, and nobody edits env files by hand on the box.
+
+Trigger it manually: **Actions → Deploy to Scaleway → Run workflow** (tick
+*build* to rebuild images).
+
+### One-time GitHub configuration
+
+Settings → Secrets and variables → Actions (under the `prod` environment):
+
+| Kind | Name | Required? | Purpose |
+|------|------|-----------|---------|
+| Secret | `MODAL_KEY`, `MODAL_SECRET` | yes | Modal proxy-auth tokens |
+| Secret | `SCALEWAY_SSH_KEY` | yes | Private SSH key authorized on the instance |
+| Secret | `API_TOKEN` | when `AUTH_TYPE=token` | Public-API bearer token |
+| Secret | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | optional | Only for a private bucket / registry workflow — the default compose stack and `deploy-scaleway.sh` do **not** use them |
+| Variable | `SCALEWAY_HOST`, `SCALEWAY_USER` | yes | Instance address + SSH user |
+| Variable | `DEPLOY_PATH` | yes | server_lux checkout path on the box |
+| Variable | `MODEL_SERVICE_URL` | yes | Modal endpoint (deploy fails fast if unset) |
+| Variable | `DEPLOY_REF` | optional | Git ref to deploy (default `master`) |
+| Variable | `AUTH_TYPE` | optional | `none` (default), `token`, or `auth0` |
+| Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
+| Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
+
+Non-secret tunables (workers/CPUs/RAM) stay in the committed
+[.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
+on top of it.
+
+### Manual deploy (fallback)
+
+On a Scaleway CPU Instance with Docker + Compose v2:
 
 ```bash
 git clone https://github.com/upskiller-xyz/server_lux.git
 cd server_lux/deployment
 cp .env.scaleway.example .env.scaleway
-$EDITOR .env.scaleway          # set MODEL_SERVICE_URL (the *.modal.run URL) + MODAL_KEY/MODAL_SECRET
+$EDITOR .env.scaleway          # set MODEL_SERVICE_URL + add the secrets yourself
 bash deploy-scaleway.sh --build --firewall
 ```
 
