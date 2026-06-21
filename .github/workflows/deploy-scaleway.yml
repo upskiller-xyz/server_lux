@@ -8,10 +8,14 @@ name: Deploy to Scaleway
 # over SSH. The app is unchanged: it still reads the values from its environment.
 #
 # Required GitHub configuration (Settings → Secrets and variables → Actions):
-#   Secrets:   MODAL_KEY, MODAL_SECRET, API_TOKEN, SCW_ACCESS_KEY, SCW_SECRET_KEY,
-#              SCALEWAY_SSH_KEY (private key authorized on the instance)
+#   Secrets:   MODAL_KEY, MODAL_SECRET, SCALEWAY_SSH_KEY (private key authorized
+#              on the instance). Optional: API_TOKEN (only when AUTH_TYPE=token);
+#              SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private bucket/registry
+#              workflow — the default compose stack does not use them).
 #   Variables: SCALEWAY_HOST, SCALEWAY_USER, DEPLOY_PATH (server_lux checkout on
-#              the box), DEPLOY_REF (default master), MODEL_SERVICE_URL, AUTH_TYPE
+#              the box), MODEL_SERVICE_URL. Optional: DEPLOY_REF (default master),
+#              AUTH_TYPE (default none), SSH_KNOWN_HOSTS (pinned host key — falls
+#              back to a live, MITM-able ssh-keyscan if unset).
 #
 # Manual trigger only (a prod box should not redeploy on every push).
 
@@ -32,17 +36,27 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Scopes the secrets to this environment and allows required-reviewer gating.
-    environment: production
+    environment: prod
     steps:
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SCALEWAY_SSH_KEY }}
           HOST: ${{ vars.SCALEWAY_HOST }}
+          KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Prefer a pinned host key (set the SSH_KNOWN_HOSTS variable to the output
+          # of `ssh-keyscan <host>`). A live keyscan trusts whatever key answers, so
+          # a MITM / host change can silently poison known_hosts — only a fallback.
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS not set — trusting the host key from a live ssh-keyscan (MITM-able). Pin it for production."
+            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Render runtime env from GitHub Secrets
         env:
@@ -55,6 +69,20 @@ jobs:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
         run: |
           umask 077
+          # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
+          # the placeholder *.modal.run URL in .env.scaleway.example and deploy a
+          # stack pointing at a bogus endpoint.
+          if [ -z "${MODEL_SERVICE_URL:-}" ]; then
+            echo "::error::MODEL_SERVICE_URL variable is not set — refusing to deploy against the placeholder endpoint."
+            exit 1
+          fi
+          # AUTH_TYPE=token with an empty API_TOKEN silently allows all requests
+          # (TokenAuthenticationStrategy: "no token configured → allow all"), a
+          # false sense of protection. Require the token when token auth is on.
+          if [ "${AUTH_TYPE:-none}" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
+            echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN or use AUTH_TYPE=none."
+            exit 1
+          fi
           # Only write keys that are actually set; appended after the committed
           # config template on the box, so these override its placeholders/defaults.
           : > .env.runtime
@@ -80,8 +108,11 @@ jobs:
           set -euo pipefail
           # $HOME (not ~) so the path stays absolute after variable expansion.
           ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes"
-          # 1. Ship the rendered secrets to the box (600).
-          scp $ssh_opts .env.runtime "${USER_}@${HOST}:${DEPLOY_PATH}/deployment/.env.runtime"
+          # 1. Stream the rendered secrets to the box. Writing via the remote shell
+          #    with `umask 077` creates the file 600 from the start — `scp` would
+          #    create it with the remote login umask (often 644), briefly exposing
+          #    secrets before any chmod.
+          ssh $ssh_opts "${USER_}@${HOST}" "umask 077; cat > '${DEPLOY_PATH}/deployment/.env.runtime'" < .env.runtime
           # 2. Update the checkout, merge config + secrets into .env.scaleway, deploy.
           build_flag=""; [ "$BUILD" = "true" ] && build_flag="--build"
           # shellcheck disable=SC2029  # vars expand locally on purpose

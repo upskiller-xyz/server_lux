@@ -50,18 +50,20 @@ Trigger it manually: **Actions → Deploy to Scaleway → Run workflow** (tick
 
 ### One-time GitHub configuration
 
-Settings → Secrets and variables → Actions (under the `production` environment):
+Settings → Secrets and variables → Actions (under the `prod` environment):
 
-| Kind | Name | Purpose |
-|------|------|---------|
-| Secret | `MODAL_KEY`, `MODAL_SECRET` | Modal proxy-auth tokens |
-| Secret | `API_TOKEN` | Public-API bearer token (when `AUTH_TYPE=token`) |
-| Secret | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | Scaleway creds (private bucket / registry) |
-| Secret | `SCALEWAY_SSH_KEY` | Private SSH key authorized on the instance |
-| Variable | `SCALEWAY_HOST`, `SCALEWAY_USER` | Instance address + SSH user |
-| Variable | `DEPLOY_PATH` | server_lux checkout path on the box |
-| Variable | `DEPLOY_REF` | Git ref to deploy (default `master`) |
-| Variable | `MODEL_SERVICE_URL`, `AUTH_TYPE` | Non-secret runtime config |
+| Kind | Name | Required? | Purpose |
+|------|------|-----------|---------|
+| Secret | `MODAL_KEY`, `MODAL_SECRET` | yes | Modal proxy-auth tokens |
+| Secret | `SCALEWAY_SSH_KEY` | yes | Private SSH key authorized on the instance |
+| Secret | `API_TOKEN` | when `AUTH_TYPE=token` | Public-API bearer token |
+| Secret | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | optional | Only for a private bucket / registry workflow — the default compose stack and `deploy-scaleway.sh` do **not** use them |
+| Variable | `SCALEWAY_HOST`, `SCALEWAY_USER` | yes | Instance address + SSH user |
+| Variable | `DEPLOY_PATH` | yes | server_lux checkout path on the box |
+| Variable | `MODEL_SERVICE_URL` | yes | Modal endpoint (deploy fails fast if unset) |
+| Variable | `DEPLOY_REF` | optional | Git ref to deploy (default `master`) |
+| Variable | `AUTH_TYPE` | optional | `none` (default) or `token` |
+| Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
 [.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
