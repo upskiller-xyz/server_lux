@@ -62,7 +62,8 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `DEPLOY_PATH` | yes | server_lux checkout path on the box |
 | Variable | `MODEL_SERVICE_URL` | yes | Modal endpoint (deploy fails fast if unset) |
 | Variable | `DEPLOY_REF` | optional | Git ref to deploy (default `master`) |
-| Variable | `AUTH_TYPE` | optional | `none` (default) or `token` |
+| Variable | `AUTH_TYPE` | optional | `none` (default), `token`, or `auth0` |
+| Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
