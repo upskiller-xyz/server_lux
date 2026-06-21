@@ -119,30 +119,42 @@ jobs:
           BUILD: ${{ inputs.build }}
         run: |
           set -euo pipefail
+          # Fail fast on missing connection config — clearer than a later SSH/cd error.
+          : "${HOST:?SCALEWAY_HOST variable is not set}"
+          : "${USER_:?SCALEWAY_USER variable is not set}"
+          : "${DEPLOY_PATH:?DEPLOY_PATH variable is not set}"
+          : "${DEPLOY_REF:?DEPLOY_REF resolved empty}"
+
           # $HOME (not ~) so the path stays absolute after variable expansion.
           # BatchMode=yes: never prompt (a bad key fails fast instead of hanging CI).
           # IdentitiesOnly=yes: use only id_deploy, don't try other identities and
           # trip the server's auth-attempt limit.
           ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes"
-          # 1. Stream the rendered secrets to the box. Writing via the remote shell
-          #    with `umask 077` creates the file 600 from the start — `scp` would
-          #    create it with the remote login umask (often 644), briefly exposing
-          #    secrets before any chmod.
-          ssh $ssh_opts "${USER_}@${HOST}" "umask 077; cat > '${DEPLOY_PATH}/deployment/.env.runtime'" < .env.runtime
-          # 2. Update the checkout, merge config + secrets into .env.scaleway, deploy.
           build_flag=""; [ "$BUILD" = "true" ] && build_flag="--build"
-          # shellcheck disable=SC2029  # vars expand locally on purpose
-          ssh $ssh_opts "${USER_}@${HOST}" "
-            set -euo pipefail
-            cd '${DEPLOY_PATH}'
-            git fetch --all --prune
-            git reset --hard 'origin/${DEPLOY_REF}'
-            cd deployment
-            umask 077
-            cat .env.scaleway.example .env.runtime > .env.scaleway
-            shred -u .env.runtime 2>/dev/null || rm -f .env.runtime
-            bash deploy-scaleway.sh ${build_flag}
-          "
+
+          # 1. Stream the rendered secrets to a FIXED remote path. The command is
+          #    single-quoted so $HOME expands on the box (not locally) and no
+          #    GitHub-controlled value is interpolated into the remote command.
+          #    `umask 077` makes the file 600 from the start (scp would use the
+          #    remote login umask, often 644).
+          ssh $ssh_opts "${USER_}@${HOST}" 'umask 077; cat > "$HOME/.lux_env.runtime"' < .env.runtime
+
+          # 2. Run the remote deploy. DEPLOY_PATH/DEPLOY_REF/build_flag are passed as
+          #    %q-quoted env vars so they reach the box as DATA, never as code — a
+          #    value containing quotes/semicolons can't break out and run commands.
+          #    The script body (single-quoted heredoc) references them as variables.
+          remote_env=$(printf 'DEPLOY_PATH=%q DEPLOY_REF=%q BUILD_FLAG=%q' "$DEPLOY_PATH" "$DEPLOY_REF" "$build_flag")
+          ssh $ssh_opts "${USER_}@${HOST}" "$remote_env bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          git fetch --all --prune
+          git reset --hard "origin/$DEPLOY_REF"
+          cd deployment
+          umask 077
+          cat .env.scaleway.example "$HOME/.lux_env.runtime" > .env.scaleway
+          shred -u "$HOME/.lux_env.runtime" 2>/dev/null || rm -f "$HOME/.lux_env.runtime"
+          bash deploy-scaleway.sh $BUILD_FLAG
+          REMOTE
 
       - name: Clean up local secrets
         if: always()
