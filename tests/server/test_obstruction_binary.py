@@ -56,6 +56,33 @@ def test_binary_mesh_forwarded_as_multipart_to_bin_endpoint():
     assert "horizon" in out and "zenith" in out
 
 
+def test_binary_mesh_routed_to_parallel_bin_even_for_non_parallel_endpoint():
+    # A client may send a binary mesh to a direct obstruction endpoint
+    # (/obstruction, /obstruction_multi, /horizon, /zenith). Binary transport
+    # exists only on the parallel endpoint, so it must still go to
+    # /obstruction_parallel_bin — not the non-existent /obstruction_bin etc.
+    raw = _npy_bytes()
+    request = ObstructionRequest(
+        x=0.5, y=0.5, z=10.0, direction_angle=90.0, mesh=raw, window_name="window"
+    )
+
+    captured = {}
+
+    def fake_post_multipart(url, files=None, data=None, headers=None):
+        captured.update(url=url)
+        return _FAKE_RESPONSE
+
+    # _get_url reflects the endpoint it is given, so the asserted URL proves the
+    # routing decision (not a hard-coded mock return value).
+    with patch.object(ObstructionService._http_client, "post_multipart", side_effect=fake_post_multipart), \
+         patch.object(ObstructionService, "_get_url",
+                      side_effect=lambda ep: f"http://obstruction:8080/{ep.value}"), \
+         patch.object(ObstructionService, "_auth_headers", return_value={}):
+        ObstructionService.run(EndpointType.OBSTRUCTION, request)
+
+    assert captured["url"].endswith("/obstruction_parallel_bin")
+
+
 class _DummyResponse:
     horizon = [1.0]
     zenith = [2.0]

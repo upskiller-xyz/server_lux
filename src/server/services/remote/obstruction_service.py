@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, cast
+from typing import Dict, Any, List, Union, cast
 import asyncio
 import time
 import math
@@ -11,7 +11,8 @@ from src.server.services.remote.contracts.obstruction_contracts import Obstructi
 logger = logging.getLogger("logger")
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
 # from .contracts import ObstructionResponse
-from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus
+from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus, HTTPStatus
+from ...exceptions import ServiceResponseError
 from .base import RemoteService
 from ...services.obstruction.calculator_interface import IObstructionCalculator
 
@@ -41,9 +42,10 @@ class ObstructionService(RemoteService):
         # binary endpoint as multipart — lux never parses it. A JSON (list) mesh
         # takes the standard JSON path.
         if isinstance(obstruction_request.mesh, (bytes, bytearray)):
-            response = cls._run_binary(endpoint, obstruction_request, response_class)
+            response = cls._run_binary(obstruction_request, response_class)
         else:
             response = super().run(endpoint, request, file, response_class)
+        response = cast(ObstructionResponse, response)
 
         window_name = obstruction_request.window_name
 
@@ -69,21 +71,29 @@ class ObstructionService(RemoteService):
     @classmethod
     def _run_binary(
         cls,
-        endpoint: EndpointType,
         request: ObstructionRequest,
         response_class: type[RemoteServiceResponse],
     ) -> RemoteServiceResponse:
         """Forward a binary mesh to obstruction's binary endpoint as multipart.
 
+        Binary transport exists only on the parallel endpoint
+        (``/obstruction_parallel_bin``), so all binary meshes are routed there
+        regardless of which obstruction endpoint the client requested — appending
+        ``_bin`` to other endpoints (``/obstruction``, ``/obstruction_multi``,
+        ``/horizon``, ``/zenith``) would call routes that don't exist.
+
         lux never parses the mesh: the raw .npy/gzip bytes are forwarded through
         as a multipart file, with the small window fields in a JSON ``params`` form field. Reuses the same response parsing as the JSON path.
         """
-        url = cls._get_url(endpoint) + cls._BIN_SUFFIX
+        url = cls._get_url(EndpointType.OBSTRUCTION_PARALLEL) + cls._BIN_SUFFIX
         params = {
             k: v for k, v in request.to_dict.items() if k != RequestField.MESH.value
         }
+        # run() only routes here when mesh is bytes/bytearray; bytes() also accepts
+        # bytearray, yielding the immutable payload the multipart upload needs.
+        mesh_bytes = bytes(cast(Union[bytes, bytearray], request.mesh))
         files = {
-            RequestField.MESH.value: ("mesh.npy", bytes(request.mesh), "application/octet-stream")
+            RequestField.MESH.value: ("mesh.npy", mesh_bytes, "application/octet-stream")
         }
         logger.info(f"[{cls.name.value}] Calling binary endpoint: {url}")
         response_dict = cls._http_client.post_multipart(
@@ -92,6 +102,11 @@ class ObstructionService(RemoteService):
             data={"params": orjson.dumps(params).decode()},
             headers=cls._auth_headers(url),
         )
+        if response_dict is None:
+            raise ServiceResponseError(
+                cls.name.value, url, HTTPStatus.BAD_GATEWAY.value,
+                "obstruction binary endpoint returned no response",
+            )
         return response_class.parse(response_dict)
     
 
