@@ -2,14 +2,11 @@
 
 import os
 import time
-import json
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
 from jose import jwt
 from jose.utils import base64url_encode
-import struct
 from src.server.enums import AuthType, ErrorType
 from src.server.auth_config import AuthConfig, Auth0Config
 from src.server.auth_strategies import (
@@ -23,11 +20,7 @@ from src.server.auth import Authenticator, TokenAuthenticator
 
 def _generate_rsa_key_pair():
     """Generate an RSA key pair for test JWT signing."""
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-        backend=default_backend()
-    )
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return private_key, private_key.public_key()
 
 
@@ -281,7 +274,7 @@ class TestAuth0AuthenticationStrategy:
     def test_validate_request_unknown_kid(self, auth0_config, rsa_key_pair):
         """JWT signed with a key whose kid is not in JWKS is rejected."""
         private_key, _ = rsa_key_pair
-        other_private, other_public = _generate_rsa_key_pair()
+        _, other_public = _generate_rsa_key_pair()
         jwks = {"keys": [_public_key_to_jwk(other_public, kid="other-key")]}
         strategy = Auth0AuthenticationStrategy(auth0_config)
         strategy._jwks_cache = jwks
