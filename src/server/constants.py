@@ -69,10 +69,10 @@ class ScalewayBackend:
     """Constants for detecting and authenticating against Scaleway serverless.
 
     A remote service is treated as Scaleway-hosted when its URL host ends with
-    ``HOST_SUFFIX`` (Scaleway serverless container/function endpoints live under
-    ``*.scw.cloud``). A private endpoint requires a token read from ``TOKEN_ENV``,
-    sent in the Scaleway auth header. Override the suffix if the region/domain
-    differs.
+    ``HOST_SUFFIX``. All Scaleway serverless container/function endpoints live
+    under ``*.scw.cloud`` regardless of region, so the single suffix covers every
+    region. A private endpoint requires a token read from ``TOKEN_ENV``, sent in
+    the Scaleway auth header.
     """
     HOST_SUFFIX: str = ".scw.cloud"
     TOKEN_ENV: str = "SCW_CONTAINER_TOKEN"

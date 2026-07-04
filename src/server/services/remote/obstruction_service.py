@@ -20,6 +20,28 @@ from .base import RemoteService
 from ...services.obstruction.calculator_interface import IObstructionCalculator
 
 
+def _resolve_obstruction_concurrency() -> int:
+    """Resolve OBSTRUCTION_MAX_CONCURRENCY into a valid semaphore size.
+
+    Falls back to the default on a missing/non-integer value (a bad value would
+    otherwise raise ValueError at import and stop the server from starting) and
+    floors at 1 (a value <= 0 would deadlock every obstruction call on the
+    semaphore).
+    """
+    raw = os.getenv(ObstructionConcurrency.MAX_ENV)
+    if raw is None:
+        return ObstructionConcurrency.DEFAULT_MAX
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning(
+            f"Invalid {ObstructionConcurrency.MAX_ENV}={raw!r}; "
+            f"falling back to {ObstructionConcurrency.DEFAULT_MAX}"
+        )
+        return ObstructionConcurrency.DEFAULT_MAX
+    return max(1, value)
+
+
 class ObstructionService(RemoteService):
     """Service for obstruction angle calculations"""
     name: ServiceName = ServiceName.OBSTRUCTION
@@ -32,9 +54,7 @@ class ObstructionService(RemoteService):
     # remote calls run in ThreadPoolExecutor threads (sync requests), so this is a
     # thread — not asyncio — semaphore. Sized from the environment to match the
     # backend ceiling (e.g. Scaleway serverless max-instances).
-    _concurrency_limit: int = int(
-        os.getenv(ObstructionConcurrency.MAX_ENV, str(ObstructionConcurrency.DEFAULT_MAX))
-    )
+    _concurrency_limit: int = _resolve_obstruction_concurrency()
     _concurrency: threading.BoundedSemaphore = threading.BoundedSemaphore(_concurrency_limit)
 
     @classmethod

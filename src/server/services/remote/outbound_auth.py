@@ -1,9 +1,11 @@
 """Outbound authentication for remote service calls.
 
 The backend hosting a service is inferred from its URL (Strategy/Adapter pattern):
-a Modal-hosted endpoint (``*.modal.run``) requires proxy-auth headers, a container
-endpoint does not. ``BackendResolver`` maps a URL to a :class:`ServiceBackend`, and
-``BackendAuthMap`` maps that backend to the strategy producing the right headers.
+a Modal-hosted endpoint (``*.modal.run``) requires proxy-auth headers, a private
+Scaleway serverless endpoint (``*.scw.cloud``) requires the invocation token in
+``X-Auth-Token``, and a plain container endpoint requires none. ``BackendResolver``
+maps a URL to a :class:`ServiceBackend`, and ``BackendAuthMap`` maps that backend to
+the strategy producing the right headers.
 """
 from abc import ABC, abstractmethod
 from typing import Dict

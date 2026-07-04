@@ -97,8 +97,9 @@ services:
 
   # ── Obstruction: off-box as a private Scaleway Serverless Container ──────────
   # Moved off the VM — bursty CPU-bound load (64 directions/window) saturated the
-  # instance's fixed cores. Deploy: deployment/deploy-obstruction-scaleway.sh.
-  # server-lux reaches it via OBSTRUCTION_SERVICE_URL (above), not lux-network.
+  # instance's fixed cores. Deployed separately from this stack (see the
+  # server_obstruction repo). server-lux reaches it via OBSTRUCTION_SERVICE_URL
+  # (above), not lux-network.
 
   # ── Encoder: CPU rasterization ─────────────────────────────────────────────
   encoder-service:
