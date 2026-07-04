@@ -56,7 +56,13 @@ services:
       - FLASK_DEBUG=False
       # Internal service URLs (docker DNS names on lux-network)
       - ENCODER_SERVICE_URL=http://encoder-service:8082
-      - OBSTRUCTION_SERVICE_URL=http://obstruction-service:8081
+      # Obstruction runs off-box as a private Scaleway Serverless Container (bursty
+      # CPU-bound load — deployed separately from this stack, see server_obstruction).
+      # The *.scw.cloud host is auto-detected and X-Auth-Token is attached from
+      # SCW_CONTAINER_TOKEN. Keep OBSTRUCTION_MAX_CONCURRENCY == the container's max-scale.
+      - OBSTRUCTION_SERVICE_URL=${OBSTRUCTION_SERVICE_URL}
+      - SCW_CONTAINER_TOKEN=${SCW_CONTAINER_TOKEN}
+      - OBSTRUCTION_MAX_CONCURRENCY=${OBSTRUCTION_MAX_CONCURRENCY:-10}
       - MERGER_SERVICE_URL=http://merger-service:8084
       - STATS_SERVICE_URL=http://stats-service:8085
       # Inference on Modal — *.modal.run is auto-detected and gets proxy-auth.
@@ -69,8 +75,6 @@ services:
     env_file:
       - .env.scaleway
     depends_on:
-      obstruction-service:
-        condition: service_healthy
       encoder-service:
         condition: service_healthy
       merger-service:
@@ -91,33 +95,11 @@ services:
           cpus: "${LUX_CPUS:-2}"
           memory: ${LUX_MEM:-2g}
 
-  # ── Obstruction: heaviest CPU service (64 directions per window, vectorized) ─
-  obstruction-service:
-    build:
-      context: ./services/server_obstruction
-      dockerfile: Dockerfile
-    container_name: obstruction-service
-    restart: unless-stopped
-    labels:
-      - "autoheal=true"
-    environment:
-      - PORT=8081
-      - WORKERS=${OBSTRUCTION_WORKERS:-4}
-      - THREADS=${OBSTRUCTION_THREADS:-2}
-      - FLASK_ENV=production
-    networks:
-      - lux-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: "${OBSTRUCTION_CPUS:-4}"
-          memory: ${OBSTRUCTION_MEM:-4g}
+  # ── Obstruction: off-box as a private Scaleway Serverless Container ──────────
+  # Moved off the VM — bursty CPU-bound load (64 directions/window) saturated the
+  # instance's fixed cores. Deployed separately from this stack (see the
+  # server_obstruction repo). server-lux reaches it via OBSTRUCTION_SERVICE_URL
+  # (above), not lux-network.
 
   # ── Encoder: CPU rasterization ─────────────────────────────────────────────
   encoder-service:

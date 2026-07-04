@@ -311,10 +311,12 @@ class ServiceBackend(ExtendedEnumMixin, Enum):
     """Backend hosting a remote service.
 
     Resolved from the service URL: a Modal-hosted endpoint requires proxy-auth
-    headers, a container endpoint does not. The URL itself is the switch.
+    headers, a private Scaleway serverless endpoint requires an auth token, a
+    plain container endpoint requires none. The URL itself is the switch.
     """
     CONTAINER = "container"
     MODAL = "modal"
+    SCALEWAY = "scaleway"
 
 
 class ModalAuthHeader(Enum):
@@ -325,4 +327,14 @@ class ModalAuthHeader(Enum):
     """
     KEY = "Modal-Key"
     SECRET = "Modal-Secret"
+
+
+class ScalewayAuthHeader(Enum):
+    """Scaleway serverless auth header name.
+
+    A private Scaleway serverless container/function is invoked with a generated
+    token passed in this header; the platform gateway validates it before the
+    request reaches the container.
+    """
+    TOKEN = "X-Auth-Token"
 

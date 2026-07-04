@@ -1,18 +1,20 @@
 """Outbound authentication for remote service calls.
 
 The backend hosting a service is inferred from its URL (Strategy/Adapter pattern):
-a Modal-hosted endpoint (``*.modal.run``) requires proxy-auth headers, a container
-endpoint does not. ``BackendResolver`` maps a URL to a :class:`ServiceBackend`, and
-``BackendAuthMap`` maps that backend to the strategy producing the right headers.
+a Modal-hosted endpoint (``*.modal.run``) requires proxy-auth headers, a private
+Scaleway serverless endpoint (``*.scw.cloud``) requires the invocation token in
+``X-Auth-Token``, and a plain container endpoint requires none. ``BackendResolver``
+maps a URL to a :class:`ServiceBackend`, and ``BackendAuthMap`` maps that backend to
+the strategy producing the right headers.
 """
 from abc import ABC, abstractmethod
 from typing import Dict
 from urllib.parse import urlparse
 import os
 
-from ...enums import ServiceBackend, ModalAuthHeader
-from ...constants import ModalBackend
-from ...exceptions import ModalCredentialsError
+from ...enums import ServiceBackend, ModalAuthHeader, ScalewayAuthHeader
+from ...constants import ModalBackend, ScalewayBackend
+from ...exceptions import ModalCredentialsError, ScalewayCredentialsError
 from ...maps import StandardMap
 
 
@@ -24,6 +26,8 @@ class BackendResolver:
         host = (urlparse(url).hostname or "").lower()
         if host.endswith(ModalBackend.HOST_SUFFIX):
             return ServiceBackend.MODAL
+        if host.endswith(ScalewayBackend.HOST_SUFFIX):
+            return ServiceBackend.SCALEWAY
         return ServiceBackend.CONTAINER
 
 
@@ -68,10 +72,26 @@ class ModalProxyAuth(OutboundAuthStrategy):
         }
 
 
+class ScalewayTokenAuth(OutboundAuthStrategy):
+    """Scaleway serverless token auth: sends the invocation token in ``X-Auth-Token``.
+
+    The token is read from the environment (SCW_CONTAINER_TOKEN). Raises
+    :class:`ScalewayCredentialsError` when missing so the failure is clear before
+    the request is made rather than surfacing as a remote 401/403.
+    """
+
+    def headers(self) -> Dict[str, str]:
+        token = os.getenv(ScalewayBackend.TOKEN_ENV)
+        if not token:
+            raise ScalewayCredentialsError([ScalewayBackend.TOKEN_ENV])
+        return {ScalewayAuthHeader.TOKEN.value: token}
+
+
 class BackendAuthMap(StandardMap):
     """Maps a service backend to its outbound auth strategy."""
     _content: Dict[ServiceBackend, OutboundAuthStrategy] = {
         ServiceBackend.CONTAINER: NoOutboundAuth(),
         ServiceBackend.MODAL: ModalProxyAuth(),
+        ServiceBackend.SCALEWAY: ScalewayTokenAuth(),
     }
     _default: OutboundAuthStrategy = NoOutboundAuth()

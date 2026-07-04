@@ -1,5 +1,7 @@
 from typing import Dict, Any, List, Union, cast
 import asyncio
+import os
+import threading
 import time
 import math
 import logging
@@ -11,10 +13,33 @@ from src.server.services.remote.contracts.obstruction_contracts import Obstructi
 logger = logging.getLogger("logger")
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
 # from .contracts import ObstructionResponse
+from ...constants import ObstructionConcurrency
 from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus, HTTPStatus
 from ...exceptions import ServiceResponseError
 from .base import RemoteService
 from ...services.obstruction.calculator_interface import IObstructionCalculator
+
+
+def _resolve_obstruction_concurrency() -> int:
+    """Resolve OBSTRUCTION_MAX_CONCURRENCY into a valid semaphore size.
+
+    Falls back to the default on a missing/non-integer value (a bad value would
+    otherwise raise ValueError at import and stop the server from starting) and
+    floors at 1 (a value <= 0 would deadlock every obstruction call on the
+    semaphore).
+    """
+    raw = os.getenv(ObstructionConcurrency.MAX_ENV)
+    if raw is None:
+        return ObstructionConcurrency.DEFAULT_MAX
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning(
+            f"Invalid {ObstructionConcurrency.MAX_ENV}={raw!r}; "
+            f"falling back to {ObstructionConcurrency.DEFAULT_MAX}"
+        )
+        return ObstructionConcurrency.DEFAULT_MAX
+    return max(1, value)
 
 
 class ObstructionService(RemoteService):
@@ -23,6 +48,14 @@ class ObstructionService(RemoteService):
 
     # Suffix of the binary (multipart) transport endpoint on obstruction.
     _BIN_SUFFIX: str = "_bin"
+
+    # Backpressure: cap concurrent in-flight obstruction requests per lux process
+    # so the per-window fan-out cannot flood the backend past its capacity. The
+    # remote calls run in ThreadPoolExecutor threads (sync requests), so this is a
+    # thread — not asyncio — semaphore. Sized from the environment to match the
+    # backend ceiling (e.g. Scaleway serverless max-instances).
+    _concurrency_limit: int = _resolve_obstruction_concurrency()
+    _concurrency: threading.BoundedSemaphore = threading.BoundedSemaphore(_concurrency_limit)
 
     @classmethod
     def _get_request(cls, endpoint: EndpointType) -> type[RemoteServiceRequest]:
@@ -40,11 +73,14 @@ class ObstructionService(RemoteService):
 
         # A binary mesh (.npy / gzip) is forwarded untouched to obstruction's
         # binary endpoint as multipart — lux never parses it. A JSON (list) mesh
-        # takes the standard JSON path.
-        if isinstance(obstruction_request.mesh, (bytes, bytearray)):
-            response = cls._run_binary(obstruction_request, response_class)
-        else:
-            response = super().run(endpoint, request, file, response_class)
+        # takes the standard JSON path. Both remote calls are gated by the
+        # concurrency semaphore so a burst of windows queues here instead of
+        # overwhelming the obstruction backend.
+        with cls._concurrency:
+            if isinstance(obstruction_request.mesh, (bytes, bytearray)):
+                response = cls._run_binary(obstruction_request, response_class)
+            else:
+                response = super().run(endpoint, request, file, response_class)
         response = cast(ObstructionResponse, response)
 
         window_name = obstruction_request.window_name
