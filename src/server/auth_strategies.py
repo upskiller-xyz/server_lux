@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Any, Optional
 from functools import wraps
-from flask import request
+from flask import request, g, has_request_context
 import requests
 from jose import jwt, JWTError
 from .enums import ErrorType, AuthType
@@ -185,6 +185,10 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
                 issuer=self._config.issuer
             )
 
+            # Expose the authenticated principal for downstream telemetry. Stored on
+            # Flask's `g` (request-scoped); consumers read g.user_sub best-effort.
+            self._store_principal(payload)
+
             # Token is valid
             return True, None
 
@@ -194,6 +198,12 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
             return False, ErrorType.INVALID_JWT
         except Exception:
             return False, ErrorType.INVALID_JWT
+
+    @staticmethod
+    def _store_principal(payload: dict) -> None:
+        """Store the auth0 sub on Flask's `g` for downstream telemetry (best-effort)."""
+        if has_request_context():
+            g.user_sub = payload.get("sub")
 
 
 class NoAuthenticationStrategy(AuthenticationStrategy):

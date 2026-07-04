@@ -1,5 +1,6 @@
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Optional, Tuple
 import logging
+import time
 import traceback
 
 import orjson
@@ -10,6 +11,7 @@ from .controllers.endpoint_controller import EndpointController
 from .response_builder import ErrorResponseBuilder
 from .services.remote.model_prewarmer import ModelPrewarmer
 from .services.helpers.timing import StageTimer
+from .services.telemetry import TelemetryRequestContext, build_default_reporter
 
 logger = logging.getLogger("logger")
 
@@ -133,6 +135,7 @@ class EndpointRequestHandler:
         self._request_parser = RequestParser()
         self._response_builder = ResponseBuilder()
         self._error_builder = ErrorResponseBuilder()
+        self._telemetry = build_default_reporter()
 
     def handle(self, request: Request) -> Tuple[Response, int]:
         """Handle a request to any endpoint
@@ -144,6 +147,9 @@ class EndpointRequestHandler:
             Tuple of (response, status_code)
         """
         endpoint = None
+        start = time.perf_counter()
+        success = False
+        error_code: Optional[str] = None
         try:
             endpoint = self._request_parser.extract_endpoint(request)
             logger.info(f"Processing endpoint: {endpoint.value}")
@@ -161,10 +167,49 @@ class EndpointRequestHandler:
             with StageTimer("controller.run", logger):
                 result = self._endpoint_controller.run(endpoint, params, file)
 
-            return self._response_builder.build(result)
+            response, status = self._response_builder.build(result)
+            success = status == HTTPStatus.OK.value
+            if not success:
+                error_code = self._error_code_from_result(result)
+            return response, status
 
         except Exception as e:
             endpoint_str = endpoint.value if endpoint else "unknown"
             logger.error(f"{endpoint_str} failed: {str(e)}")
             logger.error(f"Traceback:\n{traceback.format_exc()}")
+            error_code = type(e).__name__
             return self._error_builder.build_from_exception(e)
+
+        finally:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            self._report_telemetry(request, endpoint, duration_ms, success, error_code)
+
+    @staticmethod
+    def _error_code_from_result(result: Any) -> str:
+        """Derive a telemetry error code from a non-OK result payload."""
+        if isinstance(result, dict):
+            return result.get(ResponseKey.ERROR_TYPE.value) or ResponseKey.ERROR.value
+        return ResponseKey.ERROR.value
+
+    def _report_telemetry(
+        self,
+        request: Request,
+        endpoint: Optional[EndpointType],
+        duration_ms: int,
+        success: bool,
+        error_code: Optional[str],
+    ) -> None:
+        """Emit one telemetry event for the request (best-effort, never raises)."""
+        try:
+            ctx = TelemetryRequestContext.extract(request)
+            self._telemetry.report(
+                endpoint=endpoint.value if endpoint else EndpointType.STATUS.value,
+                duration_ms=duration_ms,
+                success=success,
+                error_code=error_code,
+                user_sub=ctx.user_sub,
+                session_id=ctx.session_id,
+                project_id=ctx.project_id,
+            )
+        except Exception as e:
+            logger.warning(f"telemetry.report failed: {e}")

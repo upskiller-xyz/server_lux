@@ -13,6 +13,8 @@ services:
       - DEPLOYMENT_MODE=local
       - PORT=8080
       - API_TOKEN=${API_TOKEN:-your_token_here}
+      # Telemetry emission (fire-and-forget). Unset to disable.
+      - TELEMETRY_SERVICE_URL=http://telemetry:8086
     depends_on:
       colormanage:
         condition: service_healthy
@@ -25,6 +27,8 @@ services:
       encoder:
         condition: service_healthy
       postprocess:
+        condition: service_healthy
+      telemetry:
         condition: service_healthy
     networks:
       - microservices
@@ -132,6 +136,27 @@ services:
       retries: 3
       start_period: 40s
 
+  # Telemetry ingestion & analysis service
+  telemetry:
+    image: ${TELEMETRY_IMAGE:-europe-north2-docker.pkg.dev/daylight-factor/daylight-server-docker-repo/daylight-telemetry-img:latest}
+    container_name: server_telemetry
+    environment:
+      - PORT=8086
+      - SQLITE_DB_PATH=/data/telemetry.db
+      - TELEMETRY_HMAC_SALT=${TELEMETRY_HMAC_SALT:-change_me_to_a_long_random_secret}
+      - TELEMETRY_IDENTITY_MODE=${TELEMETRY_IDENTITY_MODE:-anonymous}
+    volumes:
+      - telemetry_data:/data
+    networks:
+      - microservices
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8086/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   autoheal:
     image: willfarrell/autoheal
     container_name: autoheal
@@ -144,3 +169,6 @@ services:
 networks:
   microservices:
     driver: bridge
+
+volumes:
+  telemetry_data:
