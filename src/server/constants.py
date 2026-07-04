@@ -5,6 +5,19 @@ Follows DRY principle - define once, reference everywhere.
 """
 
 
+class ObstructionConcurrency:
+    """Backpressure for calls to the obstruction service.
+
+    The per-window fan-out is otherwise unbounded (default ThreadPoolExecutor),
+    so a single burst of rooms can flood the obstruction backend far beyond its
+    capacity. This caps concurrent in-flight obstruction requests per lux process
+    to match the backend's ceiling (e.g. Scaleway serverless max-instances);
+    excess callers queue on the semaphore instead of overwhelming the backend.
+    """
+    MAX_ENV: str = "OBSTRUCTION_MAX_CONCURRENCY"
+    DEFAULT_MAX: int = 10
+
+
 class ObstructionAngleDefaults:
     """Default values for obstruction angle calculations
 
@@ -50,3 +63,16 @@ class ModalBackend:
     HOST_SUFFIX: str = ".modal.run"
     KEY_ENV: str = "MODAL_KEY"
     SECRET_ENV: str = "MODAL_SECRET"
+
+
+class ScalewayBackend:
+    """Constants for detecting and authenticating against Scaleway serverless.
+
+    A remote service is treated as Scaleway-hosted when its URL host ends with
+    ``HOST_SUFFIX`` (Scaleway serverless container/function endpoints live under
+    ``*.scw.cloud``). A private endpoint requires a token read from ``TOKEN_ENV``,
+    sent in the Scaleway auth header. Override the suffix if the region/domain
+    differs.
+    """
+    HOST_SUFFIX: str = ".scw.cloud"
+    TOKEN_ENV: str = "SCW_CONTAINER_TOKEN"

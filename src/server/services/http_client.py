@@ -183,6 +183,13 @@ class HTTPClient:
             return response.json()
 
         except requests.exceptions.RequestException as e:
+            # Surface the remote status/body on failure (mirrors post()). Without
+            # this the binary obstruction path fails as an opaque ServiceResponseError
+            # with no clue whether it was a 502/503 under load, a timeout, or a real
+            # remote traceback.
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text[:500]}")
             self._handle_request_error(e, url)
 
     def post_binary(

@@ -1,14 +1,15 @@
-"""Unit tests for URL-driven outbound auth (Modal proxy-auth)."""
+"""Unit tests for URL-driven outbound auth (Modal proxy-auth, Scaleway token)."""
 
 import pytest
 
-from src.server.constants import ModalBackend
-from src.server.enums import ServiceBackend, ModalAuthHeader
-from src.server.exceptions import ModalCredentialsError
+from src.server.constants import ModalBackend, ScalewayBackend
+from src.server.enums import ServiceBackend, ModalAuthHeader, ScalewayAuthHeader
+from src.server.exceptions import ModalCredentialsError, ScalewayCredentialsError
 from src.server.services.remote.outbound_auth import (
     BackendResolver,
     NoOutboundAuth,
     ModalProxyAuth,
+    ScalewayTokenAuth,
     BackendAuthMap,
 )
 
@@ -31,6 +32,14 @@ class TestBackendResolver:
     ])
     def test_non_modal_hosts_resolve_to_container(self, url):
         assert BackendResolver.resolve(url) == ServiceBackend.CONTAINER
+
+    @pytest.mark.parametrize("url", [
+        "https://obstruction-abc.functions.fnc.fr-par.scw.cloud",
+        "https://obstruction-abc.functions.fnc.fr-par.scw.cloud/obstruction_parallel_bin",
+        "http://X.SCW.CLOUD/spec",
+    ])
+    def test_scaleway_hosts_resolve_to_scaleway(self, url):
+        assert BackendResolver.resolve(url) == ServiceBackend.SCALEWAY
 
 
 class TestModalProxyAuth:
@@ -60,6 +69,20 @@ class TestModalProxyAuth:
         assert exc.value.missing == [ModalBackend.SECRET_ENV]
 
 
+class TestScalewayTokenAuth:
+
+    def test_headers_returns_token_header(self, monkeypatch):
+        monkeypatch.setenv(ScalewayBackend.TOKEN_ENV, "tok-abc")
+        headers = ScalewayTokenAuth().headers()
+        assert headers == {ScalewayAuthHeader.TOKEN.value: "tok-abc"}
+
+    def test_missing_token_raises(self, monkeypatch):
+        monkeypatch.delenv(ScalewayBackend.TOKEN_ENV, raising=False)
+        with pytest.raises(ScalewayCredentialsError) as exc:
+            ScalewayTokenAuth().headers()
+        assert exc.value.missing == [ScalewayBackend.TOKEN_ENV]
+
+
 class TestNoOutboundAuth:
 
     def test_returns_empty(self):
@@ -73,3 +96,6 @@ class TestBackendAuthMap:
 
     def test_modal_maps_to_modal_proxy_auth(self):
         assert isinstance(BackendAuthMap.get(ServiceBackend.MODAL), ModalProxyAuth)
+
+    def test_scaleway_maps_to_scaleway_token_auth(self):
+        assert isinstance(BackendAuthMap.get(ServiceBackend.SCALEWAY), ScalewayTokenAuth)

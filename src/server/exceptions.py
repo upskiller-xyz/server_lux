@@ -96,6 +96,25 @@ class ModalCredentialsError(ServiceException):
         return f"Modal credentials missing: {', '.join(self.missing)}"
 
 
+class ScalewayCredentialsError(ServiceException):
+    """Exception raised when a service URL is a private Scaleway serverless
+    endpoint but the auth token (SCW_CONTAINER_TOKEN) is not configured."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = missing
+
+        message = (
+            "Scaleway serverless auth token missing: "
+            f"{', '.join(missing)}. Set this environment variable to call a "
+            "private Scaleway serverless service."
+        )
+        super().__init__(message)
+
+    def get_log_message(self) -> str:
+        """Get concise log message for missing Scaleway credentials"""
+        return f"Scaleway credentials missing: {', '.join(self.missing)}"
+
+
 class MergeValidationError(ServiceException):
     """Exception raised when the per-window data assembled for the merge step is
     inconsistent (e.g. a window is missing its simulation, or a mask has an

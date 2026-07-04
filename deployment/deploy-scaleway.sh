@@ -57,10 +57,11 @@ else
   echo -e "${YELLOW}Inference: MODEL_SERVICE_URL is not a *.modal.run URL — no proxy-auth will be attached.${NC}"
 fi
 
-# ── 2. Clone/update the CPU microservices (no server_model — that's on Modal) ─
+# ── 2. Clone/update the CPU microservices ────────────────────────────────────
+# Not server_model (that's on Modal) and not server_obstruction (that's an
+# off-box Scaleway Serverless Container — see deploy-obstruction-scaleway.sh).
 mkdir -p services
 declare -a REPOS=(
-  "server_obstruction:https://github.com/upskiller-xyz/server_obstruction.git"
   "server_encoder:https://github.com/upskiller-xyz/server_encoder.git"
   "server_merger:https://github.com/upskiller-xyz/server_merger.git"
   "server_stats:https://github.com/upskiller-xyz/server_stats.git"
