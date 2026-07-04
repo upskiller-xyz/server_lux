@@ -57,8 +57,8 @@ services:
       # Internal service URLs (docker DNS names on lux-network)
       - ENCODER_SERVICE_URL=http://encoder-service:8082
       # Obstruction runs off-box as a private Scaleway Serverless Container (bursty
-      # CPU-bound load — deploy with deployment/deploy-obstruction-scaleway.sh). The
-      # *.scw.cloud host is auto-detected and X-Auth-Token is attached from
+      # CPU-bound load — deployed separately from this stack, see server_obstruction).
+      # The *.scw.cloud host is auto-detected and X-Auth-Token is attached from
       # SCW_CONTAINER_TOKEN. Keep OBSTRUCTION_MAX_CONCURRENCY == the container's max-scale.
       - OBSTRUCTION_SERVICE_URL=${OBSTRUCTION_SERVICE_URL}
       - SCW_CONTAINER_TOKEN=${SCW_CONTAINER_TOKEN}

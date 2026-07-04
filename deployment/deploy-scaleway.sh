@@ -59,7 +59,7 @@ fi
 
 # ── 2. Clone/update the CPU microservices ────────────────────────────────────
 # Not server_model (that's on Modal) and not server_obstruction (that's an
-# off-box Scaleway Serverless Container — see deploy-obstruction-scaleway.sh).
+# off-box Scaleway Serverless Container, deployed from the server_obstruction repo).
 mkdir -p services
 declare -a REPOS=(
   "server_encoder:https://github.com/upskiller-xyz/server_encoder.git"
