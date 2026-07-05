@@ -59,9 +59,10 @@ services:
       # Obstruction runs off-box as a private Scaleway Serverless Container (bursty
       # CPU-bound load — deployed separately from this stack, see server_obstruction).
       # The *.scw.cloud host is auto-detected and X-Auth-Token is attached from
-      # SCW_CONTAINER_TOKEN. Keep OBSTRUCTION_MAX_CONCURRENCY == the container's max-scale.
+      # the per-service token OBSTRUCTION_TOKEN. Keep OBSTRUCTION_MAX_CONCURRENCY
+      # == the container's max-scale.
       - OBSTRUCTION_SERVICE_URL=${OBSTRUCTION_SERVICE_URL}
-      - SCW_CONTAINER_TOKEN=${SCW_CONTAINER_TOKEN}
+      - OBSTRUCTION_TOKEN=${OBSTRUCTION_TOKEN}
       - OBSTRUCTION_MAX_CONCURRENCY=${OBSTRUCTION_MAX_CONCURRENCY:-10}
       - MERGER_SERVICE_URL=http://merger-service:8084
       - STATS_SERVICE_URL=http://stats-service:8085
