@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, Dict, List
 import asyncio
 
 from src.server.services.helpers.parallel import ParallelRequest
@@ -53,12 +53,35 @@ class ParallelServiceExecutor(ServiceExecutor):
         if results and isinstance(results[0], bytes):
             return results[0]
 
-        response = {}
+        # Each parallel task returns one window's slice, either as a plain dict or a
+        # response object (services are inconsistent — DirectionAngle returns a dict,
+        # ReferencePoint/ExternalReferencePoint return objects). Normalize to a dict,
+        # then DEEP-merge: window slices share the same top-level key
+        # (e.g. ``external_reference_point``), so a shallow update would drop every
+        # window but the last — which left obstruction with no reference points and
+        # thus no requests to run.
+        response: Dict[str, Any] = {}
         for single_response in results:
-            if isinstance(single_response, dict):
-                response.update(single_response)
+            part = single_response.to_dict if hasattr(single_response, "to_dict") else single_response
+            if isinstance(part, dict):
+                self._merge(response, part)
 
         return response
+
+    @staticmethod
+    def _merge(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+        """Merge ``source`` into ``target``, combining nested per-window dicts.
+
+        Window entries live one level down under a shared key, so when both sides
+        hold a dict for the same key their entries are combined rather than the
+        whole nested dict being overwritten.
+        """
+        for key, value in source.items():
+            existing = target.get(key)
+            if isinstance(existing, dict) and isinstance(value, dict):
+                existing.update(value)
+            else:
+                target[key] = value
 
 
 class ExecutorFactory:
