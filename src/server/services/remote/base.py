@@ -51,14 +51,17 @@ class RemoteService:
 
     @classmethod
     def _auth_headers(cls, url: str) -> Dict[str, str]:
-        """Resolve outbound auth headers for a service URL.
+        """Resolve outbound auth headers for a service call.
 
-        Modal-hosted endpoints (``*.modal.run``) get proxy-auth headers; container
-        endpoints get none. Driven entirely by the URL, so pointing a service's URL
-        at Modal is the only change required to authenticate against it.
+        The hosting backend is selected from the URL: Modal-hosted endpoints
+        (``*.modal.run``) get proxy-auth headers, private Scaleway serverless
+        endpoints (``*.scw.cloud``) get an ``X-Auth-Token``, plain container
+        endpoints get none. The service (``cls.name``) is passed on too, since a
+        backend may resolve per-service credentials (Scaleway reads a per-service
+        token env var); the URL selects the backend, the service selects the token.
         """
         backend = BackendResolver.resolve(url)
-        return BackendAuthMap.get(backend).headers()
+        return BackendAuthMap.get(backend).headers(cls.name)
 
 
     @classmethod

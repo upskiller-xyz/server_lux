@@ -71,8 +71,19 @@ class ScalewayBackend:
     A remote service is treated as Scaleway-hosted when its URL host ends with
     ``HOST_SUFFIX``. All Scaleway serverless container/function endpoints live
     under ``*.scw.cloud`` regardless of region, so the single suffix covers every
-    region. A private endpoint requires a token read from ``TOKEN_ENV``, sent in
-    the Scaleway auth header.
+    region. A private endpoint requires a token sent in the Scaleway auth header;
+    the token is read from a per-service environment variable so each Scaleway
+    container can carry its own credential (e.g. ``OBSTRUCTION_TOKEN``).
     """
     HOST_SUFFIX: str = ".scw.cloud"
-    TOKEN_ENV: str = "SCW_CONTAINER_TOKEN"
+    TOKEN_ENV_SUFFIX: str = "_TOKEN"
+
+    @staticmethod
+    def token_env(service_name: str) -> str:
+        """Env var holding a service's Scaleway token, e.g. ``OBSTRUCTION_TOKEN``.
+
+        Keyed by service so distinct Scaleway containers can each hold their own
+        token; takes the service name value (a str) rather than the enum to keep
+        this constants module free of enum imports and dependency-light.
+        """
+        return f"{service_name.upper()}{ScalewayBackend.TOKEN_ENV_SUFFIX}"
