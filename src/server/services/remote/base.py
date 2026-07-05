@@ -58,7 +58,7 @@ class RemoteService:
         at Modal is the only change required to authenticate against it.
         """
         backend = BackendResolver.resolve(url)
-        return BackendAuthMap.get(backend).headers()
+        return BackendAuthMap.get(backend).headers(cls.name)
 
 
     @classmethod

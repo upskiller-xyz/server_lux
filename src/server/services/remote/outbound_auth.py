@@ -12,7 +12,7 @@ from typing import Dict
 from urllib.parse import urlparse
 import os
 
-from ...enums import ServiceBackend, ModalAuthHeader, ScalewayAuthHeader
+from ...enums import ServiceBackend, ServiceName, ModalAuthHeader, ScalewayAuthHeader
 from ...constants import ModalBackend, ScalewayBackend
 from ...exceptions import ModalCredentialsError, ScalewayCredentialsError
 from ...maps import StandardMap
@@ -35,15 +35,20 @@ class OutboundAuthStrategy(ABC):
     """Produces the auth headers to attach to an outgoing remote service call."""
 
     @abstractmethod
-    def headers(self) -> Dict[str, str]:
-        """Return auth headers for the request (empty if none required)."""
+    def headers(self, service: ServiceName) -> Dict[str, str]:
+        """Return auth headers for a call to ``service`` (empty if none required).
+
+        The service is passed so a strategy can resolve per-service credentials
+        (e.g. a distinct Scaleway token per container); strategies that need no
+        such distinction simply ignore it.
+        """
         pass
 
 
 class NoOutboundAuth(OutboundAuthStrategy):
     """No outbound authentication (container/Cloud Run endpoints)."""
 
-    def headers(self) -> Dict[str, str]:
+    def headers(self, service: ServiceName) -> Dict[str, str]:
         return {}
 
 
@@ -55,7 +60,7 @@ class ModalProxyAuth(OutboundAuthStrategy):
     before the request is made rather than surfacing as a remote 401.
     """
 
-    def headers(self) -> Dict[str, str]:
+    def headers(self, service: ServiceName) -> Dict[str, str]:
         key = os.getenv(ModalBackend.KEY_ENV)
         secret = os.getenv(ModalBackend.SECRET_ENV)
 
@@ -75,15 +80,17 @@ class ModalProxyAuth(OutboundAuthStrategy):
 class ScalewayTokenAuth(OutboundAuthStrategy):
     """Scaleway serverless token auth: sends the invocation token in ``X-Auth-Token``.
 
-    The token is read from the environment (SCW_CONTAINER_TOKEN). Raises
-    :class:`ScalewayCredentialsError` when missing so the failure is clear before
-    the request is made rather than surfacing as a remote 401/403.
+    The token is read from a per-service environment variable (e.g.
+    ``OBSTRUCTION_TOKEN``) so each Scaleway container can carry its own credential.
+    Raises :class:`ScalewayCredentialsError` when missing so the failure is clear
+    before the request is made rather than surfacing as a remote 401/403.
     """
 
-    def headers(self) -> Dict[str, str]:
-        token = os.getenv(ScalewayBackend.TOKEN_ENV)
+    def headers(self, service: ServiceName) -> Dict[str, str]:
+        env_key = ScalewayBackend.token_env(service.value)
+        token = os.getenv(env_key)
         if not token:
-            raise ScalewayCredentialsError([ScalewayBackend.TOKEN_ENV])
+            raise ScalewayCredentialsError([env_key])
         return {ScalewayAuthHeader.TOKEN.value: token}
 
 

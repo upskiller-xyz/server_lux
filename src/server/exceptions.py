@@ -98,7 +98,8 @@ class ModalCredentialsError(ServiceException):
 
 class ScalewayCredentialsError(ServiceException):
     """Exception raised when a service URL is a private Scaleway serverless
-    endpoint but the auth token (SCW_CONTAINER_TOKEN) is not configured."""
+    endpoint but its per-service auth token (e.g. OBSTRUCTION_TOKEN) is not
+    configured."""
 
     def __init__(self, missing: list[str]):
         self.missing = missing

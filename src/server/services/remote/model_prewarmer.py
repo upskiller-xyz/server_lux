@@ -53,7 +53,7 @@ class ModelPrewarmer:
     @classmethod
     def _ping(cls, warm_url: str) -> None:
         try:
-            headers = BackendAuthMap.get(ServiceBackend.MODAL).headers()
+            headers = BackendAuthMap.get(ServiceBackend.MODAL).headers(ServiceName.MODEL)
             requests.get(warm_url, headers=headers, timeout=cls._TIMEOUT)
             logger.debug(f"Prewarm ping sent to {warm_url}")
         except Exception as e:  # best-effort — swallow everything (incl. missing creds)
