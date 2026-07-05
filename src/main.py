@@ -33,13 +33,16 @@ from src.__version__ import version
 
 import logging
 
+# Log level is env-driven (LOG_LEVEL, default INFO) so DEBUG can be toggled on the
+# VM via .env without a code change. Unknown values fall back to INFO.
+_log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
+    level=_log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("logger")
-logger.setLevel(logging.INFO)
+logger.setLevel(_log_level)
 
 
 class ServiceRegistry:

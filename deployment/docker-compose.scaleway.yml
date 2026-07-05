@@ -51,6 +51,7 @@ services:
     environment:
       - PORT=8080
       - DEPLOYMENT_MODE=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - WORKERS=${LUX_WORKERS:-2}
       - THREADS=${LUX_THREADS:-8}
       - FLASK_ENV=production
