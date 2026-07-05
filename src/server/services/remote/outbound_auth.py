@@ -48,7 +48,7 @@ class OutboundAuthStrategy(ABC):
 class NoOutboundAuth(OutboundAuthStrategy):
     """No outbound authentication (container/Cloud Run endpoints)."""
 
-    def headers(self, service: ServiceName) -> Dict[str, str]:
+    def headers(self, _service: ServiceName) -> Dict[str, str]:
         return {}
 
 
@@ -60,7 +60,7 @@ class ModalProxyAuth(OutboundAuthStrategy):
     before the request is made rather than surfacing as a remote 401.
     """
 
-    def headers(self, service: ServiceName) -> Dict[str, str]:
+    def headers(self, _service: ServiceName) -> Dict[str, str]:
         key = os.getenv(ModalBackend.KEY_ENV)
         secret = os.getenv(ModalBackend.SECRET_ENV)
 

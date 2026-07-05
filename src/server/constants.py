@@ -83,7 +83,7 @@ class ScalewayBackend:
         """Env var holding a service's Scaleway token, e.g. ``OBSTRUCTION_TOKEN``.
 
         Keyed by service so distinct Scaleway containers can each hold their own
-        token; takes the service name value (not the enum) to avoid importing
-        :class:`ServiceName` here and creating a constants/enums import cycle.
+        token; takes the service name value (a str) rather than the enum to keep
+        this constants module free of enum imports and dependency-light.
         """
         return f"{service_name.upper()}{ScalewayBackend.TOKEN_ENV_SUFFIX}"
