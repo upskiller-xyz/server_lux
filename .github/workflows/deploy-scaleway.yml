@@ -9,11 +9,13 @@ name: Deploy to Scaleway
 #
 # Required GitHub configuration (Settings → Secrets and variables → Actions):
 #   Secrets:   MODAL_KEY, MODAL_SECRET, SCALEWAY_SSH_KEY (private key authorized
-#              on the instance). Optional: API_TOKEN (only when AUTH_TYPE=token);
-#              SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private bucket/registry
-#              workflow — the default compose stack does not use them).
+#              on the instance), OBSTRUCTION_TOKEN (invocation token for the private
+#              obstruction Scaleway container). Optional: API_TOKEN (only when
+#              AUTH_TYPE=token); SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private
+#              bucket/registry workflow — the default compose stack does not use them).
 #   Variables: SCALEWAY_HOST, SCALEWAY_USER, DEPLOY_PATH (server_lux checkout on
-#              the box), MODEL_SERVICE_URL. Optional: DEPLOY_REF (default master),
+#              the box), MODEL_SERVICE_URL, OBSTRUCTION_SERVICE_URL (public
+#              *.scw.cloud endpoint). Optional: DEPLOY_REF (default master),
 #              AUTH_TYPE (default none), AUTH0_DOMAIN + AUTH0_AUDIENCE (required
 #              when AUTH_TYPE=auth0; public identifiers, not secrets),
 #              SSH_KNOWN_HOSTS (pinned host key — falls back to a live, MITM-able
@@ -72,6 +74,10 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          # Off-box obstruction on a private Scaleway container: the URL is a public
+          # identifier (Variable), the invocation token is a per-service Secret.
+          OBSTRUCTION_SERVICE_URL: ${{ vars.OBSTRUCTION_SERVICE_URL }}
+          OBSTRUCTION_TOKEN: ${{ secrets.OBSTRUCTION_TOKEN }}
         run: |
           umask 077
           # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
@@ -106,7 +112,9 @@ jobs:
             "MODAL_SECRET=$MODAL_SECRET" \
             "API_TOKEN=$API_TOKEN" \
             "SCW_ACCESS_KEY=$SCW_ACCESS_KEY" \
-            "SCW_SECRET_KEY=$SCW_SECRET_KEY"; do
+            "SCW_SECRET_KEY=$SCW_SECRET_KEY" \
+            "OBSTRUCTION_SERVICE_URL=$OBSTRUCTION_SERVICE_URL" \
+            "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN"; do
             [ -n "${kv#*=}" ] && printf '%s\n' "$kv" >> .env.runtime
           done
 
