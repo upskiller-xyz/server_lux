@@ -13,14 +13,16 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade build tooling first so the image does not ship the vulnerable
-# versions bundled in the base image (pip / setuptools / wheel CVEs)
-RUN pip install --no-cache-dir --upgrade "pip>=25.3" "setuptools>=78.1.1" "wheel>=0.46.1" \
-    # Remove old bundled/cached wheels the base image ships (ensurepip stashes
-    # vulnerable pip/setuptools/wheel .whl files that scanners still flag)
-    && find / -type d -name "_bundled" -path "*ensurepip*" -exec rm -rf {} + 2>/dev/null || true \
-    && find / -type f -name "*.whl" -delete 2>/dev/null || true \
-    && rm -rf /root/.cache/pip
+# Upgrade build tooling (fixes pip / setuptools / wheel CVEs), then purge the old
+# bundled/cached wheels the base image ships (ensurepip stashes vulnerable
+# pip/setuptools/wheel .whl files that scanners still flag even after an upgrade).
+# The upgrade stays &&-gated so a failed upgrade fails the build; the cleanup runs
+# in a best-effort block so every step runs regardless of the others' exit codes.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && { \
+        find /usr/local/lib -type d -name "_bundled" -path "*ensurepip*" -exec rm -rf {} + 2>/dev/null || true; \
+        rm -rf /root/.cache/pip; \
+    }
 
 # Copy requirements.txt
 COPY requirements.txt .
