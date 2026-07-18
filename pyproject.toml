@@ -6,7 +6,9 @@ authors = ["stasja fedorova <stasja.fedorova@upskiller.xyz>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.13"
+# Matches the Dockerfile base image (python:3.12-slim). Do not bump to 3.13
+# without dropping the numpy<2.0 pin below — numpy 1.x ships no cp313 wheels.
+python = ">=3.12,<3.13"
 
 setuptools = ">=81.0.0,<84.0.0"
 
