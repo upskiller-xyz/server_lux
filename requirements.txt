@@ -17,9 +17,12 @@ aiohttp>=3.9.0,<4.0.0
 python-jose[cryptography]>=3.3.0,<4.0.0
 
 # Utilities & Logging
-# setuptools >=78.1.1 fixes CVE-2024-6345 / CVE-2025-47273 (not imported at
-# runtime, but kept installed so the image does not ship a vulnerable version)
-setuptools>=78.1.1,<82.0.0
+# setuptools: >=78.1.1 fixes CVE-2024-6345 / CVE-2025-47273; >=81.0.0 is the
+# first release whose vendored build deps are patched too — it bundles
+# jaraco.context 6.1 (CVE-2026-23949) and wheel 0.46.3 (CVE-2026-24049) under
+# setuptools/_vendor/, which scanners flag on older setuptools. Not imported at
+# runtime, but kept installed so the image ships no vulnerable (vendored) copy.
+setuptools>=81.0.0,<84.0.0
 python-dotenv>=1.0.0,<2.0.0
 
 # Computer Vision & Scientific Computing
