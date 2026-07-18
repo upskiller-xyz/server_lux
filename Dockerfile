@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" "setuptools==${SE
     && { \
         find /usr/local/lib -type d -name "_bundled" -path "*ensurepip*" -exec rm -rf {} + 2>/dev/null; \
         rm -rf /root/.cache/pip; \
+        true; \
     }
 
 # Copy requirements.txt
