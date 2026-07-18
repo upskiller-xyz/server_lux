@@ -19,7 +19,7 @@ python-jose[cryptography]>=3.3.0,<4.0.0
 # Utilities & Logging
 # setuptools >=78.1.1 fixes CVE-2024-6345 / CVE-2025-47273 (not imported at
 # runtime, but kept installed so the image does not ship a vulnerable version)
-setuptools>=78.1.1
+setuptools>=78.1.1,<82.0.0
 python-dotenv>=1.0.0,<2.0.0
 
 # Computer Vision & Scientific Computing
