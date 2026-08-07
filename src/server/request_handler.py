@@ -210,6 +210,9 @@ class EndpointRequestHandler:
                 user_sub=ctx.user_sub,
                 session_id=ctx.session_id,
                 project_id=ctx.project_id,
+                client_name=ctx.client_name,
+                client_version=ctx.client_version,
+                host_version=ctx.host_version,
             )
         except Exception as e:
             logger.warning(f"telemetry.report failed: {e}")

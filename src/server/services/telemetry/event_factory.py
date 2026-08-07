@@ -23,6 +23,9 @@ class TelemetryEventFactory:
         user_sub: Optional[str] = None,
         project_id: Optional[str] = None,
         identity_mode: Optional[IdentityMode] = None,
+        client_name: Optional[str] = None,
+        client_version: Optional[str] = None,
+        host_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             TelemetryField.REQUEST_ID.value: uuid.uuid4().hex,
@@ -39,6 +42,12 @@ class TelemetryEventFactory:
             payload[TelemetryField.PROJECT_ID.value] = project_id
         if identity_mode is not None:
             payload[TelemetryField.IDENTITY_MODE.value] = identity_mode.value
+        if client_name:
+            payload[TelemetryField.CLIENT_NAME.value] = client_name
+        if client_version:
+            payload[TelemetryField.CLIENT_VERSION.value] = client_version
+        if host_version:
+            payload[TelemetryField.HOST_VERSION.value] = host_version
         return payload
 
     @staticmethod

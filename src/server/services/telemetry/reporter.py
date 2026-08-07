@@ -34,6 +34,9 @@ class TelemetryReporter:
         user_sub: Optional[str] = None,
         session_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        client_name: Optional[str] = None,
+        client_version: Optional[str] = None,
+        host_version: Optional[str] = None,
     ) -> None:
         if not self._config.enabled:
             return
@@ -45,6 +48,9 @@ class TelemetryReporter:
             user_sub=user_sub,
             project_id=project_id,
             identity_mode=self._config.identity_mode,
+            client_name=client_name,
+            client_version=client_version,
+            host_version=host_version,
         )
         self._emitter.emit(payload, session_id=session_id)
 
