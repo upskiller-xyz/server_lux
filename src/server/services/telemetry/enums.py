@@ -15,6 +15,9 @@ class TelemetryField(ExtendedEnumMixin, Enum):
     USER_SUB = "user_sub"
     IDENTITY_MODE = "identity_mode"
     PROJECT_ID = "project_id"
+    CLIENT_NAME = "client_name"
+    CLIENT_VERSION = "client_version"
+    HOST_VERSION = "host_version"
 
 
 class IdentityMode(ExtendedEnumMixin, Enum):
@@ -29,6 +32,9 @@ class TelemetryHeader(ExtendedEnumMixin, Enum):
 
     SESSION_ID = "X-Session-Id"
     PROJECT_ID = "X-Project-Id"
+    CLIENT_NAME = "X-Client-Name"
+    CLIENT_VERSION = "X-Client-Version"
+    HOST_VERSION = "X-Host-Version"
 
 
 class TelemetryLogKey(ExtendedEnumMixin, Enum):

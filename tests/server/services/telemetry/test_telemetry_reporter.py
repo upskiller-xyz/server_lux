@@ -30,6 +30,26 @@ def test_enabled_emits_built_payload():
     assert kwargs["session_id"] == "s1"
 
 
+def test_client_identity_forwarded_to_factory():
+    emitter = Mock()
+    _reporter(emitter=emitter).report(
+        "run", 10, True, client_name="revit", client_version="0.3.0", host_version="2024.2"
+    )
+    payload = emitter.emit.call_args.args[0]
+    assert payload[TelemetryField.CLIENT_NAME.value] == "revit"
+    assert payload[TelemetryField.CLIENT_VERSION.value] == "0.3.0"
+    assert payload[TelemetryField.HOST_VERSION.value] == "2024.2"
+
+
+def test_client_identity_omitted_when_absent():
+    emitter = Mock()
+    _reporter(emitter=emitter).report("run", 10, True)
+    payload = emitter.emit.call_args.args[0]
+    assert TelemetryField.CLIENT_NAME.value not in payload
+    assert TelemetryField.CLIENT_VERSION.value not in payload
+    assert TelemetryField.HOST_VERSION.value not in payload
+
+
 def test_identity_mode_from_config_applied():
     emitter = Mock()
     _reporter(identity_mode=IdentityMode.IDENTIFIED, emitter=emitter).report("run", 10, True)

@@ -33,7 +33,9 @@ def test_request_ids_are_unique():
 def test_optional_fields_omitted_when_absent():
     event = _create()
     for field in (TelemetryField.ERROR_CODE, TelemetryField.USER_SUB,
-                  TelemetryField.PROJECT_ID, TelemetryField.IDENTITY_MODE):
+                  TelemetryField.PROJECT_ID, TelemetryField.IDENTITY_MODE,
+                  TelemetryField.CLIENT_NAME, TelemetryField.CLIENT_VERSION,
+                  TelemetryField.HOST_VERSION):
         assert field.value not in event
 
 
@@ -47,3 +49,18 @@ def test_identity_and_identifiers_included():
     assert event[TelemetryField.USER_SUB.value] == "auth0|abc"
     assert event[TelemetryField.PROJECT_ID.value] == "proj-X"
     assert event[TelemetryField.IDENTITY_MODE.value] == "identified"
+
+
+def test_client_identity_included():
+    event = _create(client_name="revit", client_version="0.3.0", host_version="2024.2")
+    assert event[TelemetryField.CLIENT_NAME.value] == "revit"
+    assert event[TelemetryField.CLIENT_VERSION.value] == "0.3.0"
+    assert event[TelemetryField.HOST_VERSION.value] == "2024.2"
+
+
+def test_client_identity_fields_are_independent():
+    """A client that sends only its name must not produce empty version fields."""
+    event = _create(client_name="web")
+    assert event[TelemetryField.CLIENT_NAME.value] == "web"
+    assert TelemetryField.CLIENT_VERSION.value not in event
+    assert TelemetryField.HOST_VERSION.value not in event
