@@ -21,6 +21,7 @@ class ErrorTypeMessageMap(StandardMap):
         ErrorType.INVALID_JWT: ErrorMessage.INVALID_JWT.value,
         ErrorType.EXPIRED_JWT: ErrorMessage.EXPIRED_JWT.value,
         ErrorType.INSUFFICIENT_PERMISSIONS: ErrorMessage.INSUFFICIENT_PERMISSIONS.value,
+        ErrorType.RATE_LIMIT_EXCEEDED: ErrorMessage.RATE_LIMIT_EXCEEDED.value,
         ErrorType.MISSING_JSON: ErrorMessage.MISSING_JSON.value,
         ErrorType.MISSING_FILE: ErrorMessage.MISSING_FILE.value,
     }
@@ -35,6 +36,7 @@ class ErrorTypeStatusMap(StandardMap):
         ErrorType.INVALID_JWT: HTTPStatus.FORBIDDEN.value,
         ErrorType.EXPIRED_JWT: HTTPStatus.FORBIDDEN.value,
         ErrorType.INSUFFICIENT_PERMISSIONS: HTTPStatus.FORBIDDEN.value,
+        ErrorType.RATE_LIMIT_EXCEEDED: HTTPStatus.TOO_MANY_REQUESTS.value,
         ErrorType.MISSING_JSON: HTTPStatus.BAD_REQUEST.value,
         ErrorType.MISSING_FILE: HTTPStatus.BAD_REQUEST.value,
         ErrorType.VALIDATION_ERROR: HTTPStatus.BAD_REQUEST.value,

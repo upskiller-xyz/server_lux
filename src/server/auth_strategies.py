@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Any, Optional
 from functools import wraps
-from flask import request
+from flask import request, g, has_app_context
 import requests
 from jose import jwt, JWTError
 from .enums import ErrorType, AuthType
@@ -184,6 +184,14 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
                 audience=self._config.audience,
                 issuer=self._config.issuer
             )
+
+            # Expose the subject + authorized-party (client id) so downstream
+            # concerns (per-user rate limiting, per-app policy) can key on the
+            # authenticated identity/app without re-parsing. Guarded: validation
+            # must not depend on a Flask app context existing.
+            if has_app_context():
+                g.auth_subject = payload.get("sub")
+                g.auth_client_id = payload.get("azp")
 
             # Token is valid
             return True, None

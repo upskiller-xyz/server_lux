@@ -16,6 +16,10 @@ aiohttp>=3.9.0,<4.0.0
 # Authentication & Security
 python-jose[cryptography]>=3.3.0,<4.0.0
 
+# Rate limiting — shared rolling-window quota counter (Redis).
+# Only imported when RATE_LIMIT_ENABLED=true and a REDIS_URL is configured.
+redis>=5.0.0,<6.0.0
+
 # Utilities & Logging
 # setuptools: >=78.1.1 fixes CVE-2024-6345 / CVE-2025-47273; >=81.0.0 is the
 # first release whose vendored build deps are patched too — it bundles
@@ -28,6 +32,8 @@ python-dotenv>=1.0.0,<2.0.0
 # Computer Vision & Scientific Computing
 opencv-python>=4.8.0,<5.0.0
 numpy>=1.24.0,<2.0.0
+# Pillow: PIL.Image is imported by src/server/services/remote/image_converters.py
+pillow>=10.0.0,<12.0.0
 
 # Production Server (optional for Docker deployment)
 gunicorn>=21.0.0,<23.0.0
