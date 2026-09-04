@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional
 import logging
-logger = logging.getLogger("logger")
 
-# from src.server.interfaces import IServerController
 from src.server.enums import ResponseKey, ServerStatus
+
+logger = logging.getLogger("logger")
 
 
 class ServerController:

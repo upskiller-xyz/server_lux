@@ -10,14 +10,14 @@ import orjson
 
 from src.server.services.helpers.parallel import ParallelRequest
 from src.server.services.remote.contracts.obstruction_contracts import ObstructionResponse
-logger = logging.getLogger("logger")
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
-# from .contracts import ObstructionResponse
 from ...constants import ObstructionConcurrency
 from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus, HTTPStatus
 from ...exceptions import ServiceResponseError
 from .base import RemoteService
 from ...services.obstruction.calculator_interface import IObstructionCalculator
+
+logger = logging.getLogger("logger")
 
 
 def _resolve_obstruction_concurrency() -> int:

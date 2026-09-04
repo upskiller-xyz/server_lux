@@ -66,6 +66,11 @@ class HTTPHeader(Enum):
     CONTENT_TYPE = "Content-Type"
     AUTHORIZATION = "Authorization"
     ACCEPT = "Accept"
+    # Caller-identity headers (telemetry): who's calling, which plugin build,
+    # and which host application it's embedded in.
+    CLIENT_NAME = "X-Client-Name"
+    CLIENT_VERSION = "X-Client-Version"
+    HOST_VERSION = "X-Host-Version"
 
 
 class HTTPContentType(Enum):

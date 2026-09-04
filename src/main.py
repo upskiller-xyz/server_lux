@@ -21,6 +21,7 @@ from flasgger import Swagger
 
 from src.server.auth import Authenticator
 from src.server.rate_limiter import RateLimiter
+from src.server.telemetry import TelemetryMiddleware
 from src.server.enums import ServiceName, EndpointType, AuthType
 from src.server.controllers.base_controller import ServerController
 from src.server.services.remote import (
@@ -70,6 +71,7 @@ class ServerApplication:
 
         self._initialize_components()
         self._setup_routes()
+        TelemetryMiddleware().register(self._app)
 
     def _initialize_components(self) -> None:
         """Initialize all application components"""
