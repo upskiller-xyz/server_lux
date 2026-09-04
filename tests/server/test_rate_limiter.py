@@ -172,6 +172,32 @@ def test_falls_back_to_ip_without_subject():
     assert second.status_code == HTTPStatus.TOO_MANY_REQUESTS.value
 
 
+def test_x_forwarded_for_ignored_without_trusted_proxy_config():
+    # trusted_proxy_hops=0 (default) ⇒ the header is untrusted/spoofable, so the
+    # socket's remote_addr is used regardless of what the caller sends.
+    resolver = RequestIdentityResolver()
+    app = Flask(__name__)
+    with app.test_request_context(
+        "/",
+        environ_overrides={"REMOTE_ADDR": "9.9.9.9"},
+        headers={"X-Forwarded-For": "1.2.3.4"},
+    ):
+        assert resolver.resolve() == "ip:9.9.9.9"
+
+
+def test_x_forwarded_for_trusted_up_to_configured_hop_count():
+    # One trusted proxy in front ⇒ read the rightmost hop it appended, ignoring
+    # anything a client prepended earlier in the chain.
+    resolver = RequestIdentityResolver(trusted_proxy_hops=1)
+    app = Flask(__name__)
+    with app.test_request_context(
+        "/",
+        environ_overrides={"REMOTE_ADDR": "10.0.0.1"},
+        headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8"},
+    ):
+        assert resolver.resolve() == "ip:5.6.7.8"
+
+
 def test_identity_prefers_subject_over_ip():
     resolver = RequestIdentityResolver()
     app = Flask(__name__)
@@ -181,7 +207,8 @@ def test_identity_prefers_subject_over_ip():
 
 
 def test_window_resets_after_ttl_elapses():
-    # A 1-second window: after it elapses, the count starts over.
+    # An immediate (0-second) window resets on the next hit; a live 1-hour
+    # window keeps counting.
     store = _store()
     config = RateLimitConfig(enabled=True, limit=1, redis_url=None, key_prefix="test:quota", window_hours=1)
     # Drive the store directly with a tiny window_seconds to avoid sleeping.

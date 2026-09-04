@@ -4,12 +4,12 @@ from typing import Any, Callable, Optional
 
 from flask import g, jsonify, make_response, request
 
-logger = logging.getLogger("logger")
-
 from .enums import ErrorType, ResponseKey
 from .rate_limit_config import RateLimitConfig
 from .rate_limit_store import QuotaState, RateLimitStore, RateLimitStoreFactory
 from .response_builder import ErrorResponseBuilder
+
+logger = logging.getLogger("logger")
 
 # flask.g attributes the authenticator sets from the validated token.
 AUTH_SUBJECT_KEY = "auth_subject"
@@ -34,6 +34,11 @@ class RequestIdentityResolver:
     present (e.g. token auth), so a quota still applies.
     """
 
+    def __init__(self, trusted_proxy_hops: int = 0):
+        # X-Forwarded-For is client-spoofable unless a trusted reverse proxy
+        # appends to it; only read the hop a trusted proxy actually wrote.
+        self._trusted_proxy_hops = trusted_proxy_hops
+
     def resolve(self) -> str:
         subject = getattr(g, AUTH_SUBJECT_KEY, None)
         if subject:
@@ -41,9 +46,11 @@ class RequestIdentityResolver:
         return f"ip:{self._client_ip()}"
 
     def _client_ip(self) -> str:
-        forwarded = request.headers.get("X-Forwarded-For", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        if self._trusted_proxy_hops > 0:
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+            if len(hops) >= self._trusted_proxy_hops:
+                return hops[-self._trusted_proxy_hops]
         return request.remote_addr or "unknown"
 
 
@@ -63,7 +70,7 @@ class RateLimiter:
     ):
         self._config = config
         self._store = store
-        self._identity = identity_resolver or RequestIdentityResolver()
+        self._identity = identity_resolver or RequestIdentityResolver(config.trusted_proxy_hops)
         self._error_builder = ErrorResponseBuilder()
 
     @classmethod

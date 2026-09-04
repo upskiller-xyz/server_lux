@@ -177,7 +177,7 @@ class ErrorMessage(Enum):
     INVALID_JWT = "Invalid JWT token"
     EXPIRED_JWT = "JWT token has expired"
     INSUFFICIENT_PERMISSIONS = "Insufficient permissions"
-    RATE_LIMIT_EXCEEDED = "Daily request limit reached. Try again after the reset time."
+    RATE_LIMIT_EXCEEDED = "Request limit reached. Try again after the reset time."
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
 

@@ -35,6 +35,11 @@ class RateLimitConfig:
     # id / `azp`). Other clients (e.g. the Revit add-in) stay unlimited even on the
     # same endpoint. Empty ⇒ apply to every authenticated caller.
     client_id: Optional[str] = None
+    # Number of reverse proxies (load balancer, CDN, …) in front of the app that
+    # append to X-Forwarded-For. 0 ⇒ the header is untrusted (client-spoofable) and
+    # the IP fallback uses the socket's remote_addr instead. Only raise this to
+    # match the actual proxy chain depth.
+    trusted_proxy_hops: int = 0
 
     @classmethod
     def from_environment(cls) -> "RateLimitConfig":
@@ -47,6 +52,8 @@ class RateLimitConfig:
         - ``RATE_LIMIT_REDIS_URL``  (falls back to ``REDIS_URL``)
         - ``RATE_LIMIT_KEY_PREFIX`` (default "lux:quota")
         - ``RATE_LIMIT_CLIENT_ID``  (Auth0 client id the limit applies to; empty = all)
+        - ``RATE_LIMIT_TRUSTED_PROXY_HOPS`` (int, default 0; number of reverse
+          proxies appending to X-Forwarded-For — 0 = don't trust the header)
         """
         enabled = os.getenv("RATE_LIMIT_ENABLED", "false").strip().lower() == "true"
         limit = int(os.getenv("RATE_LIMIT_PER_DAY", str(DEFAULT_LIMIT_PER_DAY)))
@@ -55,6 +62,7 @@ class RateLimitConfig:
         redis_url = os.getenv("RATE_LIMIT_REDIS_URL") or os.getenv("REDIS_URL") or None
         key_prefix = os.getenv("RATE_LIMIT_KEY_PREFIX", DEFAULT_KEY_PREFIX)
         client_id = os.getenv("RATE_LIMIT_CLIENT_ID") or None
+        trusted_proxy_hops = int(os.getenv("RATE_LIMIT_TRUSTED_PROXY_HOPS", "0"))
         return cls(
             enabled=enabled,
             limit=limit,
@@ -63,6 +71,7 @@ class RateLimitConfig:
             window_hours=window_hours,
             aux_limit=aux_limit,
             client_id=client_id,
+            trusted_proxy_hops=trusted_proxy_hops,
         )
 
     @property
