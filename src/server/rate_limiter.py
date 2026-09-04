@@ -1,7 +1,10 @@
+import logging
 from functools import wraps
 from typing import Any, Callable, Optional
 
 from flask import g, jsonify, make_response, request
+
+logger = logging.getLogger("logger")
 
 from .enums import ErrorType, ResponseKey
 from .rate_limit_config import RateLimitConfig
@@ -93,7 +96,14 @@ class RateLimiter:
             if not self._applies_to_caller():
                 return f(*args, **kwargs)  # e.g. the Revit add-in — unlimited
             identity = f"{bucket}:{self._identity.resolve()}"
-            state = self._store.hit(identity, limit, self._config.window_seconds)
+            try:
+                state = self._store.hit(identity, limit, self._config.window_seconds)
+            except Exception as exc:
+                # Fail OPEN: a Redis blip must not take down predictions. This is a
+                # fair-use limit (cost/abuse), not a security control, so allowing
+                # a request through during a store outage is the right trade-off.
+                logger.warning("Rate-limit store error — allowing request (fail-open): %s", exc)
+                return f(*args, **kwargs)
             if state.exceeded:
                 return self._reject(state)
             response = make_response(f(*args, **kwargs))
@@ -104,11 +114,16 @@ class RateLimiter:
 
     def _applies_to_caller(self) -> bool:
         """Whether the quota applies to the current request. When a client id is
-        configured, only that Auth0 client (the web app) is limited; all other
-        clients pass through unlimited."""
+        configured, the web app's client is limited and other *identified* clients
+        (e.g. the Revit add-in) pass through. A caller we cannot identify (no `azp`)
+        is limited — fail-safe, so a token without a client-id claim can't dodge
+        the cap."""
         if not self._config.client_id:
             return True
-        return getattr(g, AUTH_CLIENT_ID_KEY, None) == self._config.client_id
+        azp = getattr(g, AUTH_CLIENT_ID_KEY, None)
+        if azp is None:
+            return True  # unidentifiable caller → apply the limit, don't exempt
+        return azp == self._config.client_id
 
     def _reject(self, state: QuotaState):
         body, status = self._error_builder.build(ErrorType.RATE_LIMIT_EXCEEDED)

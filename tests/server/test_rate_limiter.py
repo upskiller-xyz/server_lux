@@ -13,6 +13,7 @@ from src.server.rate_limit_store import (
     InMemoryRateLimitStore,
     NullRateLimitStore,
     QuotaState,
+    RateLimitStore,
 )
 from src.server.rate_limiter import (
     AUTH_CLIENT_ID_KEY,
@@ -102,6 +103,14 @@ def test_quota_only_applies_to_configured_client():
         assert revit.get("/simulate").status_code == HTTPStatus.OK.value
 
 
+def test_unidentifiable_caller_is_limited_fail_safe():
+    # client_id configured but the token has no azp → limit (don't exempt).
+    limiter = RateLimiter(_config(limit=1, client_id="lux-web"), _store())
+    client = _app_with_route(limiter, subject="auth0|alice").test_client()  # no client_id on g
+    assert client.get("/simulate").status_code == HTTPStatus.OK.value
+    assert client.get("/simulate").status_code == HTTPStatus.TOO_MANY_REQUESTS.value
+
+
 def test_prediction_and_aux_have_separate_budgets():
     # limit=1 prediction, aux_limit=2: the buckets are independent counters.
     config = RateLimitConfig(
@@ -127,6 +136,21 @@ def test_aux_guard_off_when_aux_limit_zero():
     client = _app_with_route(RateLimiter(config, _store()), subject="auth0|alice").test_client()
     for _ in range(5):
         assert client.get("/obstruction").status_code == HTTPStatus.OK.value
+
+
+class _FailingStore(RateLimitStore):
+    """A store whose backend is unavailable."""
+
+    def hit(self, identity: str, limit: int, window_seconds: int) -> QuotaState:
+        raise RuntimeError("redis down")
+
+
+def test_fails_open_when_the_store_errors():
+    # A Redis outage must not 500 the prediction — allow the request through.
+    limiter = RateLimiter(_config(limit=1), _FailingStore())
+    client = _app_with_route(limiter, subject="auth0|alice").test_client()
+    for _ in range(5):
+        assert client.get("/simulate").status_code == HTTPStatus.OK.value
 
 
 def test_disabled_limiter_is_a_passthrough():
