@@ -20,6 +20,7 @@ from flask_cors import CORS
 from flasgger import Swagger
 
 from src.server.auth import Authenticator
+from src.server.rate_limiter import RateLimiter
 from src.server.enums import ServiceName, EndpointType, AuthType
 from src.server.controllers.base_controller import ServerController
 from src.server.services.remote import (
@@ -78,6 +79,10 @@ class ServerApplication:
         self._controller.initialize()
 
         self._authenticator = Authenticator()
+        self._rate_limiter = RateLimiter.from_environment()
+        logger.info(
+            f"Per-user rate limiting: {'enabled' if self._rate_limiter.is_enabled else 'disabled'}"
+        )
 
         # Log authentication mode for visibility
         auth_type = os.getenv('AUTH_TYPE', 'token').lower()
@@ -97,24 +102,35 @@ class ServerApplication:
         route_builder = RouteBuilder(version)
         route_configurator = RouteConfigurator(route_builder)
         auth = self._authenticator.require_auth
+        quota = self._rate_limiter.require_quota          # prediction bucket (10/day)
+        aux_quota = self._rate_limiter.require_aux_quota  # supporting compute (ceiling)
 
         handlers = {
             EndpointType.STATUS: self._get_status,
-            EndpointType.SIMULATE: auth(self._endpoint_handlers.handle_simulate),
-            EndpointType.STATS_CALCULATE: auth(self._endpoint_handlers.handle_stats),
-            EndpointType.HORIZON: auth(self._endpoint_handlers.handle_horizon),
-            EndpointType.ZENITH: auth(self._endpoint_handlers.handle_zenith),
-            EndpointType.OBSTRUCTION: auth(self._endpoint_handlers.handle_obstruction),
-            EndpointType.OBSTRUCTION_ALL: auth(self._endpoint_handlers.handle_obstruction_all),
-            EndpointType.OBSTRUCTION_MULTI: auth(self._endpoint_handlers.handle_obstruction_multi),
-            EndpointType.OBSTRUCTION_PARALLEL: auth(self._endpoint_handlers.handle_obstruction_parallel),
-            EndpointType.ENCODE_RAW: auth(self._endpoint_handlers.handle_encode_raw),
-            EndpointType.ENCODE: auth(self._endpoint_handlers.handle_encode),
-            EndpointType.CALCULATE_DIRECTION: auth(self._endpoint_handlers.handle_calculate_direction),
-            EndpointType.REFERENCE_POINT: auth(self._endpoint_handlers.handle_reference_point),
-            EndpointType.RUN: auth(self._endpoint_handlers.handle_run),
-            EndpointType.RUN_DETAILED: auth(self._endpoint_handlers.handle_run_detailed),
-            EndpointType.MERGE: auth(self._endpoint_handlers.handle_merge),
+            # Auth outer, quota inner: authentication runs first and sets the
+            # subject + client id the rate limiter keys/gates the daily quota on.
+            # The web daylight tool predicts via /run (and /run/detailed in debug);
+            # /simulate is covered too for defence-in-depth. The quota only counts
+            # requests from the web app's Auth0 client (RATE_LIMIT_CLIENT_ID), so
+            # the Revit add-in stays unlimited even on these shared endpoints.
+            EndpointType.SIMULATE: auth(quota(self._endpoint_handlers.handle_simulate)),
+            # Supporting compute endpoints — the generous aux ceiling (stops
+            # hammering; a normal run makes several of these calls).
+            EndpointType.STATS_CALCULATE: auth(aux_quota(self._endpoint_handlers.handle_stats)),
+            EndpointType.HORIZON: auth(aux_quota(self._endpoint_handlers.handle_horizon)),
+            EndpointType.ZENITH: auth(aux_quota(self._endpoint_handlers.handle_zenith)),
+            EndpointType.OBSTRUCTION: auth(aux_quota(self._endpoint_handlers.handle_obstruction)),
+            EndpointType.OBSTRUCTION_ALL: auth(aux_quota(self._endpoint_handlers.handle_obstruction_all)),
+            EndpointType.OBSTRUCTION_MULTI: auth(aux_quota(self._endpoint_handlers.handle_obstruction_multi)),
+            EndpointType.OBSTRUCTION_PARALLEL: auth(aux_quota(self._endpoint_handlers.handle_obstruction_parallel)),
+            EndpointType.ENCODE_RAW: auth(aux_quota(self._endpoint_handlers.handle_encode_raw)),
+            EndpointType.ENCODE: auth(aux_quota(self._endpoint_handlers.handle_encode)),
+            EndpointType.CALCULATE_DIRECTION: auth(aux_quota(self._endpoint_handlers.handle_calculate_direction)),
+            EndpointType.REFERENCE_POINT: auth(aux_quota(self._endpoint_handlers.handle_reference_point)),
+            # Prediction endpoints — the 10/day quota.
+            EndpointType.RUN: auth(quota(self._endpoint_handlers.handle_run)),
+            EndpointType.RUN_DETAILED: auth(quota(self._endpoint_handlers.handle_run_detailed)),
+            EndpointType.MERGE: auth(aux_quota(self._endpoint_handlers.handle_merge)),
         }
 
         route_configurator.configure(self._app, handlers)

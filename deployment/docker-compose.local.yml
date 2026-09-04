@@ -1,0 +1,14 @@
+# Local override for docker-compose-full-stack.yml
+#
+# Purpose: run the full stack locally WITHOUT authentication, for frontend testing.
+# Usage (or just run ./deploy-local.sh):
+#   docker compose --env-file .env.full-stack \
+#     -f docker-compose-full-stack.yml -f docker-compose.local.yml up -d
+#
+# Only server-lux (the public gateway on :8080) needs the auth switch — the
+# downstream services are internal-only. AUTH_TYPE=none makes lux accept requests
+# with no Authorization header, so the frontend can call it directly.
+services:
+  server-lux:
+    environment:
+      - AUTH_TYPE=none

@@ -22,9 +22,14 @@ services:
       - MERGER_SERVICE_URL=http://merger-service:8084
       - OBSTRUCTION_SERVICE_URL=http://obstruction-service:8081
       - STATS_SERVICE_URL=http://stats-service:8085
+      # Shared rolling-window quota counter (co-located Redis on this box, so it
+      # is shared across gunicorn workers). Override in .env.full-stack if needed.
+      - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
     env_file:
       - .env.full-stack
     depends_on:
+      redis:
+        condition: service_healthy
       obstruction-service:
         condition: service_healthy
       encoder-service:
@@ -43,6 +48,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Rolling-window quota counter for the daily rate limit. Pure in-memory cache
+  # (no persistence) — a restart just resets counters, fine for a fair-use limit.
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Obstruction Service (port 8081)
   obstruction-service:

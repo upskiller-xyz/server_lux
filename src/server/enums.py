@@ -47,6 +47,7 @@ class HTTPStatus(Enum):
     OK = 200
     BAD_REQUEST = 400
     FORBIDDEN = 403
+    TOO_MANY_REQUESTS = 429
     INTERNAL_SERVER_ERROR = 500
     BAD_GATEWAY = 502
     SERVICE_UNAVAILABLE = 503
@@ -83,6 +84,9 @@ class ResponseKey(Enum):
     RESULT = "result"
     RESULTS = "results"
     MESSAGE = "message"
+    LIMIT = "limit"
+    REMAINING = "remaining"
+    RESET_AT = "reset_at"
     WINDOW_NAME = "window_name"
     WINDOW_RESULTS = "window_results"
     PARTIAL_RESULTS = "partial_results"
@@ -158,6 +162,7 @@ class ErrorType(Enum):
     INVALID_JWT = "invalid_jwt"
     EXPIRED_JWT = "expired_jwt"
     INSUFFICIENT_PERMISSIONS = "insufficient_permissions"
+    RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"
     MISSING_JSON = "missing_json"
     MISSING_FILE = "missing_file"
     VALIDATION_ERROR = "validation_error"
@@ -172,6 +177,7 @@ class ErrorMessage(Enum):
     INVALID_JWT = "Invalid JWT token"
     EXPIRED_JWT = "JWT token has expired"
     INSUFFICIENT_PERMISSIONS = "Insufficient permissions"
+    RATE_LIMIT_EXCEEDED = "Request limit reached. Try again after the reset time."
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
 

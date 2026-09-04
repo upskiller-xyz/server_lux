@@ -74,9 +74,15 @@ services:
       # Optional inbound auth for the public API (set AUTH_TYPE=token + API_TOKEN)
       - AUTH_TYPE=${AUTH_TYPE:-none}
       - API_TOKEN=${API_TOKEN:-}
+      # Shared rolling-window quota counter. Defaults to the co-located Redis on
+      # this box (shared across gunicorn workers); override with an external
+      # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.
+      - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
     env_file:
       - .env.scaleway
     depends_on:
+      redis:
+        condition: service_healthy
       encoder-service:
         condition: service_healthy
       merger-service:
@@ -96,6 +102,23 @@ services:
         limits:
           cpus: "${LUX_CPUS:-2}"
           memory: ${LUX_MEM:-2g}
+
+  # ── Rolling-window quota counter (daily rate limit) ─────────────────────────
+  # Pure in-memory cache (no persistence): a restart just resets counters, which
+  # is fine for a fair-use limit. Co-located so it is shared across gunicorn
+  # workers. For multi-host, point RATE_LIMIT_REDIS_URL at a Managed Redis instead.
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - lux-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Obstruction: off-box as a private Scaleway Serverless Container ──────────
   # Moved off the VM — bursty CPU-bound load (64 directions/window) saturated the
