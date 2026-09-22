@@ -30,8 +30,13 @@ class ErrorTypeMessageMap(StandardMap):
 
 class ErrorTypeStatusMap(StandardMap):
     _content: Dict[ErrorType, int] = {
-        ErrorType.MISSING_AUTHORIZATION: HTTPStatus.BAD_REQUEST.value,
-        ErrorType.INVALID_AUTH_FORMAT: HTTPStatus.BAD_REQUEST.value,
+        # A missing or malformed Authorization header is an authentication
+        # failure, not a malformed request: 401 is what lets a client tell
+        # "log in again" apart from "your payload is wrong". web-daylight-tool
+        # maps 401/403 to its AuthRequiredError; with 400 it showed the raw
+        # backend message instead of asking the user to sign in.
+        ErrorType.MISSING_AUTHORIZATION: HTTPStatus.UNAUTHORIZED.value,
+        ErrorType.INVALID_AUTH_FORMAT: HTTPStatus.UNAUTHORIZED.value,
         ErrorType.INVALID_TOKEN: HTTPStatus.FORBIDDEN.value,
         ErrorType.INVALID_JWT: HTTPStatus.FORBIDDEN.value,
         ErrorType.EXPIRED_JWT: HTTPStatus.FORBIDDEN.value,
