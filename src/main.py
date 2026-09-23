@@ -22,6 +22,7 @@ from flasgger import Swagger
 from src.server.auth import Authenticator
 from src.server.rate_limiter import RateLimiter
 from src.server.telemetry import TelemetryMiddleware
+from src.server.constants import CorsPolicy
 from src.server.enums import ServiceName, EndpointType, AuthType
 from src.server.controllers.base_controller import ServerController
 from src.server.services.remote import (
@@ -64,7 +65,7 @@ class ServerApplication:
 
     def __init__(self, app_name: str = "Server Application"):
         self._app = Flask(app_name)
-        CORS(self._app)
+        CORS(self._app, max_age=CorsPolicy.MAX_AGE_SECONDS)
 
         # Initialize Swagger
         Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
