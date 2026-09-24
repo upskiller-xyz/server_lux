@@ -1,5 +1,6 @@
 import os
-from typing import Dict, Any
+from typing import Any, Dict
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,24 +16,30 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+import logging
+
+from flasgger import Swagger
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-from flasgger import Swagger
 
-from src.server.auth import Authenticator
-from src.server.rate_limiter import RateLimiter
-from src.server.enums import ServiceName, EndpointType, AuthType
-from src.server.controllers.base_controller import ServerController
-from src.server.services.remote import (
-    ObstructionService, EncoderService, ModelService, MergerService, StatsService
-)
-from src.server.request_handler import EndpointRequestHandler
-from src.server.endpoint_handlers import EndpointHandlers
-from src.server.route_configurator import RouteBuilder, RouteConfigurator
-from src.server.swagger_config import get_swagger_template, get_swagger_config
 from src.__version__ import version
-
-import logging
+from src.server.auth import Authenticator
+from src.server.constants import CorsPolicy
+from src.server.controllers.base_controller import ServerController
+from src.server.endpoint_handlers import EndpointHandlers
+from src.server.enums import AuthType, EndpointType, ServiceName
+from src.server.rate_limiter import RateLimiter
+from src.server.request_handler import EndpointRequestHandler
+from src.server.route_configurator import RouteBuilder, RouteConfigurator
+from src.server.services.remote import (
+    EncoderService,
+    MergerService,
+    ModelService,
+    ObstructionService,
+    StatsService,
+)
+from src.server.swagger_config import get_swagger_config, get_swagger_template
+from src.server.telemetry import TelemetryMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,13 +70,14 @@ class ServerApplication:
 
     def __init__(self, app_name: str = "Server Application"):
         self._app = Flask(app_name)
-        CORS(self._app)
+        CORS(self._app, max_age=CorsPolicy.MAX_AGE_SECONDS)
 
         # Initialize Swagger
         Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
 
         self._initialize_components()
         self._setup_routes()
+        TelemetryMiddleware().register(self._app)
 
     def _initialize_components(self) -> None:
         """Initialize all application components"""
