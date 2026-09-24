@@ -77,11 +77,12 @@ for repo_info in "${REPOS[@]}"; do
 done
 
 # ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
-# nginx restores each visitor's real IP from these ranges (per-IP rate limiting).
-# The script keeps the last known-good include on failure, so a deploy never
-# hinges on Cloudflare being reachable.
+# nginx restores each visitor's real IP from these ranges (per-IP rate limiting)
+# and the origin lock only accepts connections from them. The script keeps the
+# last known-good file on failure, so a deploy never hinges on Cloudflare
+# being reachable.
 echo -e "${BLUE}Refreshing Cloudflare IP ranges...${NC}"
-bash update-cloudflare-ips.sh
+bash nginx/update-cloudflare-ips.sh
 
 # ── 4. Optional firewall: expose only SSH + HTTP(S) ──────────────────────────
 # Defence in depth on top of the Scaleway security group. The app services never
@@ -98,6 +99,10 @@ fi
 BUILD_FLAG=""; [[ "$FORCE_BUILD" == true ]] && BUILD_FLAG="--build"
 echo -e "${BLUE}Starting stack...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
+# Validate the live config before reloading so a failed reload fails the deploy
+# instead of leaving a stale edge policy behind while printing "Done".
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -t
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload
 
 echo -e "${GREEN}Done.${NC} Public entrypoint: http://<instance-ip>/ (via nginx)."
 echo "Internal services (encoder/obstruction/merger/stats/server-lux) are not host-published."

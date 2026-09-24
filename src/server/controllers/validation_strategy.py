@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
-from ..enums import RequestField, ResponseKey, ResponseStatus
+from ..enums import RequestField
+from ..exceptions import RequestValidationError
 
 
 class IFieldValidator(ABC):
@@ -75,34 +76,25 @@ class ValidationStrategy:
     }
 
     @classmethod
-    def validate_fields(cls, request_data: Dict[str, Any], required_fields: List[RequestField]) -> Optional[Dict[str, Any]]:
+    def validate_fields(cls, request_data: Dict[str, Any], required_fields: List[RequestField]) -> None:
         """Validate all required fields using appropriate strategies
 
         Args:
             request_data: Request data dictionary
             required_fields: List of fields to validate
 
-        Returns:
-            Error response dict if validation fails, None if success
+        Raises:
+            RequestValidationError: if a required field is missing or malformed.
+                The exception path maps client-input errors to HTTP 400.
         """
         for field in required_fields:
             # Check presence first
             if field.value not in request_data:
-                return cls._build_error_response(f"Missing required field: {field.value}")
+                raise RequestValidationError(f"Missing required field: {field.value}")
 
             # Apply specific validators if configured
             validators = cls.FIELD_VALIDATORS.get(field, [])
             for validator in validators:
                 error_msg = validator.validate(request_data, field)
                 if error_msg:
-                    return cls._build_error_response(error_msg)
-
-        return None
-
-    @staticmethod
-    def _build_error_response(error_message: str) -> Dict[str, Any]:
-        """Build standardized error response"""
-        return {
-            ResponseKey.STATUS.value: ResponseStatus.ERROR.value,
-            ResponseKey.ERROR.value: error_message
-        }
+                    raise RequestValidationError(error_msg)

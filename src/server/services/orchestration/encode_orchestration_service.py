@@ -35,13 +35,8 @@ class SimulationOrchestrator(IOrchestrator):
         Returns:
             Merged simulation results. RUN_DETAILED includes per-window breakdown.
         """
-        try:
-            window_results = self._window_processor.process_all_windows(endpoint, request_data, file)
-        except ValueError as e:
-            return {
-                ResponseKey.STATUS.value: ResponseKey.ERROR.value,
-                ResponseKey.ERROR.value: str(e)
-            }
+        # Invalid client input raises RequestValidationError → 400 via the request handler.
+        window_results = self._window_processor.process_all_windows(endpoint, request_data, file)
 
         merged_data = self._merge_window_results(request_data, window_results)
 

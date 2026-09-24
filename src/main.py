@@ -20,12 +20,11 @@ import logging
 
 from flasgger import Swagger
 from flask import Flask, Response, jsonify, request
-from flask_cors import CORS
 
 from src.__version__ import version
 from src.server.auth import Authenticator
-from src.server.constants import CorsPolicy
 from src.server.controllers.base_controller import ServerController
+from src.server.cors_config import CorsConfig
 from src.server.endpoint_handlers import EndpointHandlers
 from src.server.enums import AuthType, EndpointType, ServiceName
 from src.server.rate_limiter import RateLimiter
@@ -70,14 +69,19 @@ class ServerApplication:
 
     def __init__(self, app_name: str = "Server Application"):
         self._app = Flask(app_name)
-        CORS(self._app, max_age=CorsPolicy.MAX_AGE_SECONDS)
+        CorsConfig.from_environment().apply(self._app)
 
-        # Initialize Swagger
-        Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
+        if self._api_docs_enabled():
+            Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
 
         self._initialize_components()
         self._setup_routes()
         TelemetryMiddleware().register(self._app)
+
+    @staticmethod
+    def _api_docs_enabled() -> bool:
+        """Swagger UI + apispec (/docs/, /apispec.json); disable on public gateways."""
+        return os.getenv("API_DOCS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
 
     def _initialize_components(self) -> None:
         """Initialize all application components"""
@@ -180,7 +184,7 @@ class ServerLauncher:
         app: ServerApplication,
         host: str = "0.0.0.0",
         port: int = 8080,
-        debug: bool = True
+        debug: bool = False
     ) -> None:
         """Run the server with specified configuration
 
@@ -203,7 +207,8 @@ def main() -> None:
     launcher = ServerLauncher()
     application = launcher.create_application()
     port = int(os.getenv("PORT", 8080))
-    launcher.run_server(application, port=port, debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").strip().lower() in ("true", "1", "yes")
+    launcher.run_server(application, port=port, debug=debug)
 
 
 def create_app():

@@ -16,13 +16,6 @@ class IImageProcessor(ABC):
         pass
 
 
-class IDownloadStrategy(ABC):
-
-    @abstractmethod
-    def download(self, url: str, local_path: str) -> str:
-        pass
-
-
 class ILogger(ABC):
 
     @abstractmethod
