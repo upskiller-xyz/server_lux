@@ -1,6 +1,8 @@
 """Unit tests for the error-response status mapping"""
 
 import pytest
+from flask import Flask
+
 from src.server.enums import ErrorType, HTTPStatus
 from src.server.response_builder import ErrorResponseBuilder, ErrorTypeStatusMap
 
@@ -50,7 +52,6 @@ class TestAuthErrorStatusCodes:
 
 
 class TestErrorResponseBuilder:
-
     def test_builds_the_mapped_status_for_a_missing_header(self, app_context):
         # Arrange
         builder = ErrorResponseBuilder()
@@ -75,7 +76,5 @@ class TestErrorResponseBuilder:
 @pytest.fixture
 def app_context():
     """`ErrorResponseBuilder.build` calls `jsonify`, which needs an app context."""
-    from flask import Flask
-
     with Flask(__name__).app_context():
         yield

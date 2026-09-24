@@ -1,21 +1,31 @@
-from typing import Dict, Any, List, Union, cast
 import asyncio
+import logging
+import math
 import os
 import threading
 import time
-import math
-import logging
+from typing import Any, Dict, List, Union, cast
 
 import orjson
 
 from src.server.services.helpers.parallel import ParallelRequest
-from src.server.services.remote.contracts.obstruction_contracts import ObstructionResponse
-from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
+from src.server.services.remote.contracts.obstruction_contracts import (
+    ObstructionResponse,
+)
+
 from ...constants import ObstructionConcurrency
-from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus, HTTPStatus
+from ...enums import (
+    EndpointType,
+    HTTPStatus,
+    RequestField,
+    ResponseKey,
+    ResponseStatus,
+    ServiceName,
+)
 from ...exceptions import ServiceResponseError
-from .base import RemoteService
 from ...services.obstruction.calculator_interface import IObstructionCalculator
+from .base import RemoteService
+from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
 
 logger = logging.getLogger("logger")
 

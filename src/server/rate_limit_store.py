@@ -68,7 +68,9 @@ class InMemoryRateLimitStore(RateLimitStore):
             count, expiry = 0, now + window_seconds
         count += 1
         self._counts[key] = (count, expiry)
-        return QuotaState(limit=limit, used=count, reset_at=_reset_at(int(expiry - now)))
+        return QuotaState(
+            limit=limit, used=count, reset_at=_reset_at(int(expiry - now))
+        )
 
 
 class RedisRateLimitStore(RateLimitStore):

@@ -3,6 +3,7 @@ from typing import Optional
 
 from src.utils.extended_enum import ExtendedEnum, ExtendedEnumMixin
 
+
 class Methods(Enum):
     GET = "GET"
     POST = "POST"
