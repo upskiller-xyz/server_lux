@@ -7,7 +7,8 @@ from typing import Callable, Any, Optional
 from functools import wraps
 from flask import request, g, has_app_context
 import requests
-from jose import jwt, JWTError
+import jwt
+from jwt import PyJWK, PyJWTError
 from .enums import ErrorType, AuthType
 from .response_builder import ErrorResponseBuilder
 from .auth_config import AuthConfig, Auth0Config
@@ -204,28 +205,28 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
         """Check if Auth0 is properly configured"""
         return self._config is not None
 
-    def _get_signing_key(self, token: str) -> dict:
+    def _get_signing_key(self, token: str) -> Any:
         """Get the JWKS signing key for token verification
 
         Args:
             token: JWT token
 
         Returns:
-            JWKS key dict matching the token's kid
+            Public key matching the token's kid
 
         Raises:
             ValueError: If signing key cannot be found
         """
         try:
             unverified_header = jwt.get_unverified_header(token)
-        except JWTError as e:
+        except PyJWTError as e:
             raise ValueError(f"Invalid token header: {e}")
 
         kid = unverified_header.get('kid')
         key = self._jwks.get_key(kid)
         if key is None:
             raise ValueError(f"Unable to find signing key for kid: {kid}")
-        return key
+        return PyJWK(key).key
 
     def validate_request(self, auth_header: Optional[str]) -> tuple[bool, Optional[ErrorType]]:
         """Validate Auth0 JWT token
@@ -254,7 +255,8 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
                 signing_key,
                 algorithms=self._config.algorithms,
                 audience=self._config.audience,
-                issuer=self._config.issuer
+                issuer=self._config.issuer,
+                options={"require": ["exp", "iss", "aud"]},
             )
 
             # Expose the subject + authorized-party (client id) so downstream
@@ -270,7 +272,7 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
 
         except jwt.ExpiredSignatureError:
             return False, ErrorType.EXPIRED_JWT
-        except jwt.JWTClaimsError:
+        except PyJWTError:
             return False, ErrorType.INVALID_JWT
         except Exception:
             return False, ErrorType.INVALID_JWT

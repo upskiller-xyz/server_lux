@@ -6,8 +6,8 @@ import pytest
 import requests as req
 from unittest.mock import Mock, patch
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwt
-from jose.utils import base64url_encode
+import jwt
+from jwt.utils import base64url_encode
 from src.server.enums import AuthType, ErrorType
 from src.server.auth_config import AuthConfig, Auth0Config
 from src.server.auth_strategies import (
@@ -313,6 +313,18 @@ class TestAuth0AuthenticationStrategy:
         strategy = Auth0AuthenticationStrategy(auth0_config)
         strategy._jwks.seed(jwks)
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, kid="test-key-id")
+        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        assert is_valid is False
+        assert error == ErrorType.INVALID_JWT
+
+    def test_validate_request_unsigned_token_rejected(self, strategy_with_jwks, auth0_config):
+        """alg=none tokens are never accepted."""
+        strategy, _ = strategy_with_jwks
+        now = int(time.time())
+        token = jwt.encode(
+            {"sub": "x", "aud": auth0_config.audience, "iss": auth0_config.issuer, "exp": now + 60},
+            None, algorithm="none", headers={"kid": "test-key-id"},
+        )
         is_valid, error = strategy.validate_request(f'Bearer {token}')
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT

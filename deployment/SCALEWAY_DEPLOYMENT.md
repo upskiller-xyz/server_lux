@@ -65,7 +65,7 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `AUTH_TYPE` | **required** | `auth0`, `token` or `none` — no default; deploy fails if unset |
 | Variable | `CORS_ORIGINS` | recommended | Comma-separated browser origins allowed to call the API (the web app); empty = any origin |
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
-| Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
+| Variable | `SSH_KNOWN_HOSTS` | **required** | Pinned host key (output of `ssh-keyscan <host>`, verified out of band); deploy fails if unset |
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
 [.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
