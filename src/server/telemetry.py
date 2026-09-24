@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -11,6 +12,33 @@ logger = logging.getLogger("logger")
 # Sent by an older client build that predates these headers — telemetry must
 # never fail a request over a missing header, so this is the fallback value.
 UNKNOWN_CLIENT_VALUE = "unknown"
+
+# Header values are attacker-controlled input that ends up in the request log,
+# so they are clamped before use: CR/LF (and every other control character) are
+# stripped to stop log forging, and anything longer than
+# MAX_HEADER_VALUE_LENGTH is truncated to stop log amplification.
+MAX_HEADER_VALUE_LENGTH = 128
+CONTROL_CHARACTERS_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+
+# Placeholder for a header value that was empty or only control characters.
+EMPTY_HEADER_VALUE = "-"
+
+
+class HeaderValueSanitizer:
+    """Normalizes one caller-identity header value for safe logging.
+
+    The headers come straight off the request, so a hostile client can send
+    anything. Control characters (log forging via fake log lines) are removed
+    and the value is truncated (log amplification via megabyte headers).
+    """
+
+    @staticmethod
+    def sanitize(value: str) -> str:
+        stripped = CONTROL_CHARACTERS_PATTERN.sub("", value).strip()
+        if not stripped:
+            return EMPTY_HEADER_VALUE
+        return stripped[:MAX_HEADER_VALUE_LENGTH]
+
 
 # flask.g attribute keys the resolver writes to and downstream code reads from.
 CLIENT_NAME_KEY = "client_name"
@@ -56,7 +84,8 @@ class ClientTelemetryResolver:
         )
 
     def _header(self, header: HTTPHeader) -> str:
-        return request.headers.get(header.value) or UNKNOWN_CLIENT_VALUE
+        value = request.headers.get(header.value) or UNKNOWN_CLIENT_VALUE
+        return HeaderValueSanitizer.sanitize(value)
 
 
 class RequestTelemetryLogger:
