@@ -53,7 +53,12 @@ explicit_package_bases = true
 
 [tool.ruff]
 [tool.ruff.lint]
-select = ["I"]
+select = ["I", "E402", "PLC0415"]
+# src/main.py must configure the environment (load_dotenv + CUDA/TF/threading
+# vars) BEFORE importing anything that reads it (torch, tensorflow, cv2) — the
+# imports below that setup are intentional and stay.
+[tool.ruff.lint.per-file-ignores]
+"src/main.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["Upskiller-torch"]

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple
 
+import redis
+
 from .rate_limit_config import RateLimitConfig
 
 logger = logging.getLogger("logger")
@@ -66,7 +68,9 @@ class InMemoryRateLimitStore(RateLimitStore):
             count, expiry = 0, now + window_seconds
         count += 1
         self._counts[key] = (count, expiry)
-        return QuotaState(limit=limit, used=count, reset_at=_reset_at(int(expiry - now)))
+        return QuotaState(
+            limit=limit, used=count, reset_at=_reset_at(int(expiry - now))
+        )
 
 
 class RedisRateLimitStore(RateLimitStore):
@@ -101,8 +105,6 @@ class RateLimitStoreFactory:
             return NullRateLimitStore()
 
         if config.redis_url:
-            import redis  # imported lazily so the dep is optional when disabled
-
             client = redis.Redis.from_url(config.redis_url, decode_responses=True)
             return RedisRateLimitStore(client, config.key_prefix)
 

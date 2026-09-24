@@ -3,6 +3,7 @@ from typing import Optional
 
 from src.utils.extended_enum import ExtendedEnum, ExtendedEnumMixin
 
+
 class Methods(Enum):
     GET = "GET"
     POST = "POST"
@@ -46,6 +47,7 @@ class ContentType(Enum):
 class HTTPStatus(Enum):
     OK = 200
     BAD_REQUEST = 400
+    UNAUTHORIZED = 401
     FORBIDDEN = 403
     TOO_MANY_REQUESTS = 429
     INTERNAL_SERVER_ERROR = 500
@@ -66,6 +68,11 @@ class HTTPHeader(Enum):
     CONTENT_TYPE = "Content-Type"
     AUTHORIZATION = "Authorization"
     ACCEPT = "Accept"
+    # Caller-identity headers (telemetry): who's calling, which plugin build,
+    # and which host application it's embedded in.
+    CLIENT_NAME = "X-Client-Name"
+    CLIENT_VERSION = "X-Client-Version"
+    HOST_VERSION = "X-Host-Version"
 
 
 class HTTPContentType(Enum):

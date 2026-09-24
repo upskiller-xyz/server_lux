@@ -76,7 +76,15 @@ for repo_info in "${REPOS[@]}"; do
   fi
 done
 
-# ── 3. Optional firewall: expose only SSH + HTTP(S) ──────────────────────────
+# ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
+# nginx restores each visitor's real IP from these ranges (per-IP rate limiting)
+# and the origin lock only accepts connections from them. The script keeps the
+# last known-good file on failure, so a deploy never hinges on Cloudflare
+# being reachable.
+echo -e "${BLUE}Refreshing Cloudflare IP ranges...${NC}"
+bash nginx/update-cloudflare-ips.sh
+
+# ── 4. Optional firewall: expose only SSH + HTTP(S) ──────────────────────────
 # Defence in depth on top of the Scaleway security group. The app services never
 # bind host ports anyway, but this guarantees nothing else is reachable.
 if [[ "$SETUP_FIREWALL" == true ]]; then
@@ -87,16 +95,14 @@ if [[ "$SETUP_FIREWALL" == true ]]; then
   sudo ufw --force enable
 fi
 
-# ── 4. Refresh Cloudflare edge ranges (real client IP + origin lock) ─────────
-# Non-fatal: on failure the committed nginx/cloudflare-ips.conf is kept.
-bash nginx/update-cloudflare-ips.sh || echo -e "${YELLOW}Cloudflare range refresh failed — using committed list.${NC}"
-
 # ── 5. Bring up the stack ────────────────────────────────────────────────────
 BUILD_FLAG=""; [[ "$FORCE_BUILD" == true ]] && BUILD_FLAG="--build"
 echo -e "${BLUE}Starting stack...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
-# Bind-mounted snippets may have changed without the container being recreated.
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload || true
+# Validate the live config before reloading so a failed reload fails the deploy
+# instead of leaving a stale edge policy behind while printing "Done".
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -t
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload
 
 echo -e "${GREEN}Done.${NC} Public entrypoint: http://<instance-ip>/ (via nginx)."
 echo "Internal services (encoder/obstruction/merger/stats/server-lux) are not host-published."

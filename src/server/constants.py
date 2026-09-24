@@ -87,3 +87,19 @@ class ScalewayBackend:
         this constants module free of enum imports and dependency-light.
         """
         return f"{service_name.upper()}{ScalewayBackend.TOKEN_ENV_SUFFIX}"
+
+
+class CorsPolicy:
+    """CORS preflight policy for the public API.
+
+    Every browser call carries an ``Authorization`` header, so none of them are
+    CORS-simple: each one is preceded by its own ``OPTIONS`` preflight. Without an
+    explicit ``Access-Control-Max-Age`` browsers fall back to a ~5 s preflight
+    cache, which doubles the request count the gateway sees and drains its rate
+    limiter during the per-window fan-out. Caching the preflight for a day means a
+    client pays for it once per session instead of once per call.
+
+    Chromium caps the honoured value at 2 hours, Firefox at 24 hours; sending the
+    larger value is safe — each browser clamps it to its own ceiling.
+    """
+    MAX_AGE_SECONDS: int = 86400

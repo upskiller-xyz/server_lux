@@ -1,15 +1,18 @@
-from typing import Callable, Optional, Dict, Any, Tuple, Type
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Optional, Tuple, Type
+
 from flask import jsonify
-from .enums import ErrorType, ErrorMessage, HTTPStatus, ResponseKey, ResponseStatus
-from .maps import StandardMap
+
+from .enums import ErrorMessage, ErrorType, HTTPStatus, ResponseKey, ResponseStatus
 from .exceptions import (
     RequestValidationError,
-    ServiceResponseError,
     ServiceAuthorizationError,
     ServiceConnectionError,
+    ServiceException,
+    ServiceResponseError,
     ServiceTimeoutError,
 )
+from .maps import StandardMap
 
 # Upstream statuses whose body is our own services' input validation and is
 # meaningful to the caller. Anything else (incl. 401/403: our service
@@ -41,8 +44,13 @@ class ErrorTypeMessageMap(StandardMap):
 
 class ErrorTypeStatusMap(StandardMap):
     _content: Dict[ErrorType, int] = {
-        ErrorType.MISSING_AUTHORIZATION: HTTPStatus.BAD_REQUEST.value,
-        ErrorType.INVALID_AUTH_FORMAT: HTTPStatus.BAD_REQUEST.value,
+        # A missing or malformed Authorization header is an authentication
+        # failure, not a malformed request: 401 is what lets a client tell
+        # "log in again" apart from "your payload is wrong". web-daylight-tool
+        # maps 401/403 to its AuthRequiredError; with 400 it showed the raw
+        # backend message instead of asking the user to sign in.
+        ErrorType.MISSING_AUTHORIZATION: HTTPStatus.UNAUTHORIZED.value,
+        ErrorType.INVALID_AUTH_FORMAT: HTTPStatus.UNAUTHORIZED.value,
         ErrorType.INVALID_TOKEN: HTTPStatus.FORBIDDEN.value,
         ErrorType.INVALID_JWT: HTTPStatus.FORBIDDEN.value,
         ErrorType.EXPIRED_JWT: HTTPStatus.FORBIDDEN.value,
