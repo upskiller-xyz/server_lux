@@ -3,7 +3,7 @@
 import pytest
 from flask import Flask
 
-from src.server.enums import ErrorType, HTTPStatus
+from src.server.enums import EndpointType, ErrorType, HTTPStatus
 from src.server.exceptions import (
     MergeValidationError,
     RequestValidationError,
@@ -12,6 +12,7 @@ from src.server.exceptions import (
     ServiceResponseError,
     ServiceTimeoutError,
 )
+from src.server.request_handler import EndpointRequestHandler
 from src.server.response_builder import ErrorResponseBuilder
 
 
@@ -79,3 +80,38 @@ def test_upstream_connection_and_timeout(app):
     body, status = _build(ServiceTimeoutError("model", "/run", 300))
     assert status == HTTPStatus.GATEWAY_TIMEOUT.value
     assert body["error"] == "model service timeout"
+
+
+def test_missing_required_field_is_400(app, monkeypatch):
+    """The validation path raises instead of returning an error dict, so a
+    missing required field answers 400 — not the generic 500 that plain
+    error dicts used to get."""
+    handler = EndpointRequestHandler()
+    monkeypatch.setattr(
+        handler._request_parser, "extract_endpoint",
+        lambda req: EndpointType.OBSTRUCTION,
+    )
+    monkeypatch.setattr(handler._request_parser, "extract_params", lambda req: {})
+    monkeypatch.setattr(handler._request_parser, "extract_file", lambda req: None)
+
+    _, status = handler.handle(request=object())
+
+    assert status == HTTPStatus.BAD_REQUEST.value
+
+
+def test_malformed_field_type_is_400(app, monkeypatch):
+    """A required field present but of the wrong type follows the same 400 path."""
+    handler = EndpointRequestHandler()
+    monkeypatch.setattr(
+        handler._request_parser, "extract_endpoint",
+        lambda req: EndpointType.OBSTRUCTION,
+    )
+    monkeypatch.setattr(
+        handler._request_parser, "extract_params",
+        lambda req: {"parameters": "not-a-dict"},
+    )
+    monkeypatch.setattr(handler._request_parser, "extract_file", lambda req: None)
+
+    _, status = handler.handle(request=object())
+
+    assert status == HTTPStatus.BAD_REQUEST.value
