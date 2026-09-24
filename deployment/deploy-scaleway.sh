@@ -87,10 +87,16 @@ if [[ "$SETUP_FIREWALL" == true ]]; then
   sudo ufw --force enable
 fi
 
-# ── 4. Bring up the stack ────────────────────────────────────────────────────
+# ── 4. Refresh Cloudflare edge ranges (real client IP + origin lock) ─────────
+# Non-fatal: on failure the committed nginx/cloudflare-ips.conf is kept.
+bash nginx/update-cloudflare-ips.sh || echo -e "${YELLOW}Cloudflare range refresh failed — using committed list.${NC}"
+
+# ── 5. Bring up the stack ────────────────────────────────────────────────────
 BUILD_FLAG=""; [[ "$FORCE_BUILD" == true ]] && BUILD_FLAG="--build"
 echo -e "${BLUE}Starting stack...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
+# Bind-mounted snippets may have changed without the container being recreated.
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload || true
 
 echo -e "${GREEN}Done.${NC} Public entrypoint: http://<instance-ip>/ (via nginx)."
 echo "Internal services (encoder/obstruction/merger/stats/server-lux) are not host-published."

@@ -29,6 +29,9 @@ services:
       - "443:443"
     volumes:
       - ./nginx-docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/cloudflare-ips.conf:/etc/nginx/snippets/cloudflare-ips.conf:ro
+      # Behind Cloudflare: refuse connections that do not come from its edge.
+      - ./nginx/origin-lock.conf:/etc/nginx/snippets/origin-lock.conf:ro
       # TLS certs for the 443 server block in nginx-docker.conf. Drop
       # origin.pem + origin.key into ./certs (git-ignored, never committed).
       - ./certs:/etc/nginx/certs:ro
@@ -77,6 +80,10 @@ services:
       # Comma-separated browser origins allowed to call the API (e.g. the web app).
       # Empty = allow every origin (logged as a warning at startup).
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      # Swagger UI / apispec off on the public gateway unless explicitly enabled.
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED:-false}
+      # nginx overwrites X-Forwarded-For with the real client IP → trust one hop.
+      - RATE_LIMIT_TRUSTED_PROXY_HOPS=${RATE_LIMIT_TRUSTED_PROXY_HOPS:-1}
       # Shared rolling-window quota counter. Defaults to the co-located Redis on
       # this box (shared across gunicorn workers); override with an external
       # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.

@@ -65,11 +65,16 @@ class ServerApplication:
         self._app = Flask(app_name)
         CorsConfig.from_environment().apply(self._app)
 
-        # Initialize Swagger
-        Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
+        if self._api_docs_enabled():
+            Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
 
         self._initialize_components()
         self._setup_routes()
+
+    @staticmethod
+    def _api_docs_enabled() -> bool:
+        """Swagger UI + apispec (/docs/, /apispec.json); disable on public gateways."""
+        return os.getenv("API_DOCS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
 
     def _initialize_components(self) -> None:
         """Initialize all application components"""
