@@ -14,7 +14,7 @@ requests>=2.32.0,<3.0.0
 aiohttp>=3.9.0,<4.0.0
 
 # Authentication & Security
-python-jose[cryptography]>=3.3.0,<4.0.0
+python-jose[cryptography]>=3.4.0,<4.0.0
 
 # Rate limiting — shared rolling-window quota counter (Redis).
 # Only imported when RATE_LIMIT_ENABLED=true and a REDIS_URL is configured.
@@ -36,7 +36,7 @@ numpy>=1.24.0,<2.0.0
 pillow>=10.0.0,<12.0.0
 
 # Production Server (optional for Docker deployment)
-gunicorn>=21.0.0,<23.0.0
+gunicorn>=23.0.0,<24.0.0
 flasgger
 
 # Fast JSON parsing (request body / mesh can be several MB)

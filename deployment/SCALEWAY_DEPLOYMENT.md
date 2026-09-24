@@ -62,7 +62,7 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `DEPLOY_PATH` | yes | server_lux checkout path on the box |
 | Variable | `MODEL_SERVICE_URL` | yes | Modal endpoint (deploy fails fast if unset) |
 | Variable | `DEPLOY_REF` | optional | Git ref to deploy (default `master`) |
-| Variable | `AUTH_TYPE` | optional | `none` (default), `token`, or `auth0` |
+| Variable | `AUTH_TYPE` | **required** | `auth0`, `token` or `none` — no default; deploy fails if unset |
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
 
@@ -108,5 +108,5 @@ front the instance with a Scaleway Load Balancer that terminates TLS.
 - **Modal proxy-auth is automatic.** A `*.modal.run` host is detected by
   server-lux and `Modal-Key`/`Modal-Secret` are attached from `MODAL_KEY` /
   `MODAL_SECRET`. The deploy script fails fast if the URL is Modal but creds are missing.
-- **Public API auth.** Set `AUTH_TYPE=token` + `API_TOKEN` to require a bearer
-  token on the public API; default `none` (open).
+- **Public API auth.** `AUTH_TYPE` must be set explicitly: `auth0` (JWT),
+  `token` (+ `API_TOKEN`, required) or `none` (open). No implicit default.

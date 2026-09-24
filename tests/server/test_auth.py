@@ -3,6 +3,7 @@
 import os
 import time
 import pytest
+import requests as req
 from unittest.mock import Mock, patch
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import jwt
@@ -12,7 +13,8 @@ from src.server.auth_config import AuthConfig, Auth0Config
 from src.server.auth_strategies import (
     TokenAuthenticationStrategy,
     Auth0AuthenticationStrategy,
-    NoAuthenticationStrategy
+    NoAuthenticationStrategy,
+    JwksProvider
 )
 from src.server.auth_factory import AuthenticationStrategyFactory
 from src.server.auth import Authenticator, TokenAuthenticator
@@ -88,14 +90,25 @@ class TestAuth0Config:
                 Auth0Config.from_environment()
 
     def test_from_environment_multiple_algorithms(self):
-        """Test Auth0Config with multiple algorithms"""
+        """Test Auth0Config with multiple asymmetric algorithms"""
         with patch.dict(os.environ, {
             'AUTH0_DOMAIN': 'test.auth0.com',
             'AUTH0_AUDIENCE': 'https://api.test.com',
-            'AUTH0_ALGORITHMS': 'RS256,HS256'
+            'AUTH0_ALGORITHMS': 'RS256, ES256'
         }):
             config = Auth0Config.from_environment()
-            assert config.algorithms == ['RS256', 'HS256']
+            assert config.algorithms == ['RS256', 'ES256']
+
+    @pytest.mark.parametrize("algorithms", ["RS256,HS256", "HS256", "none", ""])
+    def test_from_environment_rejects_symmetric_or_empty_algorithms(self, algorithms):
+        """HS*/none would let the public JWKS key act as an HMAC secret"""
+        with patch.dict(os.environ, {
+            'AUTH0_DOMAIN': 'test.auth0.com',
+            'AUTH0_AUDIENCE': 'https://api.test.com',
+            'AUTH0_ALGORITHMS': algorithms
+        }):
+            with pytest.raises(ValueError, match="AUTH0_ALGORITHMS"):
+                Auth0Config.from_environment()
 
     def test_jwks_url_property(self):
         """Test JWKS URL generation"""
@@ -113,9 +126,22 @@ class TestAuthConfig:
 
     def test_default_auth_type_is_token(self):
         """Test that default auth type is token"""
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {'API_TOKEN': 'test_token'}, clear=True):
             config = AuthConfig()
             assert config.auth_type == AuthType.TOKEN
+
+    @pytest.mark.parametrize("env", [{}, {'AUTH_TYPE': 'token'}, {'AUTH_TYPE': 'token', 'API_TOKEN': ''}])
+    def test_token_auth_without_token_fails_closed(self, env):
+        """Token auth without API_TOKEN must refuse to start"""
+        with patch.dict(os.environ, env, clear=True):
+            with pytest.raises(ValueError, match="API_TOKEN"):
+                AuthConfig()
+
+    def test_unknown_auth_type_fails_closed(self):
+        """A typo in AUTH_TYPE must not silently fall back to another mode"""
+        with patch.dict(os.environ, {'AUTH_TYPE': 'auht0', 'API_TOKEN': 'x'}, clear=True):
+            with pytest.raises(ValueError, match="AUTH_TYPE"):
+                AuthConfig()
 
     def test_token_auth_type(self):
         """Test token authentication configuration"""
@@ -189,12 +215,20 @@ class TestTokenAuthenticationStrategy:
         assert is_valid is False
         assert error == ErrorType.INVALID_AUTH_FORMAT
 
-    def test_validate_request_no_token_configured(self):
-        """Test validation allows all when no token is configured"""
-        strategy = TokenAuthenticationStrategy(None)
+    @pytest.mark.parametrize("configured", [None, ""])
+    def test_validate_request_no_token_configured(self, configured):
+        """Without a configured token every request is rejected (fail closed)"""
+        strategy = TokenAuthenticationStrategy(configured)
         is_valid, error = strategy.validate_request('Bearer any_token')
-        assert is_valid is True
-        assert error is None
+        assert is_valid is False
+        assert error == ErrorType.INVALID_TOKEN
+
+    def test_validate_request_token_prefix_rejected(self):
+        """A prefix of the configured token is not accepted"""
+        strategy = TokenAuthenticationStrategy('test_token')
+        is_valid, error = strategy.validate_request('Bearer test_')
+        assert is_valid is False
+        assert error == ErrorType.INVALID_TOKEN
 
 
 class TestAuth0AuthenticationStrategy:
@@ -220,7 +254,7 @@ class TestAuth0AuthenticationStrategy:
         jwk = _public_key_to_jwk(public_key)
         jwks = {"keys": [jwk]}
         strategy = Auth0AuthenticationStrategy(auth0_config)
-        strategy._jwks_cache = jwks
+        strategy._jwks.seed(jwks)
         return strategy, private_key
 
     def test_is_configured(self, auth0_config):
@@ -277,7 +311,7 @@ class TestAuth0AuthenticationStrategy:
         _, other_public = _generate_rsa_key_pair()
         jwks = {"keys": [_public_key_to_jwk(other_public, kid="other-key")]}
         strategy = Auth0AuthenticationStrategy(auth0_config)
-        strategy._jwks_cache = jwks
+        strategy._jwks.seed(jwks)
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, kid="test-key-id")
         is_valid, error = strategy.validate_request(f'Bearer {token}')
         assert is_valid is False
@@ -286,7 +320,7 @@ class TestAuth0AuthenticationStrategy:
     def test_validate_request_garbage_token(self, auth0_config):
         """Completely invalid token string is rejected."""
         strategy = Auth0AuthenticationStrategy(auth0_config)
-        strategy._jwks_cache = {"keys": []}
+        strategy._jwks.seed({"keys": []})
         is_valid, error = strategy.validate_request('Bearer not.a.real.jwt')
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
@@ -296,7 +330,7 @@ class TestAuth0AuthenticationStrategy:
         private_key, public_key = rsa_key_pair
         jwks = {"keys": [_public_key_to_jwk(public_key)]}
         strategy = Auth0AuthenticationStrategy(auth0_config)
-        assert strategy._jwks_cache is None
+        assert strategy._jwks.cached is None
         with patch('requests.get') as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = jwks
@@ -310,7 +344,7 @@ class TestAuth0AuthenticationStrategy:
 
     def test_jwks_fetch_failure_returns_invalid_jwt(self, auth0_config):
         """Network error fetching JWKS results in INVALID_JWT, not a crash."""
-        import requests as req
+
         strategy = Auth0AuthenticationStrategy(auth0_config)
         private_key, _ = _generate_rsa_key_pair()
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer)
@@ -318,6 +352,58 @@ class TestAuth0AuthenticationStrategy:
             is_valid, error = strategy.validate_request(f'Bearer {token}')
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
+
+
+class TestJwksProvider:
+    """Tests for JWKS caching, TTL and key-rotation refresh"""
+
+    URL = 'https://test.auth0.com/.well-known/jwks.json'
+
+    @staticmethod
+    def _response(jwks: dict) -> Mock:
+        response = Mock()
+        response.json.return_value = jwks
+        response.raise_for_status = Mock()
+        return response
+
+    def test_unknown_kid_triggers_refresh_after_min_interval(self):
+        """Rotated key (new kid) is picked up without restart"""
+        now = [0.0]
+        provider = JwksProvider(self.URL, min_refresh_interval_seconds=60, clock=lambda: now[0])
+        provider.seed({"keys": [{"kid": "old"}]})
+        now[0] = 61.0
+        with patch('requests.get', return_value=self._response({"keys": [{"kid": "new"}]})) as mock_get:
+            assert provider.get_key("new") == {"kid": "new"}
+            assert mock_get.call_count == 1
+
+    def test_unknown_kid_refresh_is_throttled(self):
+        """Random kids cannot force a JWKS fetch per request"""
+        now = [0.0]
+        provider = JwksProvider(self.URL, min_refresh_interval_seconds=60, clock=lambda: now[0])
+        provider.seed({"keys": [{"kid": "old"}]})
+        now[0] = 10.0
+        with patch('requests.get') as mock_get:
+            assert provider.get_key("forged") is None
+            mock_get.assert_not_called()
+
+    def test_expired_cache_is_refetched(self):
+        now = [0.0]
+        provider = JwksProvider(self.URL, ttl_seconds=100, clock=lambda: now[0])
+        provider.seed({"keys": [{"kid": "a"}]})
+        now[0] = 100.0
+        with patch('requests.get', return_value=self._response({"keys": [{"kid": "a"}]})) as mock_get:
+            provider.get_key("a")
+            assert mock_get.call_count == 1
+
+    def test_refresh_failure_keeps_cached_keys(self):
+        """An Auth0 outage does not invalidate already-known keys"""
+
+        now = [0.0]
+        provider = JwksProvider(self.URL, ttl_seconds=100, clock=lambda: now[0])
+        provider.seed({"keys": [{"kid": "a"}]})
+        now[0] = 200.0
+        with patch('requests.get', side_effect=req.RequestException("down")):
+            assert provider.get_key("a") == {"kid": "a"}
 
 
 class TestNoAuthenticationStrategy:

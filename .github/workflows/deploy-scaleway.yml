@@ -87,16 +87,18 @@ jobs:
             echo "::error::MODEL_SERVICE_URL variable is not set — refusing to deploy against the placeholder endpoint."
             exit 1
           fi
-          # AUTH_TYPE=token with an empty API_TOKEN doesn't validate the token value:
-          # a missing/malformed Authorization header is still rejected, but ANY
-          # `Bearer <anything>` is accepted — a false sense of protection. Require
-          # the token when token auth is on.
-          if [ "${AUTH_TYPE:-none}" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
-            echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN or use AUTH_TYPE=none."
+          # No implicit default: an unset variable must not deploy an open API.
+          case "${AUTH_TYPE:-}" in
+            auth0|token|none) ;;
+            *) echo "::error::AUTH_TYPE variable must be set to auth0, token or none (got '${AUTH_TYPE:-}')."; exit 1 ;;
+          esac
+          # Token auth without a token refuses to start in lux — fail here instead.
+          if [ "$AUTH_TYPE" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
+            echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN."
             exit 1
           fi
           # Auth0 needs both identifiers; lux raises at startup otherwise — fail here.
-          if [ "${AUTH_TYPE:-none}" = "auth0" ] && { [ -z "${AUTH0_DOMAIN:-}" ] || [ -z "${AUTH0_AUDIENCE:-}" ]; }; then
+          if [ "$AUTH_TYPE" = "auth0" ] && { [ -z "${AUTH0_DOMAIN:-}" ] || [ -z "${AUTH0_AUDIENCE:-}" ]; }; then
             echo "::error::AUTH_TYPE=auth0 requires the AUTH0_DOMAIN and AUTH0_AUDIENCE variables."
             exit 1
           fi

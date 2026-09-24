@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 from dataclasses import dataclass
-from .enums import AuthType
+from .enums import AuthType, JwtAlgorithm
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class Auth0Config:
         if not audience:
             raise ValueError("AUTH0_AUDIENCE environment variable is required")
 
-        algorithms = [alg.strip() for alg in algorithms_str.split(',')]
+        algorithms = cls._parse_algorithms(algorithms_str)
         issuer = f"https://{domain}/"
 
         return cls(
@@ -41,6 +41,23 @@ class Auth0Config:
             algorithms=algorithms,
             issuer=issuer
         )
+
+    @staticmethod
+    def _parse_algorithms(algorithms_str: str) -> list[str]:
+        """Parse AUTH0_ALGORITHMS, accepting only asymmetric algorithms.
+
+        Raises:
+            ValueError: If the list is empty or names a non-asymmetric algorithm
+        """
+        algorithms = [alg.strip() for alg in algorithms_str.split(',') if alg.strip()]
+        allowed = {alg.value for alg in JwtAlgorithm}
+        rejected = [alg for alg in algorithms if alg not in allowed]
+        if not algorithms or rejected:
+            raise ValueError(
+                f"AUTH0_ALGORITHMS must list asymmetric algorithms only "
+                f"({', '.join(a.value for a in JwtAlgorithm)}); rejected: {rejected}"
+            )
+        return algorithms
 
     @property
     def jwks_url(self) -> str:
@@ -64,20 +81,25 @@ class AuthConfig:
         Returns:
             AuthType enum value
         """
-        auth_type_str = os.getenv('AUTH_TYPE', 'token').lower()
+        auth_type_str = os.getenv('AUTH_TYPE', AuthType.TOKEN.value).strip().lower()
 
-        auth_type_map = {
-            AuthType.TOKEN.value: AuthType.TOKEN,
-            AuthType.AUTH0.value: AuthType.AUTH0,
-            AuthType.NONE.value: AuthType.NONE,
-        }
+        auth_type_map = {auth_type.value: auth_type for auth_type in AuthType}
 
-        return auth_type_map.get(auth_type_str, AuthType.TOKEN)
+        auth_type = auth_type_map.get(auth_type_str)
+        if auth_type is None:
+            # Fail closed: a typo must not silently pick a weaker mode.
+            raise ValueError(
+                f"Unsupported AUTH_TYPE '{auth_type_str}'; expected one of {sorted(auth_type_map)}"
+            )
+        return auth_type
 
     def _initialize_config(self) -> None:
         """Initialize configuration based on auth type"""
         if self._auth_type == AuthType.TOKEN:
             self._token = os.getenv('API_TOKEN')
+            if not self._token:
+                # Fail closed: token auth without a token would accept any bearer.
+                raise ValueError("AUTH_TYPE=token requires a non-empty API_TOKEN")
         elif self._auth_type == AuthType.AUTH0:
             try:
                 self._auth0_config = Auth0Config.from_environment()
