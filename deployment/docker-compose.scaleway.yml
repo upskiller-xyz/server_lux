@@ -74,6 +74,9 @@ services:
       # Inbound auth for the public API — must be set explicitly (auth0|token|none).
       - AUTH_TYPE=${AUTH_TYPE:?AUTH_TYPE must be set explicitly (auth0|token|none)}
       - API_TOKEN=${API_TOKEN:-}
+      # Comma-separated browser origins allowed to call the API (e.g. the web app).
+      # Empty = allow every origin (logged as a warning at startup).
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       # Shared rolling-window quota counter. Defaults to the co-located Redis on
       # this box (shared across gunicorn workers); override with an external
       # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.

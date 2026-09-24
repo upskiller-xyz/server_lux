@@ -4,6 +4,7 @@ import numpy as np
 
 from .base_contracts import RemoteServiceRequest, StandardResponse
 from ....enums import RequestField, ResponseKey
+from ....exceptions import RequestValidationError
 
 
 @dataclass
@@ -30,7 +31,7 @@ class StatsRequest(RemoteServiceRequest):
         mask = content.get(RequestField.MASK.value)
 
         if df_values is None:
-            raise ValueError(f"Missing '{RequestField.RESULT.value}' field in request data for StatsService")
+            raise RequestValidationError(f"Missing '{RequestField.RESULT.value}' field in request data")
 
         # Convert to numpy arrays if they're lists
         if isinstance(df_values, list):

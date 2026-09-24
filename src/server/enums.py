@@ -197,6 +197,10 @@ class ErrorMessage(Enum):
     RATE_LIMIT_EXCEEDED = "Request limit reached. Try again after the reset time."
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
+    INTERNAL_ERROR = "Internal server error"
+    UPSTREAM_ERROR = "{service} service error"
+    UPSTREAM_UNAVAILABLE = "{service} service unavailable"
+    UPSTREAM_TIMEOUT = "{service} service timeout"
 
 
 class NPZKey(Enum):

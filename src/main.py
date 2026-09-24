@@ -16,10 +16,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from flask import Flask, Response, jsonify, request
-from flask_cors import CORS
 from flasgger import Swagger
 
 from src.server.auth import Authenticator
+from src.server.cors_config import CorsConfig
 from src.server.rate_limiter import RateLimiter
 from src.server.enums import ServiceName, EndpointType, AuthType
 from src.server.controllers.base_controller import ServerController
@@ -63,7 +63,7 @@ class ServerApplication:
 
     def __init__(self, app_name: str = "Server Application"):
         self._app = Flask(app_name)
-        CORS(self._app)
+        CorsConfig.from_environment().apply(self._app)
 
         # Initialize Swagger
         Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
@@ -172,7 +172,7 @@ class ServerLauncher:
         app: ServerApplication,
         host: str = "0.0.0.0",
         port: int = 8080,
-        debug: bool = True
+        debug: bool = False
     ) -> None:
         """Run the server with specified configuration
 
@@ -195,7 +195,8 @@ def main() -> None:
     launcher = ServerLauncher()
     application = launcher.create_application()
     port = int(os.getenv("PORT", 8080))
-    launcher.run_server(application, port=port, debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").strip().lower() in ("true", "1", "yes")
+    launcher.run_server(application, port=port, debug=debug)
 
 
 def create_app():

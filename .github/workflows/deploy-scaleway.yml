@@ -66,6 +66,7 @@ jobs:
         env:
           MODEL_SERVICE_URL: ${{ vars.MODEL_SERVICE_URL }}
           AUTH_TYPE: ${{ vars.AUTH_TYPE }}
+          CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
           # Auth0 identifiers are public (not secrets) → GitHub Variables.
           AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
           AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
@@ -108,6 +109,7 @@ jobs:
           for kv in \
             "MODEL_SERVICE_URL=$MODEL_SERVICE_URL" \
             "AUTH_TYPE=$AUTH_TYPE" \
+            "CORS_ORIGINS=$CORS_ORIGINS" \
             "AUTH0_DOMAIN=$AUTH0_DOMAIN" \
             "AUTH0_AUDIENCE=$AUTH0_AUDIENCE" \
             "MODAL_KEY=$MODAL_KEY" \

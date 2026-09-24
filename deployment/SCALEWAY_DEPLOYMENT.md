@@ -63,6 +63,7 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `MODEL_SERVICE_URL` | yes | Modal endpoint (deploy fails fast if unset) |
 | Variable | `DEPLOY_REF` | optional | Git ref to deploy (default `master`) |
 | Variable | `AUTH_TYPE` | **required** | `auth0`, `token` or `none` — no default; deploy fails if unset |
+| Variable | `CORS_ORIGINS` | recommended | Comma-separated browser origins allowed to call the API (the web app); empty = any origin |
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | optional | Pinned host key (output of `ssh-keyscan <host>`); falls back to a live, MITM-able keyscan if unset |
 

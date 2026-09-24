@@ -2,6 +2,10 @@ from typing import Optional
 from abc import ABC
 
 
+class RequestValidationError(ValueError):
+    """Invalid client input. Its message is safe to return to the caller."""
+
+
 class ServiceException(Exception, ABC):
     """Base exception for all service-related errors"""
 
