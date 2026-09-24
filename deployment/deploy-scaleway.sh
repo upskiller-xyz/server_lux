@@ -76,7 +76,14 @@ for repo_info in "${REPOS[@]}"; do
   fi
 done
 
-# ── 3. Optional firewall: expose only SSH + HTTP(S) ──────────────────────────
+# ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
+# nginx restores each visitor's real IP from these ranges (per-IP rate limiting).
+# The script keeps the last known-good include on failure, so a deploy never
+# hinges on Cloudflare being reachable.
+echo -e "${BLUE}Refreshing Cloudflare IP ranges...${NC}"
+bash update-cloudflare-ips.sh
+
+# ── 4. Optional firewall: expose only SSH + HTTP(S) ──────────────────────────
 # Defence in depth on top of the Scaleway security group. The app services never
 # bind host ports anyway, but this guarantees nothing else is reachable.
 if [[ "$SETUP_FIREWALL" == true ]]; then
@@ -87,7 +94,7 @@ if [[ "$SETUP_FIREWALL" == true ]]; then
   sudo ufw --force enable
 fi
 
-# ── 4. Bring up the stack ────────────────────────────────────────────────────
+# ── 5. Bring up the stack ────────────────────────────────────────────────────
 BUILD_FLAG=""; [[ "$FORCE_BUILD" == true ]] && BUILD_FLAG="--build"
 echo -e "${BLUE}Starting stack...${NC}"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
