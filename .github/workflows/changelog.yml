@@ -5,8 +5,12 @@ on:
     tags:
       - 'v*'
 
+# master is protected (changes must go through a PR, commits must be signed), so
+# the changelog lands via a PR rather than a direct push: creating the branch
+# needs contents:write and opening the PR needs pull-requests:write.
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   generate-changelog:
@@ -36,13 +40,47 @@ jobs:
           OUTPUT: NOTES.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Commit CHANGELOG.md
+      - name: Open changelog PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+          BASE: ${{ github.event.repository.default_branch }}
         run: |
+          set -euo pipefail
+
+          # Nothing to do if git-cliff produced no change. Porcelain status, not
+          # `git diff`: on the first run CHANGELOG.md is untracked, and git diff
+          # ignores untracked files — the step would report "no changes" exactly
+          # when the first changelog is being created.
+          if [ -z "$(git status --porcelain -- CHANGELOG.md)" ]; then
+            echo "No changes to CHANGELOG.md"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # A tag push checks out a detached HEAD at the tagged commit; branch
+          # from it so the PR carries only the changelog change. Re-running the
+          # same tag reuses the branch and the open PR instead of failing.
+          BRANCH="changelog/${VERSION}"
+          git checkout -b "$BRANCH"
           git add CHANGELOG.md
-          git diff --cached --quiet || git commit -m "chore(changelog): update for ${{ github.ref_name }}"
-          git push origin HEAD:${{ github.event.repository.default_branch }}
+          git commit -m "chore(changelog): update for ${VERSION}"
+          git push --force-with-lease origin "$BRANCH"
+
+          # Only an OPEN PR counts as "already exists": `gh pr view <branch>`
+          # also resolves a closed one, which would leave the changelog on a
+          # branch with no PR to merge and no way to recover on a re-run.
+          if [ -n "$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[].number')" ]; then
+            echo "Open PR for $BRANCH already exists; branch updated."
+          else
+            gh pr create \
+              --base "$BASE" \
+              --head "$BRANCH" \
+              --title "chore(changelog): update for ${VERSION}" \
+              --body "Automated changelog update for ${VERSION}."
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
