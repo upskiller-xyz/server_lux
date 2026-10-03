@@ -53,12 +53,29 @@ class ParallelServiceExecutor(ServiceExecutor):
         if results and isinstance(results[0], bytes):
             return results[0]
 
-        response = {}
+        response: dict = {}
         for single_response in results:
             if isinstance(single_response, dict):
-                response.update(single_response)
+                self._merge(response, single_response)
 
         return response
+
+    @staticmethod
+    def _merge(response: dict, single_response: dict) -> None:
+        """Merge one request's response into the accumulated response.
+
+        Per-window services answer with a window-keyed mapping under a shared
+        key (``{"horizon": {"window_1": [...]}}``). A plain ``dict.update``
+        replaces that mapping wholesale, so every window but the last was lost.
+        Dict values are therefore merged one level deep; any other value keeps
+        last-wins, as before.
+        """
+        for key, value in single_response.items():
+            existing = response.get(key)
+            if isinstance(existing, dict) and isinstance(value, dict):
+                existing.update(value)
+                continue
+            response[key] = value
 
 
 class ExecutorFactory:
