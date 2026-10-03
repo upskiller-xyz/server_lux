@@ -56,7 +56,7 @@ def get_swagger_template() -> dict:
         'definitions': {
             'Mesh': {
                 'type': 'array',
-                'description': '3D mesh as array of triangle vertex coordinates [[x,y,z], ...]. Must have vertices in multiples of 3 (each triangle has 3 vertices). The mesh should represent buildings/obstacles near the window position for realistic obstruction calculations.',
+                'description': 'Optional 3D mesh as array of triangle vertex coordinates [[x,y,z], ...]. Must have vertices in multiples of 3 (each triangle has 3 vertices). The mesh should represent buildings/obstacles near the window position for realistic obstruction calculations. Omit it, or send an empty array, for an unobstructed sky: obstruction angles are 0 deg in every direction and the obstruction service is not called.',
                 'example': [
                     [-10, 0, 0], [10, 0, 0], [-10, 10, 0],
                     [10, 0, 0], [10, 10, 0], [-10, 10, 0],

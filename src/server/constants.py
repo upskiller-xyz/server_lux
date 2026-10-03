@@ -30,6 +30,17 @@ class ObstructionAngleDefaults:
     EXPECTED_ANGLE_COUNT: int = 64
 
 
+class ObstructionRequestDefaults:
+    """Defaults shared by the obstruction request contracts and service.
+
+    ``WINDOW_NAME`` is the sentinel a single-window (non-orchestrated) request
+    carries. ObstructionService returns flat angle lists for it and a
+    ``{window_name: angles}`` mapping for every other name.
+    """
+    WINDOW_NAME: str = "window"
+    UNOBSTRUCTED_ANGLE_DEGREES: float = 0.0
+
+
 class ImageDefaults:
     """Default values for image processing"""
     TARGET_WIDTH: int = 128

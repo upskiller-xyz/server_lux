@@ -54,25 +54,33 @@ class ListTypeValidator(IFieldValidator):
 class MeshTypeValidator(IFieldValidator):
     """Validates the mesh field.
 
-    The mesh may arrive as a JSON list of ``[x, y, z]`` vertices, or as a raw
-    binary payload (.npy / gzip) that lux forwards untouched to obstruction's
-    binary endpoint without ever parsing it. Both are accepted here.
+    The mesh may arrive as a JSON list of ``[x, y, z]`` vertices, as a split
+    dict (``{"horizon": [...], "zenith": [...]}``, the form
+    ObstructionMultiRequest sends), or as a raw binary payload (.npy / gzip)
+    that lux forwards untouched to obstruction's binary endpoint without ever
+    parsing it. All three are accepted here.
     """
+
+    _ACCEPTED_TYPES: tuple = (list, dict, bytes, bytearray)
 
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         value = request_data.get(field.value)
-        if value is not None and not isinstance(value, (list, bytes, bytearray)):
-            return f"Field '{field.value}' must be a list or a binary mesh payload"
+        if value is not None and not isinstance(value, self._ACCEPTED_TYPES):
+            return f"Field '{field.value}' must be a list, a split dict or a binary mesh payload"
         return None
 
 
 class ValidationStrategy:
     """Strategy for validating request fields using validator chain"""
 
-    # Map fields to their specific validators
+    # Map fields to their validator chain. A field listed here is validated by
+    # its chain alone, so whether it may be omitted is expressed by including
+    # PresenceValidator or not — mesh is optional (an absent mesh means an
+    # unobstructed sky, see EmptyMeshPolicy) but still type-checked when sent.
+    # Fields without a chain fall back to requiring presence.
     FIELD_VALIDATORS: Dict[RequestField, List[IFieldValidator]] = {
         RequestField.PARAMETERS: [PresenceValidator(), DictTypeValidator()],
-        RequestField.MESH: [PresenceValidator(), MeshTypeValidator()],
+        RequestField.MESH: [MeshTypeValidator()],
     }
 
     @classmethod
@@ -88,12 +96,14 @@ class ValidationStrategy:
                 The exception path maps client-input errors to HTTP 400.
         """
         for field in required_fields:
-            # Check presence first
-            if field.value not in request_data:
-                raise RequestValidationError(f"Missing required field: {field.value}")
+            validators = cls.FIELD_VALIDATORS.get(field)
 
-            # Apply specific validators if configured
-            validators = cls.FIELD_VALIDATORS.get(field, [])
+            # No chain configured: presence is the whole contract for this field.
+            if not validators:
+                if field.value not in request_data:
+                    raise RequestValidationError(f"Missing required field: {field.value}")
+                continue
+
             for validator in validators:
                 error_msg = validator.validate(request_data, field)
                 if error_msg:

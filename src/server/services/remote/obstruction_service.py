@@ -13,7 +13,7 @@ from src.server.services.remote.contracts.obstruction_contracts import (
     ObstructionResponse,
 )
 
-from ...constants import ObstructionConcurrency
+from ...constants import ObstructionConcurrency, ObstructionRequestDefaults
 from ...enums import (
     EndpointType,
     HTTPStatus,
@@ -24,6 +24,7 @@ from ...enums import (
 )
 from ...exceptions import ServiceResponseError
 from ...services.obstruction.calculator_interface import IObstructionCalculator
+from ...services.obstruction.empty_mesh_policy import EmptyMeshPolicy
 from .base import RemoteService
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
 
@@ -81,6 +82,13 @@ class ObstructionService(RemoteService):
         # Cast to ObstructionRequest since _get_request returns ObstructionRequest
         obstruction_request = cast(ObstructionRequest, request)
 
+        # No context geometry means nothing shades the window: 0° in every
+        # direction, known without the remote service. Returning here also keeps
+        # the request off the concurrency semaphore, so a room whose windows have
+        # no obstruction mesh costs no obstruction capacity at all.
+        if EmptyMeshPolicy.is_empty(obstruction_request.mesh):
+            return EmptyMeshPolicy.unobstructed_angles(obstruction_request.window_name)
+
         # A binary mesh (.npy / gzip) is forwarded untouched to obstruction's
         # binary endpoint as multipart — lux never parses it. A JSON (list) mesh
         # takes the standard JSON path. Both remote calls are gated by the
@@ -106,7 +114,7 @@ class ObstructionService(RemoteService):
         # For multi-window orchestration, return nested structure
         horizon_params = horizon_angles
         zenith_params = zenith_angles
-        if window_name != "window":
+        if window_name != ObstructionRequestDefaults.WINDOW_NAME:
             horizon_params = {window_name: horizon_angles}
             zenith_params = {window_name: zenith_angles}
         return {

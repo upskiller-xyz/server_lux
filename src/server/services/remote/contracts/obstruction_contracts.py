@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Optional, Union
 import logging
 
 from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
+from ....constants import ObstructionRequestDefaults
 from ....enums import RequestField, ResponseKey
 
 
@@ -23,7 +24,7 @@ class ObstructionRequest(RemoteServiceRequest):
     z: float
     direction_angle: float
     mesh: Union[List[List[float]], Dict[str, Any], bytes, bytearray]
-    window_name: str = "window"
+    window_name: str = ObstructionRequestDefaults.WINDOW_NAME
 
     @classmethod
     def parse(cls, content: Dict[str, Any]) -> List['ObstructionRequest']:

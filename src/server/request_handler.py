@@ -88,9 +88,13 @@ class RequestParser:
                 raw = mesh_file.read()
                 # Binary mesh (.npy, optionally gzipped) is forwarded to obstruction
                 # as raw bytes — lux never parses it. Only a JSON mesh is parsed.
-                params[RequestField.MESH.value] = (
-                    raw if RequestParser._is_binary_mesh(raw) else orjson.loads(raw)
-                )
+                # A zero-length upload is neither: parsing it as JSON would raise
+                # and surface as a 500, so it is kept as the empty payload it is
+                # and resolved downstream as an unobstructed sky (EmptyMeshPolicy).
+                if not raw or RequestParser._is_binary_mesh(raw):
+                    params[RequestField.MESH.value] = raw
+                else:
+                    params[RequestField.MESH.value] = orjson.loads(raw)
         return params
 
     # Magic bytes identifying a binary mesh payload that lux forwards untouched.
