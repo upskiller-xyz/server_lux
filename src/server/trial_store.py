@@ -76,10 +76,11 @@ class InMemoryTrialStore(TrialStore):
 class RedisTrialStore(TrialStore):
     """Shared trial deadlines in Redis.
 
-    ``SET key <expires_epoch> NX`` starts the clock on the company's first
-    request; the started_at is reconstructable as expires minus duration, but
-    is also kept in a companion key so it survives duration overrides. Shared
-    across all workers/instances that point at the Redis.
+    The company's first request atomically writes both the deadline and the
+    original start timestamp (a single pipelined transaction), so a later
+    change of ``TRIAL_HOURS`` cannot shift the reported start of an already
+    activated trial. ``SET NX`` guarantees only the first request ever writes.
+    Shared across all workers/instances that point at the Redis.
     """
 
     def __init__(self, client, key_prefix: str):
@@ -88,16 +89,33 @@ class RedisTrialStore(TrialStore):
 
     def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
         deadline_key = f"{self._key_prefix}:{domain}"
+        started_key = f"{deadline_key}:started"
         now = time.time()
         expires = int(now + duration_seconds)
-        # NX: only the first request ever writes; later requests keep the
-        # original deadline. Atomic, so concurrent first requests converge.
-        was_set = self._client.set(deadline_key, expires, nx=True)
-        if not was_set:
-            expires = int(self._client.get(deadline_key))
+        # Atomic NX pair: only the company's first request ever writes; later
+        # requests — including ones with a different duration configured — read
+        # the original pair. Concurrent first requests converge on one writer.
+        pipe = self._client.pipeline()
+        pipe.set(deadline_key, expires, nx=True)
+        pipe.set(started_key, int(now), nx=True)
+        _, _ = pipe.execute()
+        deadline_raw = self._client.get(deadline_key)
+        started_raw = self._client.get(started_key)
+        if deadline_raw is None or started_raw is None:
+            # Only reachable if the pair was partially wiped between the SET
+            # and the GET (e.g. a FLUSH racing the activation) — repair by
+            # writing the deadline unconditionally so the pair is whole again.
+            started = int(now)
+            expires = int(now + duration_seconds)
+            pipe = self._client.pipeline()
+            pipe.set(deadline_key, expires)
+            pipe.set(started_key, started)
+            pipe.execute()
+        else:
+            started, expires = int(started_raw), int(deadline_raw)
         return TrialState(
             domain=domain,
-            started_at=datetime.fromtimestamp(expires - duration_seconds, tz=timezone.utc),
+            started_at=datetime.fromtimestamp(started, tz=timezone.utc),
             expires_at=datetime.fromtimestamp(expires, tz=timezone.utc),
         )
 

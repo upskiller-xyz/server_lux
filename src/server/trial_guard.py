@@ -65,9 +65,10 @@ class TrialGuard:
             except Exception as exc:
                 # A store outage must not take the server down; failing closed
                 # here is safe because it only affects trial callers, never
-                # paying customers.
+                # paying customers. The distinct error type tells the plugin
+                # this is transient and retryable, not a missing registration.
                 logger.error("Trial store error — blocking trial request (fail-closed): %s", exc)
-                return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
+                return self._reject(ErrorType.TRIAL_STORE_UNAVAILABLE)
             if state.is_expired:
                 return self._reject(ErrorType.TRIAL_EXPIRED, state)
             response = make_response(f(*args, **kwargs))
@@ -81,7 +82,9 @@ class TrialGuard:
 
         Starts the clock on first call like any guarded request, but never
         blocks: an expired trial is reported, not rejected, so the client can
-        render "expired" without guessing.
+        render "expired" without guessing. Not wrapped in require_trial —
+        the guard decorator would 403 an expired trial before this could
+        report it. Only authentication applies on the route.
         """
         if not self._applies_to_caller():
             return jsonify({ResponseKey.STATUS.value: "not_applicable"})
@@ -92,12 +95,12 @@ class TrialGuard:
             state = self._store.activate_or_get(domain, self._config.duration_seconds)
         except Exception as exc:
             logger.error("Trial store error — blocking trial status (fail-closed): %s", exc)
-            return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
+            return self._reject(ErrorType.TRIAL_STORE_UNAVAILABLE)
         payload = {
             ResponseKey.STATUS.value: "expired" if state.is_expired else "active",
             ResponseKey.TRIAL_STARTED_AT.value: state.started_at.isoformat(),
             ResponseKey.TRIAL_EXPIRES_AT.value: state.expires_at.isoformat(),
-            ResponseKey.REMAINING.value: round(state.remaining_hours, 1),
+            ResponseKey.REMAINING_HOURS.value: round(state.remaining_hours, 1),
         }
         response = make_response(jsonify(payload))
         self._apply_headers(response, state)

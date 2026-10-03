@@ -2,22 +2,26 @@
 
 import os
 import time
+from unittest.mock import Mock, patch
+
+import jwt
 import pytest
 import requests as req
-from unittest.mock import Mock, patch
 from cryptography.hazmat.primitives.asymmetric import rsa
-import jwt
+from flask import Flask, g
 from jwt.utils import base64url_encode
-from src.server.enums import AuthType, ErrorType
-from src.server.auth_config import AuthConfig, Auth0Config
-from src.server.auth_strategies import (
-    TokenAuthenticationStrategy,
-    Auth0AuthenticationStrategy,
-    NoAuthenticationStrategy,
-    JwksProvider
-)
-from src.server.auth_factory import AuthenticationStrategyFactory
+
 from src.server.auth import Authenticator, TokenAuthenticator
+from src.server.auth_config import Auth0Config, AuthConfig
+from src.server.auth_factory import AuthenticationStrategyFactory
+from src.server.auth_strategies import (
+    TRIAL_DOMAIN_CLAIM,
+    Auth0AuthenticationStrategy,
+    JwksProvider,
+    NoAuthenticationStrategy,
+    TokenAuthenticationStrategy,
+)
+from src.server.enums import AuthType, ErrorType
 
 
 def _generate_rsa_key_pair():
@@ -51,6 +55,7 @@ def _make_jwt(
     issuer: str,
     kid: str = "test-key-id",
     exp_offset: int = 3600,
+    extra_claims: dict | None = None,
 ) -> str:
     """Sign a test JWT with the given RSA private key."""
     now = int(time.time())
@@ -61,6 +66,8 @@ def _make_jwt(
         "iat": now,
         "exp": now + exp_offset,
     }
+    if extra_claims:
+        payload.update(extra_claims)
     headers = {"kid": kid}
     return jwt.encode(payload, private_key, algorithm="RS256", headers=headers)
 
@@ -364,6 +371,26 @@ class TestAuth0AuthenticationStrategy:
             is_valid, error = strategy.validate_request(f'Bearer {token}')
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
+
+    def test_validate_request_propagates_identity_to_request_context(self, strategy_with_jwks, auth0_config):
+        """A valid trial token populates g.auth_subject/auth_client_id/auth_domain.
+
+        This is the claim-to-guard boundary the trial guard keys on: the
+        signed token carries azp + the custom trial-domain claim, and all
+        three must land on flask.g inside a request context.
+        """
+        strategy, private_key = strategy_with_jwks
+        extra_claims = {"azp": "lux-revit-trial", TRIAL_DOMAIN_CLAIM: "foretagx.se"}
+        token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, extra_claims=extra_claims)
+
+        app = Flask(__name__)
+        with app.test_request_context("/", headers={"Authorization": f"Bearer {token}"}):
+            is_valid, error = strategy.validate_request(f"Bearer {token}")
+            assert is_valid is True
+            assert error is None
+            assert g.auth_subject == "test-user"
+            assert g.auth_client_id == "lux-revit-trial"
+            assert g.auth_domain == "foretagx.se"
 
 
 class TestJwksProvider:

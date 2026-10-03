@@ -25,6 +25,9 @@ services:
       # Shared rolling-window quota counter (co-located Redis on this box, so it
       # is shared across gunicorn workers). Override in .env.full-stack if needed.
       - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
+      # Shared trial-deadline store (same Redis; persistence is enabled below so
+      # a restart does not reset trial clocks).
+      - TRIAL_REDIS_URL=${TRIAL_REDIS_URL:-redis://redis:6379}
     env_file:
       - .env.full-stack
     depends_on:
@@ -49,13 +52,16 @@ services:
       retries: 3
       start_period: 40s
 
-  # Rolling-window quota counter for the daily rate limit. Pure in-memory cache
-  # (no persistence) — a restart just resets counters, fine for a fair-use limit.
+  # Shared state for the daily rate limit + trial deadlines. AOF persistence
+  # keeps trial clocks across restarts (rate-limit counters may reset, that is
+  # fine for a fair-use limit — trial deadlines must not).
   redis:
     image: redis:7-alpine
     container_name: redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
     networks:
       - lux-network
     healthcheck:
@@ -197,3 +203,6 @@ services:
 networks:
   lux-network:
     driver: bridge
+
+volumes:
+  redis-data:

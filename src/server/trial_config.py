@@ -40,6 +40,11 @@ class TrialConfig:
         """
         enabled = os.getenv("TRIAL_ENABLED", "false").strip().lower() == "true"
         client_id = os.getenv("TRIAL_CLIENT_ID") or None
+        if enabled and client_id is None:
+            # Fail closed at startup: an enabled trial without a client id
+            # would silently guard nothing (fail-open), granting unrestricted
+            # access. Refuse to start instead — same policy as AuthConfig.
+            raise ValueError("TRIAL_ENABLED=true requires TRIAL_CLIENT_ID to be set")
         hours = int(os.getenv("TRIAL_HOURS", str(DEFAULT_TRIAL_HOURS)))
         redis_url = os.getenv("TRIAL_REDIS_URL") or os.getenv("REDIS_URL") or None
         key_prefix = os.getenv("TRIAL_KEY_PREFIX", DEFAULT_TRIAL_KEY_PREFIX)

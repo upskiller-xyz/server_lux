@@ -38,6 +38,7 @@ class ErrorTypeMessageMap(StandardMap):
         ErrorType.RATE_LIMIT_EXCEEDED: ErrorMessage.RATE_LIMIT_EXCEEDED.value,
         ErrorType.TRIAL_EXPIRED: ErrorMessage.TRIAL_EXPIRED.value,
         ErrorType.TRIAL_DOMAIN_MISSING: ErrorMessage.TRIAL_DOMAIN_MISSING.value,
+        ErrorType.TRIAL_STORE_UNAVAILABLE: ErrorMessage.TRIAL_STORE_UNAVAILABLE.value,
         ErrorType.MISSING_JSON: ErrorMessage.MISSING_JSON.value,
         ErrorType.MISSING_FILE: ErrorMessage.MISSING_FILE.value,
     }
@@ -60,6 +61,7 @@ class ErrorTypeStatusMap(StandardMap):
         ErrorType.RATE_LIMIT_EXCEEDED: HTTPStatus.TOO_MANY_REQUESTS.value,
         ErrorType.TRIAL_EXPIRED: HTTPStatus.FORBIDDEN.value,
         ErrorType.TRIAL_DOMAIN_MISSING: HTTPStatus.FORBIDDEN.value,
+        ErrorType.TRIAL_STORE_UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE.value,
         ErrorType.MISSING_JSON: HTTPStatus.BAD_REQUEST.value,
         ErrorType.MISSING_FILE: HTTPStatus.BAD_REQUEST.value,
         ErrorType.VALIDATION_ERROR: HTTPStatus.BAD_REQUEST.value,

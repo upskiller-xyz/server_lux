@@ -112,9 +112,11 @@ The domain is the company: all users at `foretagx.se` share one trial clock.
 - **Scope**: only the trial client is guarded. Paying Revit customers and the
   web app pass through untouched, even on the same endpoints.
 - **Fail-closed**: a trial token without the domain claim is rejected
-  (`trial_domain_missing`); a Redis outage blocks trial callers rather than
-  handing out unlimited access. Neither failure mode can affect paying
-  customers.
+  (`trial_domain_missing`); a Redis outage blocks trial callers with a
+  retryable `trial_store_unavailable` (503) rather than handing out
+  unlimited access. Neither failure mode can affect paying customers.
+- **Startup validation**: `TRIAL_ENABLED=true` without `TRIAL_CLIENT_ID`
+  refuses to start (fail closed), instead of silently guarding nothing.
 
 ### Configuration
 
@@ -141,8 +143,9 @@ X-Trial-Expires-At: 2026-10-10T14:32:00+00:00
 ```
 
 `GET /v1/trial/status` returns the same window as JSON (plus
-`remaining_hours`) without blocking, so the plugin can refresh its countdown;
-it reports `"not_applicable"` for non-trial clients.
+`remaining_hours`) without blocking — the route is authenticated but *not*
+wrapped in the trial guard, so an expired trial is reported (`"expired"`)
+rather than rejected; it answers `"not_applicable"` for non-trial clients.
 
 When the trial has ended, `403 Forbidden`:
 

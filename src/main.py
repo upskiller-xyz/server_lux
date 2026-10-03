@@ -128,9 +128,11 @@ class ServerApplication:
 
         handlers = {
             EndpointType.STATUS: self._get_status,
-            # Read-only trial status for the plugin (starts the clock on first call,
-            # reports expired instead of rejecting).
-            EndpointType.TRIAL_STATUS: auth(trial(self._trial_guard.get_status)),
+            # Read-only trial status for the plugin. NOT wrapped in the trial
+            # guard — the guard would 403 an expired trial before this could
+            # report it. get_status() performs the lookup itself and reports
+            # "expired" instead of rejecting; only authentication applies.
+            EndpointType.TRIAL_STATUS: auth(self._trial_guard.get_status),
             # Auth outer, quota inner: authentication runs first and sets the
             # subject + client id the rate limiter keys/gates the daily quota on.
             # The web daylight tool predicts via /run (and /run/detailed in debug);

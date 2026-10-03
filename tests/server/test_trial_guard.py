@@ -3,8 +3,11 @@
 These use the in-memory store and a Flask test app so no Redis is required.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
+import pytest
 from flask import Flask, g, jsonify
 
 from src.server.enums import ErrorType, HTTPHeader, HTTPStatus, ResponseKey
@@ -40,6 +43,7 @@ def _app_with_route(
     guard: TrialGuard,
     client_id: str | None = None,
     domain: str | None = None,
+    guard_status_route: bool = False,
 ) -> Flask:
     app = Flask(__name__)
 
@@ -50,6 +54,12 @@ def _app_with_route(
 
     @app.route("/trial/status")
     def trial_status():
+        # Mirrors main.py composition: authentication only — get_status()
+        # performs the trial lookup itself so an expired trial is reported
+        # instead of rejected. Set guard_status_route=True to verify the
+        # miscomposition is caught.
+        if guard_status_route:
+            return guard.require_trial(guard.get_status)()
         return guard.get_status()
 
     @app.before_request
@@ -154,7 +164,20 @@ def test_store_error_fails_closed_for_trial_callers():
     client = _app_with_route(guard, client_id=TRIAL_CLIENT, domain="foretagx.se").test_client()
 
     response = client.get("/run")
-    assert response.status_code == HTTPStatus.FORBIDDEN.value
+    assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE.value
+    assert (
+        response.get_json()[ResponseKey.ERROR_TYPE.value]
+        == ErrorType.TRIAL_STORE_UNAVAILABLE.value
+    )
+
+
+def test_enabled_config_requires_client_id():
+    # TRIAL_ENABLED=true without TRIAL_CLIENT_ID must refuse to construct —
+    # silently guarding nothing would fail open with unrestricted access.
+    env = {"TRIAL_ENABLED": "true"}
+    with patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValueError, match="TRIAL_CLIENT_ID"):
+            TrialConfig.from_environment()
 
 
 def test_status_endpoint_reports_without_blocking():
@@ -167,16 +190,33 @@ def test_status_endpoint_reports_without_blocking():
     assert body[ResponseKey.STATUS.value] == "active"
     assert body[ResponseKey.TRIAL_STARTED_AT.value]
     assert body[ResponseKey.TRIAL_EXPIRES_AT.value]
-    assert body[ResponseKey.REMAINING.value] > 0
+    assert body[ResponseKey.REMAINING_HOURS.value] > 0
 
 
 def test_status_endpoint_reports_expired_not_rejects():
+    # The real route composition: authentication only, no require_trial wrap —
+    # an expired trial must be REPORTED, not 403:ed before get_status runs.
     guard = _guard(store=_ExpiredTrialStore())
     client = _app_with_route(guard, client_id=TRIAL_CLIENT, domain="foretagx.se").test_client()
 
     status = client.get("/trial/status")
     assert status.status_code == HTTPStatus.OK.value
-    assert status.get_json()[ResponseKey.STATUS.value] == "expired"
+    body = status.get_json()
+    assert body[ResponseKey.STATUS.value] == "expired"
+    assert body[ResponseKey.TRIAL_EXPIRES_AT.value]
+
+
+def test_status_route_wrapped_in_guard_would_block_expired():
+    # Regression proof for the composition bug: wrapping the status route in
+    # require_trial rejects an expired trial before it can report itself.
+    guard = _guard(store=_ExpiredTrialStore())
+    client = _app_with_route(
+        guard, client_id=TRIAL_CLIENT, domain="foretagx.se", guard_status_route=True
+    ).test_client()
+
+    status = client.get("/trial/status")
+    assert status.status_code == HTTPStatus.FORBIDDEN.value
+    assert status.get_json()[ResponseKey.ERROR_TYPE.value] == ErrorType.TRIAL_EXPIRED.value
 
 
 def test_status_not_applicable_for_other_clients():
