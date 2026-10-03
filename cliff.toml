@@ -16,7 +16,7 @@ body = """
 {% for commit in commits %}\
 - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
 {% if commit.breaking %}[**breaking**] {% endif %}\
-{{ commit.message | upper_first }}\
+{{ commit.message | upper_first }}
 {% endfor %}
 {% endfor %}\n
 """
@@ -36,6 +36,7 @@ commit_parsers = [
     { message = "^refactor", group = "Refactoring" },
     { message = "^style", group = "Style" },
     { message = "^test", group = "Testing" },
+    { message = "^ci", group = "CI/CD" },
     { message = "^chore\\(changelog\\)", skip = true },
     { message = "^chore", group = "Miscellaneous" },
     { body = ".*security", group = "Security" },
