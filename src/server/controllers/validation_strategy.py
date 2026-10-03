@@ -54,15 +54,19 @@ class ListTypeValidator(IFieldValidator):
 class MeshTypeValidator(IFieldValidator):
     """Validates the mesh field.
 
-    The mesh may arrive as a JSON list of ``[x, y, z]`` vertices, or as a raw
-    binary payload (.npy / gzip) that lux forwards untouched to obstruction's
-    binary endpoint without ever parsing it. Both are accepted here.
+    The mesh may arrive as a JSON list of ``[x, y, z]`` vertices, as a split
+    dict (``{"horizon": [...], "zenith": [...]}``, the form
+    ObstructionMultiRequest sends), or as a raw binary payload (.npy / gzip)
+    that lux forwards untouched to obstruction's binary endpoint without ever
+    parsing it. All three are accepted here.
     """
+
+    _ACCEPTED_TYPES: tuple = (list, dict, bytes, bytearray)
 
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         value = request_data.get(field.value)
-        if value is not None and not isinstance(value, (list, bytes, bytearray)):
-            return f"Field '{field.value}' must be a list or a binary mesh payload"
+        if value is not None and not isinstance(value, self._ACCEPTED_TYPES):
+            return f"Field '{field.value}' must be a list, a split dict or a binary mesh payload"
         return None
 
 

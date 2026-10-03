@@ -169,6 +169,24 @@ class TestMeshFieldValidation:
             self._RUN_FIELDS,
         )
 
+    @pytest.mark.parametrize("mesh", [
+        {},
+        {"horizon": [], "zenith": []},
+        {"horizon": [[0.0, 0.0, 0.0]], "zenith": []},
+    ], ids=["empty_dict", "empty_split", "split_with_geometry"])
+    def test_split_dict_mesh_passes_validation(self, mesh):
+        # ObstructionMultiRequest sends the split form, and EmptyMeshPolicy
+        # recognises the empty variants — neither is reachable if validation
+        # rejects dicts outright.
+        ValidationStrategy.validate_fields(
+            {
+                RequestField.MODEL_TYPE.value: "df",
+                RequestField.PARAMETERS.value: {},
+                RequestField.MESH.value: mesh,
+            },
+            self._RUN_FIELDS,
+        )
+
     def test_wrong_mesh_type_is_rejected(self):
         with pytest.raises(RequestValidationError, match="mesh"):
             ValidationStrategy.validate_fields(

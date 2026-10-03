@@ -26,7 +26,6 @@ class EndpointHandlers:
               required:
                 - model_type
                 - parameters
-                - mesh
               properties:
                 model_type:
                   type: string
@@ -161,7 +160,6 @@ class EndpointHandlers:
                 - y
                 - z
                 - direction_angle
-                - mesh
               properties:
                 x:
                   $ref: '#/definitions/CoordinateX'
@@ -211,7 +209,6 @@ class EndpointHandlers:
                 - y
                 - z
                 - direction_angle
-                - mesh
               properties:
                 x:
                   $ref: '#/definitions/CoordinateX'
@@ -262,7 +259,6 @@ class EndpointHandlers:
                 - y
                 - z
                 - direction_angle
-                - mesh
               properties:
                 x:
                   $ref: '#/definitions/CoordinateX'
@@ -318,7 +314,6 @@ class EndpointHandlers:
               required:
                 - room_polygon
                 - windows
-                - mesh
               properties:
                 room_polygon:
                   $ref: '#/definitions/RoomPolygon'
@@ -397,7 +392,6 @@ class EndpointHandlers:
                 - x
                 - y
                 - z
-                - mesh
               properties:
                 x:
                   $ref: '#/definitions/CoordinateX'
@@ -507,7 +501,6 @@ class EndpointHandlers:
               type: object
               required:
                 - parameters
-                - mesh
               properties:
                 model_type:
                   type: string
@@ -654,7 +647,6 @@ class EndpointHandlers:
               required:
                 - model_type
                 - parameters
-                - mesh
               properties:
                 model_type:
                   type: string

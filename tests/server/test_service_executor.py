@@ -43,6 +43,23 @@ class TestExecutorFactory:
         assert isinstance(ExecutorFactory.create(2), ParallelServiceExecutor)
 
 
+class _DataclassResponseService:
+    """Stand-in for a service answering with a response object, not a dict.
+
+    ReferencePointService and ExternalReferencePointService both do this: their
+    ``run()`` returns a response dataclass carrying a ``to_dict`` property.
+    """
+
+    @staticmethod
+    def run(endpoint, request, file=None):
+        class _Response:
+            @property
+            def to_dict(self):
+                return {"reference_point": {request: {"x": 1.0, "y": 2.0, "z": 3.0}}}
+
+        return _Response()
+
+
 class TestParallelMerge:
 
     def test_window_keyed_mappings_are_merged_not_replaced(self):
@@ -59,6 +76,33 @@ class TestParallelMerge:
         )
 
         assert out["status"] == "second"
+
+    def test_response_dataclasses_are_normalized_and_merged(self):
+        # Accepting only dicts dropped every result, leaving an empty merge and
+        # no reference points for the obstruction step that follows.
+        out = ParallelServiceExecutor().execute(
+            _DataclassResponseService,
+            EndpointType.REFERENCE_POINT,
+            ["window_1", "window_2"],
+            None,
+        )
+
+        assert out["reference_point"] == {
+            "window_1": {"x": 1.0, "y": 2.0, "z": 3.0},
+            "window_2": {"x": 1.0, "y": 2.0, "z": 3.0},
+        }
+
+    def test_unmergeable_responses_are_ignored(self):
+        class _OpaqueService:
+            @staticmethod
+            def run(endpoint, request, file=None):
+                return object()
+
+        out = ParallelServiceExecutor().execute(
+            _OpaqueService, EndpointType.REFERENCE_POINT, ["a", "b"], None
+        )
+
+        assert out == {}
 
     def test_binary_response_short_circuits(self):
         class _BinaryService:

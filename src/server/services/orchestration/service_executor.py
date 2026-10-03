@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, List, Optional
 import asyncio
 
 from src.server.services.helpers.parallel import ParallelRequest
@@ -55,10 +55,29 @@ class ParallelServiceExecutor(ServiceExecutor):
 
         response: dict = {}
         for single_response in results:
-            if isinstance(single_response, dict):
-                self._merge(response, single_response)
+            as_dict = self._as_dict(single_response)
+            if as_dict is not None:
+                self._merge(response, as_dict)
 
         return response
+
+    @staticmethod
+    def _as_dict(single_response: Any) -> Optional[dict]:
+        """View one request's response as a dict, or None if it is not mergeable.
+
+        Services differ in what ``run()`` returns: ObstructionService returns a
+        plain dict, while the reference-point services return a response
+        dataclass carrying a ``to_dict`` property. Accepting only dicts dropped
+        every dataclass result, so a multi-window fan-out of those services
+        merged to an empty dict. Mirrors Orchestrator._update_params, which
+        already normalizes both.
+        """
+        if isinstance(single_response, dict):
+            return single_response
+        if hasattr(single_response, "to_dict"):
+            as_dict = single_response.to_dict
+            return as_dict if isinstance(as_dict, dict) else None
+        return None
 
     @staticmethod
     def _merge(response: dict, single_response: dict) -> None:
