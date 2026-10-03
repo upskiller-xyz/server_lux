@@ -4,6 +4,7 @@ import numpy as np
 
 from src.server.services.helpers.parameter_validator import ParameterValidator
 from ....enums import RequestField, ResponseKey
+from ....exceptions import RequestValidationError
 
 
 @dataclass
@@ -55,18 +56,18 @@ class WindowGeometry:
         for field in core_required_fields:
             value = content.get(field.value)
             if value is None:
-                raise ValueError(f"Required field '{field.value}' is missing")
+                raise RequestValidationError(f"Required field '{field.value}' is missing")
             try:
                 validated[field.value] = float(value)
             except (TypeError, ValueError):
-                raise ValueError(f"Field '{field.value}' must be a valid number, got {type(value).__name__}")
+                raise RequestValidationError(f"Field '{field.value}' must be a valid number, got {type(value).__name__}")
 
         # Optional window_frame_ratio field
         if RequestField.WINDOW_FRAME_RATIO.value in content:
             try:
                 validated[RequestField.WINDOW_FRAME_RATIO.value] = float(content[RequestField.WINDOW_FRAME_RATIO.value])
             except (TypeError, ValueError):
-                raise ValueError(f"Field 'window_frame_ratio' must be a valid number")
+                raise RequestValidationError("Field 'window_frame_ratio' must be a valid number")
 
         return validated
 

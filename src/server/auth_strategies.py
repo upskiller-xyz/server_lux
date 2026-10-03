@@ -1,12 +1,19 @@
+import hmac
+import logging
+import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Callable, Any, Optional
 from functools import wraps
 from flask import request, g, has_app_context
 import requests
-from jose import jwt, JWTError
+import jwt
+from jwt import PyJWK, PyJWTError
 from .enums import ErrorType, AuthType
 from .response_builder import ErrorResponseBuilder
 from .auth_config import AuthConfig, Auth0Config
+
+logger = logging.getLogger("logger")
 
 
 class AuthenticationStrategy(ABC):
@@ -46,16 +53,28 @@ class AuthenticationStrategy(ABC):
             auth_header = request.headers.get('Authorization')
 
             if not auth_header:
+                self._log_rejection(ErrorType.MISSING_AUTHORIZATION)
                 return self._error_builder.build(ErrorType.MISSING_AUTHORIZATION)
 
             is_valid, error_type = self.validate_request(auth_header)
 
             if not is_valid:
+                self._log_rejection(error_type)
                 return self._error_builder.build(error_type)
 
             return f(*args, **kwargs)
 
         return decorated_function
+
+    @staticmethod
+    def _log_rejection(error_type: Optional[ErrorType]) -> None:
+        """Log a rejected request (never the credential itself)."""
+        logger.warning(
+            "Authentication rejected: %s path=%s remote=%s",
+            error_type.value if error_type else "unknown",
+            request.path,
+            request.remote_addr,
+        )
 
 
 class TokenAuthenticationStrategy(AuthenticationStrategy):
@@ -88,72 +107,126 @@ class TokenAuthenticationStrategy(AuthenticationStrategy):
         token = parts[1]
 
         if not self.is_configured():
-            # If no token is configured, allow all requests
-            return True, None
+            # Fail closed: without a configured token nothing can be validated.
+            return False, ErrorType.INVALID_TOKEN
 
-        if token == self._token:
+        if hmac.compare_digest(token.encode(), self._token.encode()):
             return True, None
 
         return False, ErrorType.INVALID_TOKEN
 
 
+class JwksProvider:
+    """Thread-safe JWKS cache with TTL and on-demand refresh for unknown ``kid``.
+
+    Refetches when the cache is older than ``ttl_seconds`` or when a token names
+    a ``kid`` not in the cached set (Auth0 key rotation). Refetches triggered by
+    unknown kids are throttled by ``min_refresh_interval_seconds`` so forged
+    tokens with random kids cannot turn the server into a JWKS request amplifier.
+    """
+
+    def __init__(
+        self,
+        jwks_url: str,
+        ttl_seconds: float = 3600.0,
+        min_refresh_interval_seconds: float = 60.0,
+        timeout_seconds: float = 10.0,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        self._jwks_url = jwks_url
+        self._ttl = ttl_seconds
+        self._min_refresh_interval = min_refresh_interval_seconds
+        self._timeout = timeout_seconds
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._jwks: Optional[dict] = None
+        self._fetched_at: float = float("-inf")
+
+    @property
+    def cached(self) -> Optional[dict]:
+        return self._jwks
+
+    def seed(self, jwks: dict) -> None:
+        """Pre-populate the cache (tests, or a JWKS fetched out of band)."""
+        with self._lock:
+            self._jwks = jwks
+            self._fetched_at = self._clock()
+
+    def get_key(self, kid: Optional[str]) -> Optional[dict]:
+        """Return the JWK for ``kid``, refreshing the cache when stale or missing it.
+
+        Raises:
+            RuntimeError: If JWKS cannot be fetched and no cached copy exists
+        """
+        with self._lock:
+            if self._is_expired():
+                self._refresh()
+            key = self._find(kid)
+            if key is None and self._may_refresh_for_unknown_kid():
+                self._refresh()
+                key = self._find(kid)
+            return key
+
+    def _is_expired(self) -> bool:
+        return self._jwks is None or self._clock() - self._fetched_at >= self._ttl
+
+    def _may_refresh_for_unknown_kid(self) -> bool:
+        return self._clock() - self._fetched_at >= self._min_refresh_interval
+
+    def _find(self, kid: Optional[str]) -> Optional[dict]:
+        for key in (self._jwks or {}).get('keys', []):
+            if key.get('kid') == kid:
+                return key
+        return None
+
+    def _refresh(self) -> None:
+        try:
+            response = requests.get(self._jwks_url, timeout=self._timeout)
+            response.raise_for_status()
+            self._jwks = response.json()
+        except requests.RequestException as e:
+            if self._jwks is None:
+                raise RuntimeError(f"Failed to fetch JWKS: {e}")
+            # Keep serving the last good key set during an Auth0 outage.
+            logger.warning("JWKS refresh failed, keeping cached keys: %s", e)
+        finally:
+            self._fetched_at = self._clock()
+
+
 class Auth0AuthenticationStrategy(AuthenticationStrategy):
     """Auth0 JWT-based authentication strategy using Adapter pattern"""
 
-    def __init__(self, config: Auth0Config):
+    def __init__(self, config: Auth0Config, jwks_provider: Optional[JwksProvider] = None):
         super().__init__()
         self._config = config
-        self._jwks_cache: Optional[dict] = None
+        self._jwks = jwks_provider or JwksProvider(config.jwks_url)
 
     def is_configured(self) -> bool:
         """Check if Auth0 is properly configured"""
         return self._config is not None
 
-    def _get_jwks(self) -> dict:
-        """Fetch JWKS from Auth0 (cached)
-
-        Returns:
-            JWKS dictionary
-
-        Raises:
-            RuntimeError: If JWKS cannot be fetched
-        """
-        if self._jwks_cache is None:
-            try:
-                response = requests.get(self._config.jwks_url, timeout=10)
-                response.raise_for_status()
-                self._jwks_cache = response.json()
-            except requests.RequestException as e:
-                raise RuntimeError(f"Failed to fetch JWKS: {e}")
-
-        return self._jwks_cache
-
-    def _get_signing_key(self, token: str) -> dict:
+    def _get_signing_key(self, token: str) -> Any:
         """Get the JWKS signing key for token verification
 
         Args:
             token: JWT token
 
         Returns:
-            JWKS key dict matching the token's kid
+            Public key matching the token's kid
 
         Raises:
             ValueError: If signing key cannot be found
         """
         try:
             unverified_header = jwt.get_unverified_header(token)
-        except JWTError as e:
+        except PyJWTError as e:
             raise ValueError(f"Invalid token header: {e}")
 
-        jwks = self._get_jwks()
-
-        # Find the key with matching kid
         kid = unverified_header.get('kid')
-        for key in jwks.get('keys', []):
-            if key.get('kid') == kid:
-                return key
-
-        raise ValueError(f"Unable to find signing key for kid: {kid}")
+        key = self._jwks.get_key(kid)
+        if key is None:
+            raise ValueError(f"Unable to find signing key for kid: {kid}")
+        return PyJWK(key).key
 
     def validate_request(self, auth_header: Optional[str]) -> tuple[bool, Optional[ErrorType]]:
         """Validate Auth0 JWT token
@@ -182,7 +255,8 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
                 signing_key,
                 algorithms=self._config.algorithms,
                 audience=self._config.audience,
-                issuer=self._config.issuer
+                issuer=self._config.issuer,
+                options={"require": ["exp", "iss", "aud"]},
             )
 
             # Expose the subject + authorized-party (client id) so downstream
@@ -198,7 +272,7 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
 
         except jwt.ExpiredSignatureError:
             return False, ErrorType.EXPIRED_JWT
-        except jwt.JWTClaimsError:
+        except PyJWTError:
             return False, ErrorType.INVALID_JWT
         except Exception:
             return False, ErrorType.INVALID_JWT

@@ -16,10 +16,10 @@ name: Deploy to Scaleway
 #   Variables: SCALEWAY_HOST, SCALEWAY_USER, DEPLOY_PATH (server_lux checkout on
 #              the box), MODEL_SERVICE_URL, OBSTRUCTION_SERVICE_URL (public
 #              *.scw.cloud endpoint). Optional: DEPLOY_REF (default master),
-#              AUTH_TYPE (default none), AUTH0_DOMAIN + AUTH0_AUDIENCE (required
-#              when AUTH_TYPE=auth0; public identifiers, not secrets),
-#              SSH_KNOWN_HOSTS (pinned host key — falls back to a live, MITM-able
-#              ssh-keyscan if unset).
+#              AUTH0_DOMAIN + AUTH0_AUDIENCE (required when AUTH_TYPE=auth0;
+#              public identifiers, not secrets), CORS_ORIGINS.
+#              Required: AUTH_TYPE (auth0|token|none), SSH_KNOWN_HOSTS (pinned
+#              host key, output of `ssh-keyscan <host>`).
 #
 # Manual trigger only (a prod box should not redeploy on every push).
 
@@ -51,21 +51,20 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          # Prefer a pinned host key (set the SSH_KNOWN_HOSTS variable to the output
-          # of `ssh-keyscan <host>`). A live keyscan trusts whatever key answers, so
-          # a MITM / host change can silently poison known_hosts — only a fallback.
-          if [ -n "$KNOWN_HOSTS" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          else
-            echo "::warning::SSH_KNOWN_HOSTS not set — trusting the host key from a live ssh-keyscan (MITM-able). Pin it for production."
-            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Pinned host key only: a live ssh-keyscan trusts whatever key answers,
+          # so a MITM could receive the deploy key and the runtime secrets.
+          if [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error::SSH_KNOWN_HOSTS variable is not set — pin the host key (output of \`ssh-keyscan <host>\`)."
+            exit 1
           fi
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Render runtime env from GitHub Secrets
         env:
           MODEL_SERVICE_URL: ${{ vars.MODEL_SERVICE_URL }}
           AUTH_TYPE: ${{ vars.AUTH_TYPE }}
+          CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
           # Auth0 identifiers are public (not secrets) → GitHub Variables.
           AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
           AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
@@ -87,16 +86,18 @@ jobs:
             echo "::error::MODEL_SERVICE_URL variable is not set — refusing to deploy against the placeholder endpoint."
             exit 1
           fi
-          # AUTH_TYPE=token with an empty API_TOKEN doesn't validate the token value:
-          # a missing/malformed Authorization header is still rejected, but ANY
-          # `Bearer <anything>` is accepted — a false sense of protection. Require
-          # the token when token auth is on.
-          if [ "${AUTH_TYPE:-none}" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
-            echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN or use AUTH_TYPE=none."
+          # No implicit default: an unset variable must not deploy an open API.
+          case "${AUTH_TYPE:-}" in
+            auth0|token|none) ;;
+            *) echo "::error::AUTH_TYPE variable must be set to auth0, token or none (got '${AUTH_TYPE:-}')."; exit 1 ;;
+          esac
+          # Token auth without a token refuses to start in lux — fail here instead.
+          if [ "$AUTH_TYPE" = "token" ] && [ -z "${API_TOKEN:-}" ]; then
+            echo "::error::AUTH_TYPE=token but API_TOKEN secret is empty — set API_TOKEN."
             exit 1
           fi
           # Auth0 needs both identifiers; lux raises at startup otherwise — fail here.
-          if [ "${AUTH_TYPE:-none}" = "auth0" ] && { [ -z "${AUTH0_DOMAIN:-}" ] || [ -z "${AUTH0_AUDIENCE:-}" ]; }; then
+          if [ "$AUTH_TYPE" = "auth0" ] && { [ -z "${AUTH0_DOMAIN:-}" ] || [ -z "${AUTH0_AUDIENCE:-}" ]; }; then
             echo "::error::AUTH_TYPE=auth0 requires the AUTH0_DOMAIN and AUTH0_AUDIENCE variables."
             exit 1
           fi
@@ -106,6 +107,7 @@ jobs:
           for kv in \
             "MODEL_SERVICE_URL=$MODEL_SERVICE_URL" \
             "AUTH_TYPE=$AUTH_TYPE" \
+            "CORS_ORIGINS=$CORS_ORIGINS" \
             "AUTH0_DOMAIN=$AUTH0_DOMAIN" \
             "AUTH0_AUDIENCE=$AUTH0_AUDIENCE" \
             "MODAL_KEY=$MODAL_KEY" \

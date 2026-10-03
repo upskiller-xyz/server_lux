@@ -5,6 +5,7 @@ import logging
 from src.server.services.helpers.parallel import ParallelRequest
 from .request_builder import WindowRequestBuilder
 from ...enums import EndpointType, RequestField
+from ...exceptions import RequestValidationError
 
 logger = logging.getLogger("logger")
 
@@ -52,7 +53,7 @@ class WindowProcessor:
         windows = params.get(RequestField.WINDOWS.value, {})
 
         if not windows:
-            raise ValueError("No windows provided")
+            raise RequestValidationError("No windows provided")
 
         args_list = [
             (endpoint, name, data, request_data, file)

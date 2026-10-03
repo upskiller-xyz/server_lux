@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# Base image pinned by digest (reproducible, tamper-evident); Dependabot bumps it.
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
 # Set working directory
 WORKDIR /app
@@ -32,13 +33,17 @@ RUN pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" "setuptools==${SE
         true; \
     }
 
-# Copy requirements.txt
+# Copy the hash-locked requirements (generated from requirements.in)
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies; every artifact must match its pinned hash
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# Copy application source
+# Unprivileged runtime user (no shell, no home); the app never writes to disk.
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+
+# Copy application source (root-owned, read-only for the app user)
 COPY src/ ./src/
 
 # Set environment variables
@@ -52,6 +57,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Expose port
 EXPOSE 8080
+
+USER app
 
 # Run with gunicorn (WORKERS/THREADS overridable via env; defaults match prior behavior)
 CMD exec gunicorn --bind 0.0.0.0:$PORT --workers ${WORKERS:-1} --threads ${THREADS:-8} --timeout 900 --chdir src main:app

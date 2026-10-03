@@ -1,8 +1,9 @@
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Dict, Optional
 
 from src.server.controllers.field_map import EndpointOrchestratorMap, FieldMap
 from src.server.controllers.validation_strategy import ValidationStrategy
+
 from ..enums import EndpointType
 from ..response_builder import ErrorResponseBuilder
 from ..services.helpers.timing import StageTimer
@@ -26,16 +27,19 @@ class EndpointController:
             file: File data if any
 
         Returns:
-            Response dictionary or error response
+            Response dictionary
+
+        Raises:
+            RequestValidationError: on missing/invalid input fields (mapped to 400)
         """
         logger.info(f"Processing {endpoint.value} request")
 
-        # Validate required fields using Strategy pattern
+        # Validate required fields using Strategy pattern. Missing or malformed
+        # input raises instead of returning an error dict: dicts fall through
+        # ResponseBuilder's 500 path, exceptions map to the 400 contract.
         required_fields = FieldMap.get(endpoint)
         with StageTimer("validate_fields", logger):
-            validation_error = self._validator.validate_fields(request_data, required_fields)
-        if validation_error:
-            return validation_error
+            self._validator.validate_fields(request_data, required_fields)
 
         # Get and instantiate appropriate orchestrator
         orchestrator_class = EndpointOrchestratorMap.get(endpoint)

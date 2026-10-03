@@ -35,17 +35,14 @@ class Orchestrator(IOrchestrator):
         for service in services:
             # Skip service if its output already exists in params
             if self._should_skip_service(service, params):
-                logger.info(f"[DEBUG-SKIP] Skipping {service.__name__} - horizon in params: {'horizon' in params}, zenith in params: {'zenith' in params}")
-                if 'horizon' in params:
-                    h_val = params['horizon']
-                    logger.info(f"[DEBUG-SKIP] horizon type={type(h_val).__name__}, value_preview={str(h_val)[:200]}")
+                logger.debug(f"Skipping {service.__name__}: output already in params")
                 self._drop_binary_mesh(service, params)
                 continue
 
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
             self._drop_binary_mesh(service, params)
-            logger.debug(f"[DEBUG-ORCH] After {service.__name__}: params keys={[k for k in params if not k in ('parameters', 'mesh')]}")
+            logger.debug(f"After {service.__name__}: params keys={[k for k in params if k not in ('parameters', 'mesh')]}")
 
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value

@@ -161,6 +161,23 @@ class AuthType(Enum):
     NONE = "none"
 
 
+class JwtAlgorithm(Enum):
+    """Asymmetric JWT signing algorithms accepted for JWKS-verified tokens.
+
+    Symmetric (HS*) algorithms are deliberately excluded: a JWKS publishes
+    public keys, and accepting HS* would let a public key act as an HMAC secret.
+    """
+    RS256 = "RS256"
+    RS384 = "RS384"
+    RS512 = "RS512"
+    ES256 = "ES256"
+    ES384 = "ES384"
+    ES512 = "ES512"
+    PS256 = "PS256"
+    PS384 = "PS384"
+    PS512 = "PS512"
+
+
 class ErrorType(Enum):
     """Error type identifiers for error responses"""
     MISSING_AUTHORIZATION = "missing_authorization"
@@ -187,6 +204,10 @@ class ErrorMessage(Enum):
     RATE_LIMIT_EXCEEDED = "Request limit reached. Try again after the reset time."
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
+    INTERNAL_ERROR = "Internal server error"
+    UPSTREAM_ERROR = "{service} service error"
+    UPSTREAM_UNAVAILABLE = "{service} service unavailable"
+    UPSTREAM_TIMEOUT = "{service} service timeout"
 
 
 class NPZKey(Enum):
