@@ -8,9 +8,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$SCRIPT_DIR/cloudflare-ips.conf"
 CIDR_RE='^[0-9a-fA-F:.]+/[0-9]{1,3}$'
 
+# Overridable so CI can generate from committed fixtures (file:// works here):
+# generation then always happens and is byte-stable, instead of silently falling
+# back to the committed file when the network is unavailable.
+V4_URL="${CLOUDFLARE_IPS_V4_URL:-https://www.cloudflare.com/ips-v4}"
+V6_URL="${CLOUDFLARE_IPS_V6_URL:-https://www.cloudflare.com/ips-v6}"
+
 fetch() { curl -fsS --max-time 15 "$1" | tr -d '\r' | grep -E "$CIDR_RE"; }
 
-if ! v4="$(fetch https://www.cloudflare.com/ips-v4)" || ! v6="$(fetch https://www.cloudflare.com/ips-v6)"; then
+if ! v4="$(fetch "$V4_URL")" || ! v6="$(fetch "$V6_URL")"; then
   echo "cloudflare-ips: download failed — keeping committed $TARGET" >&2
   exit 0
 fi
