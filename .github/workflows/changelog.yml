@@ -48,8 +48,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Nothing to do if git-cliff produced no change.
-          if git diff --quiet -- CHANGELOG.md; then
+          # Nothing to do if git-cliff produced no change. Porcelain status, not
+          # `git diff`: on the first run CHANGELOG.md is untracked, and git diff
+          # ignores untracked files — the step would report "no changes" exactly
+          # when the first changelog is being created.
+          if [ -z "$(git status --porcelain -- CHANGELOG.md)" ]; then
             echo "No changes to CHANGELOG.md"
             exit 0
           fi
@@ -66,8 +69,11 @@ jobs:
           git commit -m "chore(changelog): update for ${VERSION}"
           git push --force-with-lease origin "$BRANCH"
 
-          if gh pr view "$BRANCH" >/dev/null 2>&1; then
-            echo "PR for $BRANCH already exists; branch updated."
+          # Only an OPEN PR counts as "already exists": `gh pr view <branch>`
+          # also resolves a closed one, which would leave the changelog on a
+          # branch with no PR to merge and no way to recover on a re-run.
+          if [ -n "$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[].number')" ]; then
+            echo "Open PR for $BRANCH already exists; branch updated."
           else
             gh pr create \
               --base "$BASE" \
