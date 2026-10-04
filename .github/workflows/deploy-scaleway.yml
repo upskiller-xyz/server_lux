@@ -64,19 +64,26 @@ jobs:
     # Scopes the secrets to this environment and allows required-reviewer gating.
     environment: prod
     steps:
-      - name: Resolve the target service and ref override
+      - name: Resolve the target service and the per-service refs
         id: target
         env:
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_SERVICE: ${{ github.event.client_payload.service }}
           DISPATCH_REF: ${{ github.event.client_payload.ref }}
           INPUT_SERVICE: ${{ inputs.service }}
+          # Durable per-service pins. These are the source of truth a deploy
+          # starts from; a tag dispatch overrides only its own service, for its
+          # own run. Unset is fine — deploy-scaleway.sh then falls back to what
+          # the box last deployed, and only then to master.
+          VAR_ENCODER_REF: ${{ vars.ENCODER_REF }}
+          VAR_MERGER_REF: ${{ vars.MERGER_REF }}
+          VAR_STATS_REF: ${{ vars.STATS_REF }}
         run: |
-          # Picks the short service id from whichever trigger fired, maps it to
-          # the compose service name (encoder -> encoder-service) and the env
-          # var deploy-scaleway.sh reads for that service's ref
-          # (encoder -> ENCODER_REF). A repository_dispatch additionally forces
-          # a rebuild — the entire point of the dispatch is new code to run.
+          set -euo pipefail
+          # Picks the short service id from whichever trigger fired and maps it
+          # to the compose service name (encoder -> encoder-service). A
+          # repository_dispatch additionally forces a rebuild — the entire point
+          # of the dispatch is new code to run.
           if [ "$EVENT_NAME" = "repository_dispatch" ]; then
             short="$DISPATCH_SERVICE"
             ref="$DISPATCH_REF"
@@ -87,12 +94,10 @@ jobs:
             force_build=false
           fi
 
-          compose_service=""; ref_var=""
+          compose_service=""
           case "$short" in
             "") ;;
-            encoder) compose_service="encoder-service"; ref_var="ENCODER_REF" ;;
-            merger)  compose_service="merger-service";  ref_var="MERGER_REF" ;;
-            stats)   compose_service="stats-service";   ref_var="STATS_REF" ;;
+            encoder|merger|stats) compose_service="${short}-service" ;;
             *) echo "::error::Unknown service '$short' — expected encoder, merger or stats."; exit 1 ;;
           esac
 
@@ -101,10 +106,46 @@ jobs:
             exit 1
           fi
 
+          # The dispatch ref is attacker-controlled input from another repo, and
+          # it ends up in .env.scaleway, which deploy-scaleway.sh `source`s on the
+          # VM. Without this, a ref like '$(curl … | sh)' or one containing a
+          # newline would execute as shell on the deployment host, or inject
+          # additional env assignments. Restrict it to what git ref names
+          # actually need before it is written anywhere.
+          if [ -n "$ref" ]; then
+            case "$ref" in
+              *[!A-Za-z0-9._/-]*)
+                echo "::error::Ref '$ref' contains characters outside [A-Za-z0-9._/-]."
+                exit 1 ;;
+            esac
+            case "$ref" in
+              -*|/*|*/|*..*|*.lock)
+                echo "::error::Ref '$ref' is not a well-formed branch or tag name."
+                exit 1 ;;
+            esac
+            if [ "${#ref}" -gt 200 ]; then
+              echo "::error::Ref is longer than 200 characters."
+              exit 1
+            fi
+          fi
+
+          # Render all three pins every run, overriding only the targeted one.
+          # Emitting just the dispatch's ref would drop the other two services'
+          # pins from the rebuilt .env.scaleway on the box.
+          encoder_ref="$VAR_ENCODER_REF"
+          merger_ref="$VAR_MERGER_REF"
+          stats_ref="$VAR_STATS_REF"
+          case "$short" in
+            encoder) [ -n "$ref" ] && encoder_ref="$ref" ;;
+            merger)  [ -n "$ref" ] && merger_ref="$ref" ;;
+            stats)   [ -n "$ref" ] && stats_ref="$ref" ;;
+          esac
+
           {
             echo "compose_service=$compose_service"
-            echo "ref_var=$ref_var"
-            echo "ref=$ref"
+            echo "encoder_ref=$encoder_ref"
+            echo "merger_ref=$merger_ref"
+            echo "stats_ref=$stats_ref"
             echo "force_build=$force_build"
           } >> "$GITHUB_OUTPUT"
       - name: Configure SSH
@@ -142,11 +183,12 @@ jobs:
           # identifier (Variable), the invocation token is a per-service Secret.
           OBSTRUCTION_SERVICE_URL: ${{ vars.OBSTRUCTION_SERVICE_URL }}
           OBSTRUCTION_TOKEN: ${{ secrets.OBSTRUCTION_TOKEN }}
-          # Set only on a targeted deploy (see "Resolve the target service and
-          # ref override"): the <SERVICE>_REF variable deploy-scaleway.sh reads
-          # to pin that one microservice to a specific branch/tag.
-          REF_VAR_NAME: ${{ steps.target.outputs.ref_var }}
-          REF_VAR_VALUE: ${{ steps.target.outputs.ref }}
+          # Per-service pins, resolved in the step above (GitHub Variable,
+          # overridden by a tag dispatch for its own service). Rendered on every
+          # run so no service's pin is lost when another one is deployed.
+          ENCODER_REF: ${{ steps.target.outputs.encoder_ref }}
+          MERGER_REF: ${{ steps.target.outputs.merger_ref }}
+          STATS_REF: ${{ steps.target.outputs.stats_ref }}
         run: |
           umask 077
           # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
@@ -186,14 +228,12 @@ jobs:
             "SCW_ACCESS_KEY=$SCW_ACCESS_KEY" \
             "SCW_SECRET_KEY=$SCW_SECRET_KEY" \
             "OBSTRUCTION_SERVICE_URL=$OBSTRUCTION_SERVICE_URL" \
-            "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN"; do
+            "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN" \
+            "ENCODER_REF=$ENCODER_REF" \
+            "MERGER_REF=$MERGER_REF" \
+            "STATS_REF=$STATS_REF"; do
             [ -n "${kv#*=}" ] && printf '%s\n' "$kv" >> .env.runtime
           done
-          # The ref override's key name is itself dynamic (ENCODER_REF,
-          # MERGER_REF, ...), so it can't live in the fixed kv list above.
-          if [ -n "${REF_VAR_NAME:-}" ] && [ -n "${REF_VAR_VALUE:-}" ]; then
-            printf '%s=%s\n' "$REF_VAR_NAME" "$REF_VAR_VALUE" >> .env.runtime
-          fi
 
       - name: Copy env and deploy over SSH
         env:
