@@ -76,6 +76,13 @@ on:
           - encoder
           - merger
           - stats
+          # The log agent. Unlike the three above it is an upstream image with
+          # no repo of its own, so it takes no service_ref and no
+          # release_order — only a restart. Targeting it is the way to apply a
+          # changed COCKPIT_* value without recreating the rest of the stack,
+          # which would discard the container logs that are the only copy
+          # until shipping works.
+          - alloy
       service_ref:
         description: "Pin that service to this branch/tag (empty = leave as-is)"
         type: string
@@ -135,8 +142,28 @@ jobs:
             encoder|merger|stats)
               compose_service="${short}-service"
               ref_var="$(echo "$short" | tr '[:lower:]' '[:upper:]')_REF" ;;
-            *) echo "::error::Unknown service '$short' — expected encoder, merger or stats."; exit 1 ;;
+            # An upstream image, not a repo we build: its compose service is
+            # named plainly and it has no <NAME>_REF to resolve. Leaving
+            # ref_var empty matters — `${ref_var%_REF}_ORDER` would otherwise
+            # render the key `_ORDER` into the sourced env file.
+            alloy)
+              compose_service="alloy" ;;
+            *) echo "::error::Unknown service '$short' — expected encoder, merger, stats or alloy."; exit 1 ;;
           esac
+
+          # Pinning a ref or ordering a release only means something for a
+          # service built from its own repo. Accepting either for alloy would
+          # silently do nothing, or write a malformed key.
+          if [ "$short" = alloy ]; then
+            if [ -n "$ref" ]; then
+              echo "::error::alloy is an upstream image — it takes no service_ref."
+              exit 1
+            fi
+            if [ -n "$INPUT_RELEASE_ORDER" ]; then
+              echo "::error::alloy has no releases to order — omit release_order."
+              exit 1
+            fi
+          fi
 
           # validate_ref <value> <name>: every ref below is emitted to
           # $GITHUB_OUTPUT, written into .env.scaleway and `source`d by
