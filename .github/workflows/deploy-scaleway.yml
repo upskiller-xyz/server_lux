@@ -117,28 +117,34 @@ jobs:
             exit 1
           fi
 
-          # The dispatch ref is attacker-controlled input from another repo, and
-          # it ends up in .env.scaleway, which deploy-scaleway.sh `source`s on the
-          # VM. Without this, a ref like '$(curl … | sh)' or one containing a
-          # newline would execute as shell on the deployment host, or inject
-          # additional env assignments. Restrict it to what git ref names
-          # actually need before it is written anywhere.
-          if [ -n "$ref" ]; then
-            case "$ref" in
+          # validate_ref <value> <name>: every ref below is emitted to
+          # $GITHUB_OUTPUT, written into .env.scaleway and `source`d by
+          # deploy-scaleway.sh on the VM — a value like '$(curl … | sh)' or one
+          # containing a newline would execute as shell there, or inject extra
+          # env assignments. Restrict every ref to what git branch/tag names
+          # actually need before it is written anywhere. This covers the
+          # dispatch payload AND the ENCODER_REF/MERGER_REF/STATS_REF GitHub
+          # Variables: a Variable is admin-controlled, but it reaches the same
+          # sourced file, so it gets the same treatment rather than trust.
+          validate_ref() {
+            local value="$1" name="$2"
+            case "$value" in
               *[!A-Za-z0-9._/-]*)
-                echo "::error::Ref '$ref' contains characters outside [A-Za-z0-9._/-]."
+                echo "::error::${name} '${value}' contains characters outside [A-Za-z0-9._/-]."
                 exit 1 ;;
             esac
-            case "$ref" in
+            case "$value" in
               -*|/*|*/|*..*|*.lock)
-                echo "::error::Ref '$ref' is not a well-formed branch or tag name."
+                echo "::error::${name} '${value}' is not a well-formed branch or tag name."
                 exit 1 ;;
             esac
-            if [ "${#ref}" -gt 200 ]; then
-              echo "::error::Ref is longer than 200 characters."
+            if [ "${#value}" -gt 200 ]; then
+              echo "::error::${name} is longer than 200 characters."
               exit 1
             fi
-          fi
+          }
+
+          [ -n "$ref" ] && validate_ref "$ref" "repository_dispatch ref"
 
           # Render all three pins every run, overriding only the targeted one.
           # Emitting just the dispatch's ref would drop the other two services'
@@ -151,6 +157,11 @@ jobs:
             merger)  [ -n "$ref" ] && merger_ref="$ref" ;;
             stats)   [ -n "$ref" ] && stats_ref="$ref" ;;
           esac
+          # The dispatch ref is validated above; these checks are what guard
+          # the three GitHub Variable values.
+          [ -n "$encoder_ref" ] && validate_ref "$encoder_ref" "ENCODER_REF variable"
+          [ -n "$merger_ref" ] && validate_ref "$merger_ref" "MERGER_REF variable"
+          [ -n "$stats_ref" ] && validate_ref "$stats_ref" "STATS_REF variable"
 
           {
             echo "compose_service=$compose_service"

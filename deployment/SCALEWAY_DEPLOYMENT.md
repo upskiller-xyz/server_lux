@@ -121,8 +121,9 @@ Two ways to trigger:
   this repo carrying `{"service": "encoder", "ref": "<tag>"}`; the workflow
   resolves that into `ENCODER_REF=<tag>` and `--service encoder-service`, and
   forces a rebuild (the whole point of the dispatch is new code to run).
-  Dispatch refs are validated against `[A-Za-z0-9._/-]` before being used,
-  since the value reaches a file the deploy script `source`s on the VM.
+  Dispatch refs — and the `ENCODER_REF` / `MERGER_REF` / `STATS_REF` GitHub
+  Variables — are validated against `[A-Za-z0-9._/-]` before being used,
+  since every one of them reaches a file the deploy script `source`s on the VM.
 
   The service repo needs a small workflow of its own — not committed here,
   since `server_lux` doesn't contain those repos' checkouts. For each of
