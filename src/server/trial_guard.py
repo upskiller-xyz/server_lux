@@ -4,13 +4,12 @@ from typing import Any, Callable, Optional
 
 from flask import g, jsonify, make_response
 
-from .enums import AuthContextKey, ErrorType, HTTPHeader, ResponseKey
+from .enums import AuthContextKey, ErrorType, HTTPHeader, ResponseKey, TrialStatus
 from .response_builder import ErrorResponseBuilder
-from .trial_config import TrialConfig
+from .trial_config import TrialConfig, TrialDomain
 from .trial_store import TrialState, TrialStore, TrialStoreFactory
 
 logger = logging.getLogger("logger")
-
 
 
 class TrialGuard:
@@ -49,14 +48,14 @@ class TrialGuard:
         def decorated(*args: Any, **kwargs: Any) -> Any:
             if not self._applies_to_caller():
                 return f(*args, **kwargs)
-            domain = getattr(g, AuthContextKey.DOMAIN.value, None)
+            domain = self._caller_domain
             if not domain:
                 # Fail closed: the trial Action must stamp the domain claim —
                 # a token without it cannot be attributed to a company, so it
                 # gets no trial window.
                 return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
             try:
-                state = self._store.activate_or_get(domain, self._config.duration_seconds)
+                state = self._store.activate_or_get(domain)
             except Exception as exc:
                 # A store outage must not take the server down; failing closed
                 # here is safe because it only affects trial callers, never
@@ -75,24 +74,35 @@ class TrialGuard:
     def get_status(self) -> Any:
         """Read-only trial status for the caller (GET /v1/trial/status).
 
-        Starts the clock on first call like any guarded request, but never
-        blocks: an expired trial is reported, not rejected, so the client can
-        render "expired" without guessing. Not wrapped in require_trial —
-        the guard decorator would 403 an expired trial before this could
-        report it. Only authentication applies on the route.
+        A pure read: it never starts the clock, so a plugin polling status on
+        startup cannot burn trial time the user never used — an unactivated
+        company is reported as ``not_started``. It never blocks either: an
+        expired trial is reported, not rejected, so the client can render
+        "expired" without guessing. Not wrapped in require_trial — the guard
+        decorator would 403 an expired trial before this could report it.
+        Only authentication applies on the route.
         """
         if not self._applies_to_caller():
-            return jsonify({ResponseKey.STATUS.value: "not_applicable"})
-        domain = getattr(g, AuthContextKey.DOMAIN.value, None)
+            return jsonify({ResponseKey.STATUS.value: TrialStatus.NOT_APPLICABLE.value})
+        domain = self._caller_domain
         if not domain:
             return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
         try:
-            state = self._store.activate_or_get(domain, self._config.duration_seconds)
+            state = self._store.get(domain)
         except Exception as exc:
-            logger.error("Trial store error — blocking trial status (fail-closed): %s", exc)
+            logger.error("Trial store error — cannot report trial status: %s", exc)
             return self._reject(ErrorType.TRIAL_STORE_UNAVAILABLE)
+        if state is None:
+            # The company has not made its first guarded request yet, so no
+            # window exists. Report the length it will get, not a fake one.
+            return jsonify({
+                ResponseKey.STATUS.value: TrialStatus.NOT_STARTED.value,
+                ResponseKey.REMAINING_HOURS.value: float(self._config.hours),
+            })
         payload = {
-            ResponseKey.STATUS.value: "expired" if state.is_expired else "active",
+            ResponseKey.STATUS.value: (
+                TrialStatus.EXPIRED.value if state.is_expired else TrialStatus.ACTIVE.value
+            ),
             ResponseKey.TRIAL_STARTED_AT.value: state.started_at.isoformat(),
             ResponseKey.TRIAL_EXPIRES_AT.value: state.expires_at.isoformat(),
             ResponseKey.REMAINING_HOURS.value: round(state.remaining_hours, 1),
@@ -100,6 +110,26 @@ class TrialGuard:
         response = make_response(jsonify(payload))
         self._apply_headers(response, state)
         return response
+
+    @property
+    def _caller_domain(self) -> Optional[str]:
+        """The validated company domain for this request, or None.
+
+        None covers both a missing claim and one that is not a usable hostname;
+        either way the caller cannot be attributed to a company, and the guard
+        rejects rather than exempts. The claim comes from an Auth0 Action, so it
+        is validated here rather than trusted.
+        """
+        raw = getattr(g, AuthContextKey.DOMAIN.value, None)
+        domain = TrialDomain.normalise(raw)
+        if raw and not domain:
+            # The claim's own value is never logged — only its shape, since a
+            # non-string claim has no length to report.
+            logger.warning(
+                "Trial domain claim is not a valid hostname — rejecting (type=%s)",
+                type(raw).__name__,
+            )
+        return domain
 
     def _applies_to_caller(self) -> bool:
         """Whether the trial applies to the current request: only the
