@@ -1,0 +1,118 @@
+// Grafana Alloy: ship every container's stdout to Scaleway Cockpit (Loki).
+//
+// No application change is needed. Each [call] record is already one JSON line
+// on stdout (see call_recorder.py), and nginx's access.log is a symlink to
+// /dev/stdout in the official image, so the gateway's rt/urt/rid fields arrive
+// through the same stream. Docker deletes a container's log with the container,
+// so `up -d --force-recreate` is what this exists to survive: once a line is
+// pushed it lives in Cockpit, not on the box.
+//
+// Label discipline. Loki indexes per label combination and bills per ingested
+// GB, so only bounded value sets become labels: container, service, outcome,
+// kind. The rid and ms fields stay in the line body — every rid is unique, so
+// promoting it would create one stream per request and blow up both the index
+// and the bill. LogQL reads them out of the body with `| json` at query time.
+//
+// The weekly percentiles the observability plan asks for, per downstream
+// service:
+//
+//   quantile_over_time(0.95,
+//     {container="lux-orchestrator"} | json | unwrap ms [1h]) by (service)
+//
+// And the deploy boundary that gives a latency change a cause:
+//
+//   {kind="deploy"} | json
+
+// ── Discovery: every container on the box, now and as they come and go ──────
+
+discovery.docker "containers" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "15s"
+}
+
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	// The container name is the one stream label worth keeping. Docker reports
+	// it with a leading slash ("/lux-orchestrator"), hence the capture group.
+	// Every other __meta_docker_* label is dropped automatically: Alloy treats
+	// __-prefixed labels as internal and never promotes them to streams.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	// Never collect from ourselves. Discovery sees every container on the box,
+	// this one included, and tailing our own stdout closes a feedback loop: a
+	// failed push logs an error, the error is tailed, pushing it fails, which
+	// logs another error. Under an outage that amplifies without bound — and
+	// the ingestion is billed by volume.
+	rule {
+		source_labels = ["container"]
+		regex         = "lux-alloy"
+		action        = "drop"
+	}
+}
+
+// ── Read: tail each container's log stream ──────────────────────────────────
+
+loki.source.docker "containers" {
+	host    = "unix:///var/run/docker.sock"
+	targets = discovery.relabel.containers.output
+
+	// One shared job label so a query can span the whole stack
+	// ({job="lux"}) without naming each container.
+	labels = {
+		job = "lux",
+	}
+
+	forward_to = [loki.process.records.receiver]
+}
+
+// ── Process: promote the bounded [call] fields to labels ────────────────────
+
+loki.process "records" {
+	// [call] records and the deploy marker are JSON. Lines that are not JSON
+	// (gunicorn startup, redis, the nginx access log) pass through untouched:
+	// stage.json leaves a line it cannot parse alone, and stage.labels skips
+	// keys that were never extracted. So the access log still reaches Cockpit,
+	// it just arrives without these labels.
+	stage.json {
+		expressions = {
+			service = "service",
+			outcome = "outcome",
+			kind    = "kind",
+		}
+	}
+
+	// An empty value means "use the extracted field of the same name".
+	//
+	// Only these three are promoted, and all three are enum-derived in the
+	// application (ServiceName, CallOutcome, and "deploy" for the marker), so
+	// their value sets stay small. That matters beyond tidiness: a label whose
+	// values an outsider could influence would let a crafted JSON line mint a
+	// new Loki stream per request — an index blowup billed by the GB.
+	stage.labels {
+		values = {
+			service = "",
+			outcome = "",
+			kind    = "",
+		}
+	}
+
+	forward_to = [loki.write.cockpit.receiver]
+}
+
+// ── Write: push to the project's Cockpit ────────────────────────────────────
+
+loki.write "cockpit" {
+	endpoint {
+		// Both from the environment, injected by compose from .env.scaleway.
+		// The URL is the Cockpit console's logs endpoint including the
+		// /loki/api/v1/push path; the token is a Cockpit token with Push
+		// permission only — it cannot read anything back.
+		url          = sys.env("COCKPIT_LOKI_URL")
+		bearer_token = sys.env("COCKPIT_TOKEN")
+	}
+}

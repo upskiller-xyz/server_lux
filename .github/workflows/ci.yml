@@ -114,6 +114,82 @@ jobs:
           docker run --rm --add-host server-lux:127.0.0.1 lux-gateway-test nginx -t
           echo "::endgroup::"
 
+  # The log agent's config is only exercised when a deploy starts it, so a
+  # syntax error would first surface with the agent crash-looping and no logs
+  # arriving — the one moment the records are wanted. Same argument as the
+  # gateway config above, same remedy: check it at PR time, in the image the
+  # stack actually runs.
+  agent-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate the Alloy config
+        working-directory: deployment
+        run: |
+          set -euo pipefail
+
+          # Read the tag from the compose file so the two cannot drift.
+          image="$(grep -oE 'grafana/alloy:[^[:space:]]+' docker-compose.scaleway.yml | head -1)"
+          echo "Validating against $image"
+
+          mount="$PWD/alloy/config.alloy:/c.alloy:ro"
+
+          echo "::group::alloy fmt"
+          docker run --rm -v "$mount" --entrypoint alloy "$image" fmt /c.alloy > /dev/null
+          echo "::endgroup::"
+
+          # `validate` loads every component, so it catches what fmt cannot:
+          # unknown components, bad references, wrong argument names. It is
+          # newer than fmt, so fall back rather than fail on an older image.
+          if docker run --rm --entrypoint alloy "$image" validate --help >/dev/null 2>&1; then
+            echo "::group::alloy validate"
+            # The endpoint and token come from the environment. The values are
+            # irrelevant to a config check, but an empty URL would fail for the
+            # wrong reason.
+            docker run --rm -v "$mount" \
+              -e COCKPIT_LOKI_URL=https://ci.invalid/loki/api/v1/push \
+              -e COCKPIT_TOKEN=ci-not-a-real-token \
+              --entrypoint alloy "$image" validate /c.alloy
+            echo "::endgroup::"
+          else
+            echo "::warning::alloy validate is unavailable in $image — fmt only"
+          fi
+
+      - name: Resolve the compose file in every profile state
+        working-directory: deployment
+        run: |
+          set -euo pipefail
+
+          # Compose interpolates the WHOLE file before it applies profiles, so a
+          # required-variable guard (${VAR:?...}) on an optional service breaks
+          # every deploy — including the ones that never start that service.
+          # That regression is invisible until a deploy runs, so pin all three
+          # states the stack is deployed in.
+          base="AUTH_TYPE=none MODEL_SERVICE_URL=x MODAL_KEY=x MODAL_SECRET=x"
+          base="$base OBSTRUCTION_SERVICE_URL=x OBSTRUCTION_TOKEN=x"
+
+          resolve() {
+            env $base "$@" docker compose -f docker-compose.scaleway.yml \
+              --env-file /dev/null config --services | sort | tr '\n' ' '
+          }
+
+          echo "::group::profiles resolved"
+          off="$(resolve)"
+          on="$(resolve COMPOSE_PROFILES=cockpit \
+                        COCKPIT_LOKI_URL=https://ci.invalid/loki/api/v1/push \
+                        COCKPIT_TOKEN=ci)"
+          bare="$(resolve COMPOSE_PROFILES=cockpit)"
+          echo "off:  $off"
+          echo "on:   $on"
+          echo "bare: $bare"
+          echo "::endgroup::"
+
+          grep -q alloy <<< "$off" && { echo "::error::alloy resolves with the profile off"; exit 1; }
+          grep -q alloy <<< "$on" || { echo "::error::alloy missing with the profile on"; exit 1; }
+          grep -q alloy <<< "$bare" || { echo "::error::profile on without values must still resolve"; exit 1; }
+          echo "All three profile states resolve as expected."
+
   # The deploy workflow and script only run when something is actually being
   # deployed, so a YAML or bash syntax error would otherwise surface for the
   # first time with production down. Parse both on every push instead.

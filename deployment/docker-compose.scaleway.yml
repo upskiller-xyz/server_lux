@@ -38,6 +38,14 @@ services:
     depends_on:
       server-lux:
         condition: service_healthy
+    # A size cap, not persistence: json-file has no max-size at all, so the
+    # access log grows until the disk does. The log still dies with the
+    # container on `--force-recreate` — shipping it off the box (the alloy
+    # service below) is what makes it outlive a deploy.
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
     networks:
       - lux-network
 
@@ -88,6 +96,12 @@ services:
       # this box (shared across gunicorn workers); override with an external
       # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.
       - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
+    # Same deal as the gateway: a cap so the [call] lines cannot fill the disk.
+    # Persistence comes from alloy pushing them to Cockpit, not from here.
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
     env_file:
       - .env.scaleway
     depends_on:
@@ -230,6 +244,65 @@ services:
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
       - AUTOHEAL_START_PERIOD=120
+
+  # ── Log shipping: every container's stdout → Scaleway Cockpit (OPTIONAL) ───
+  # One agent for the whole box. It reads the Docker socket, tails each
+  # container's log and pushes the lines to the project's Cockpit, where they
+  # become queryable (LogQL) and graphable (Grafana) and survive both a
+  # `--force-recreate` and the VM itself. No application change is involved:
+  # the [call] records are already JSON on stdout and nginx already logs there.
+  #
+  # Off unless COMPOSE_PROFILES=cockpit is set in .env.scaleway — the deploy
+  # script sources that file with `set -a`, so the profile reaches the
+  # `docker compose up` calls that follow. Without it this service does not
+  # exist and the stack behaves exactly as before.
+  alloy:
+    # Pinned like every other image here: an unpinned agent would change
+    # version under us on an unrelated deploy.
+    image: grafana/alloy:v1.20.1
+    container_name: lux-alloy
+    restart: unless-stopped
+    profiles:
+      - cockpit
+    command:
+      - run
+      # Loopback only. Alloy's HTTP server is its own debug UI and needs no
+      # reader here; binding 0.0.0.0 would publish it to every container on
+      # the box.
+      - --server.http.listen-addr=127.0.0.1:12345
+      # Where the read positions live (see the volume below).
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      # Defaulted empty on purpose, NOT `:?`. Compose interpolates the whole
+      # file before it applies profiles, so a required-variable guard here
+      # would fail every deploy that does not set these — including the ones
+      # that never start this service. Alloy refuses to load a config with an
+      # empty endpoint URL, so the failure still surfaces immediately, but it
+      # stays inside this container (`docker logs lux-alloy`) instead of
+      # taking the whole stack's `up` with it.
+      - COCKPIT_LOKI_URL=${COCKPIT_LOKI_URL:-}
+      - COCKPIT_TOKEN=${COCKPIT_TOKEN:-}
+    volumes:
+      # NOTE: `:ro` protects the socket file, not the Docker API behind it —
+      # anything that can reach this socket can control the daemon. That is the
+      # standing cost of socket-based log collection (autoheal above already
+      # pays it, read-write). Harden with a socket proxy if the box ever runs
+      # anything less trusted than this stack.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Read positions must outlive the container, or a restart re-ships every
+      # line still held by Docker and you pay to ingest duplicates.
+      - alloy-data:/var/lib/alloy/data
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+    # Deliberately not on lux-network: the agent needs the socket and outbound
+    # HTTPS to Cockpit, never a route to the services it collects from.
+
+volumes:
+  alloy-data:
 
 networks:
   lux-network:

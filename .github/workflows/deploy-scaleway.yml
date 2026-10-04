@@ -13,6 +13,8 @@ name: Deploy to Scaleway
 #              obstruction Scaleway container). Optional: API_TOKEN (only when
 #              AUTH_TYPE=token); RATE_LIMIT_REDIS_URL (external Managed Redis
 #              rediss:// URL — unset uses the co-located redis service);
+#              COCKPIT_TOKEN (Cockpit token, Push permission only — a leak on
+#              the box must not grant read access to telemetry);
 #              SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private
 #              bucket/registry workflow — the default compose stack does not use them).
 #   Variables: SCALEWAY_HOST, SCALEWAY_USER, DEPLOY_PATH (server_lux checkout on
@@ -21,7 +23,10 @@ name: Deploy to Scaleway
 #              AUTH0_DOMAIN + AUTH0_AUDIENCE (required when AUTH_TYPE=auth0;
 #              public identifiers, not secrets), CORS_ORIGINS,
 #              RATE_LIMIT_ENABLED + RATE_LIMIT_PER_DAY + RATE_LIMIT_WINDOW_HOURS
-#              + RATE_LIMIT_AUX_PER_DAY + RATE_LIMIT_CLIENT_ID, API_DOCS_ENABLED.
+#              + RATE_LIMIT_AUX_PER_DAY + RATE_LIMIT_CLIENT_ID, API_DOCS_ENABLED,
+#              COMPOSE_PROFILES (`cockpit` starts the log agent) + COCKPIT_LOKI_URL
+#              (the push endpoint of your OWN logs data source — the
+#              preconfigured "Scaleway Logs" source answers 403).
 #              Required: AUTH_TYPE (auth0|token|none), SSH_KNOWN_HOSTS (pinned
 #              host key, output of `ssh-keyscan <host>`).
 #
@@ -255,6 +260,13 @@ jobs:
           # External Managed Redis; unset keeps the co-located redis service.
           RATE_LIMIT_REDIS_URL: ${{ secrets.RATE_LIMIT_REDIS_URL }}
           API_DOCS_ENABLED: ${{ vars.API_DOCS_ENABLED }}
+          # Log shipping to Cockpit. Same split as obstruction above: the push
+          # endpoint is a public identifier (Variable), the token is a Secret.
+          # COMPOSE_PROFILES=cockpit is what starts the agent at all — set it
+          # as a Variable so enabling collection needs no code change.
+          COCKPIT_LOKI_URL: ${{ vars.COCKPIT_LOKI_URL }}
+          COCKPIT_TOKEN: ${{ secrets.COCKPIT_TOKEN }}
+          COMPOSE_PROFILES: ${{ vars.COMPOSE_PROFILES }}
           # Per-service pins, resolved in the step above (GitHub Variable,
           # overridden by a tag dispatch for its own service). Rendered on every
           # run so no service's pin is lost when another one is deployed.
@@ -313,6 +325,9 @@ jobs:
             "RATE_LIMIT_CLIENT_ID=$RATE_LIMIT_CLIENT_ID" \
             "RATE_LIMIT_REDIS_URL=$RATE_LIMIT_REDIS_URL" \
             "API_DOCS_ENABLED=$API_DOCS_ENABLED" \
+            "COCKPIT_LOKI_URL=$COCKPIT_LOKI_URL" \
+            "COCKPIT_TOKEN=$COCKPIT_TOKEN" \
+            "COMPOSE_PROFILES=$COMPOSE_PROFILES" \
             "ENCODER_REF=$ENCODER_REF" \
             "MERGER_REF=$MERGER_REF" \
             "STATS_REF=$STATS_REF"; do
@@ -380,6 +395,49 @@ jobs:
           shred -u "$HOME/.lux_env.runtime" 2>/dev/null || rm -f "$HOME/.lux_env.runtime"
           bash deploy-scaleway.sh $BUILD_FLAG $SERVICE_FLAG
           REMOTE
+
+      - name: Mark the deploy in the log stream
+        # The causality record. Without it a report can say "p95 is 9s" but
+        # never "p95 rose after sha X" — the deploy boundary is what turns a
+        # latency number into a finding. Pushed straight to Loki from the
+        # runner: no file on the box, no dependency on the agent having
+        # started, and it lands in the same stream as the [call] records, so
+        # one LogQL query spans both.
+        #
+        # continue-on-error, not `|| true`: the deploy has already succeeded by
+        # this point, and a missing marker degrades the report, not the
+        # deployment. A red step here would be a lie about the deploy.
+        if: vars.COCKPIT_LOKI_URL != ''
+        continue-on-error: true
+        env:
+          COCKPIT_LOKI_URL: ${{ vars.COCKPIT_LOKI_URL }}
+          COCKPIT_TOKEN: ${{ secrets.COCKPIT_TOKEN }}
+          # The ref that was deployed, and who/what triggered the run. Note
+          # github.sha is the workflow's commit — the remote step resets to
+          # origin/$DEPLOY_REF, so for a dispatch without a pin these agree.
+          DEPLOY_REF: ${{ vars.DEPLOY_REF || 'master' }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          BUILT: ${{ inputs.build }}
+          SERVICE: ${{ steps.target.outputs.compose_service }}
+        run: |
+          set -euo pipefail
+          # jq builds both payloads so every value is escaped as JSON data —
+          # an actor or ref containing a quote cannot break the document.
+          line=$(jq -nc \
+            --arg ref "$DEPLOY_REF" --arg sha "$SHA" --arg actor "$ACTOR" \
+            --arg built "$BUILT" --arg service "$SERVICE" \
+            '{kind: "deploy", ref: $ref, sha: $sha, actor: $actor,
+              built: $built, service: $service}')
+          # Loki wants nanosecond epoch timestamps as strings.
+          body=$(jq -nc --arg ts "$(date -u +%s)000000000" --arg line "$line" \
+            '{streams: [{stream: {job: "lux", container: "deploy", kind: "deploy"},
+                         values: [[$ts, $line]]}]}')
+          curl -sS --fail-with-body -X POST "$COCKPIT_LOKI_URL" \
+            -H "Authorization: Bearer $COCKPIT_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-raw "$body"
+          echo "Deploy marker pushed for $SHA."
 
       - name: Persist the deployed ref as a GitHub Variable
         # Only a run that pinned a ref has something new worth recording; a
