@@ -11,15 +11,33 @@ name: Deploy to Scaleway
 #   Secrets:   MODAL_KEY, MODAL_SECRET, SCALEWAY_SSH_KEY (private key authorized
 #              on the instance), OBSTRUCTION_TOKEN (invocation token for the private
 #              obstruction Scaleway container). Optional: API_TOKEN (only when
-#              AUTH_TYPE=token); SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private
+#              AUTH_TYPE=token); RATE_LIMIT_REDIS_URL (external Managed Redis
+#              rediss:// URL — unset uses the co-located redis service);
+#              COCKPIT_TOKEN (Cockpit token, Push permission only — a leak on
+#              the box must not grant read access to telemetry);
+#              SCW_ACCESS_KEY / SCW_SECRET_KEY (only for a private
 #              bucket/registry workflow — the default compose stack does not use them).
 #   Variables: SCALEWAY_HOST, SCALEWAY_USER, DEPLOY_PATH (server_lux checkout on
 #              the box), MODEL_SERVICE_URL, OBSTRUCTION_SERVICE_URL (public
 #              *.scw.cloud endpoint). Optional: DEPLOY_REF (default master),
 #              AUTH0_DOMAIN + AUTH0_AUDIENCE (required when AUTH_TYPE=auth0;
-#              public identifiers, not secrets), CORS_ORIGINS.
+#              public identifiers, not secrets), CORS_ORIGINS,
+#              RATE_LIMIT_ENABLED + RATE_LIMIT_PER_DAY + RATE_LIMIT_WINDOW_HOURS
+#              + RATE_LIMIT_AUX_PER_DAY + RATE_LIMIT_CLIENT_ID, API_DOCS_ENABLED,
+#              COMPOSE_PROFILES (`cockpit` starts the log agent) + COCKPIT_LOKI_URL
+#              (the push endpoint of your OWN logs data source — the
+#              preconfigured "Scaleway Logs" source answers 403).
 #              Required: AUTH_TYPE (auth0|token|none), SSH_KNOWN_HOSTS (pinned
 #              host key, output of `ssh-keyscan <host>`).
+#
+# Only the keys rendered below survive a deploy: the box rebuilds .env.scaleway
+# as `.env.scaleway.example + the rendered file`, so a key that is in neither is
+# lost. Non-secret, environment-independent config (worker/thread/CPU/memory
+# sizing) therefore belongs in the committed template, NOT here — one source of
+# truth per key. What has to be here is anything secret, anything that differs
+# per environment, and anything whose code default is not the value we want:
+# RATE_LIMIT_ENABLED defaults to "false" in rate_limit_config.py, so leaving it
+# out of both files silently disables the quota.
 #
 # One trigger, two callers:
 #   - A human, from the Actions tab. Optionally targets one service
@@ -227,6 +245,21 @@ jobs:
           # identifier (Variable), the invocation token is a per-service Secret.
           OBSTRUCTION_SERVICE_URL: ${{ vars.OBSTRUCTION_SERVICE_URL }}
           OBSTRUCTION_TOKEN: ${{ secrets.OBSTRUCTION_TOKEN }}
+          # Rate limiting reaches the container via env_file (not the compose
+          # `environment:` list), so these live ONLY in .env.scaleway — which the
+          # deploy rebuilds from scratch. Unrendered, they vanish on every deploy
+          # and RATE_LIMIT_ENABLED falls back to its code default of "false",
+          # turning the quota off without failing anything.
+          RATE_LIMIT_ENABLED: ${{ vars.RATE_LIMIT_ENABLED }}
+          RATE_LIMIT_PER_DAY: ${{ vars.RATE_LIMIT_PER_DAY }}
+          RATE_LIMIT_WINDOW_HOURS: ${{ vars.RATE_LIMIT_WINDOW_HOURS }}
+          RATE_LIMIT_AUX_PER_DAY: ${{ vars.RATE_LIMIT_AUX_PER_DAY }}
+          # Limits only the web app's Auth0 client; empty = limit every
+          # authenticated caller, which would include the Revit plugin.
+          RATE_LIMIT_CLIENT_ID: ${{ vars.RATE_LIMIT_CLIENT_ID }}
+          # External Managed Redis; unset keeps the co-located redis service.
+          RATE_LIMIT_REDIS_URL: ${{ secrets.RATE_LIMIT_REDIS_URL }}
+          API_DOCS_ENABLED: ${{ vars.API_DOCS_ENABLED }}
           # Log shipping to Cockpit. Same split as obstruction above: the push
           # endpoint is a public identifier (Variable), the token is a Secret.
           # COMPOSE_PROFILES=cockpit is what starts the agent at all — set it
@@ -285,6 +318,13 @@ jobs:
             "SCW_SECRET_KEY=$SCW_SECRET_KEY" \
             "OBSTRUCTION_SERVICE_URL=$OBSTRUCTION_SERVICE_URL" \
             "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN" \
+            "RATE_LIMIT_ENABLED=$RATE_LIMIT_ENABLED" \
+            "RATE_LIMIT_PER_DAY=$RATE_LIMIT_PER_DAY" \
+            "RATE_LIMIT_WINDOW_HOURS=$RATE_LIMIT_WINDOW_HOURS" \
+            "RATE_LIMIT_AUX_PER_DAY=$RATE_LIMIT_AUX_PER_DAY" \
+            "RATE_LIMIT_CLIENT_ID=$RATE_LIMIT_CLIENT_ID" \
+            "RATE_LIMIT_REDIS_URL=$RATE_LIMIT_REDIS_URL" \
+            "API_DOCS_ENABLED=$API_DOCS_ENABLED" \
             "COCKPIT_LOKI_URL=$COCKPIT_LOKI_URL" \
             "COCKPIT_TOKEN=$COCKPIT_TOKEN" \
             "COMPOSE_PROFILES=$COMPOSE_PROFILES" \
