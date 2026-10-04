@@ -21,7 +21,18 @@ name: Deploy to Scaleway
 #              Required: AUTH_TYPE (auth0|token|none), SSH_KNOWN_HOSTS (pinned
 #              host key, output of `ssh-keyscan <host>`).
 #
-# Manual trigger only (a prod box should not redeploy on every push).
+# Two ways to trigger a deploy:
+#   - workflow_dispatch: manual, from this repo. Optionally targets one
+#     service (encoder/merger/stats) instead of redeploying the whole stack.
+#   - repository_dispatch (type "service-tag"): sent BY a microservice repo's
+#     own workflow when it pushes a tag, carrying
+#     client_payload: {service: "encoder"|"merger"|"stats", ref: "<tag>"}.
+#     This is how a tag on e.g. server_encoder redeploys ONLY that service,
+#     pinned to that tag — the deploy key and this logic stay in this one
+#     repo rather than being duplicated (and re-rotated) in every service repo.
+#     The sending workflow needs a token with `repo` scope on THIS repo (a
+#     fine-grained PAT or a GitHub App install token) — the default
+#     GITHUB_TOKEN of a different repository cannot dispatch across repos.
 
 on:
   workflow_dispatch:
@@ -30,6 +41,17 @@ on:
         description: "Force rebuild of all images"
         type: boolean
         default: false
+      service:
+        description: "Restart only this service (empty = full stack)"
+        type: choice
+        default: ""
+        options:
+          - ""
+          - encoder
+          - merger
+          - stats
+  repository_dispatch:
+    types: [service-tag]
 
 # Never run two deploys against the same box at once.
 concurrency:
@@ -42,6 +64,49 @@ jobs:
     # Scopes the secrets to this environment and allows required-reviewer gating.
     environment: prod
     steps:
+      - name: Resolve the target service and ref override
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SERVICE: ${{ github.event.client_payload.service }}
+          DISPATCH_REF: ${{ github.event.client_payload.ref }}
+          INPUT_SERVICE: ${{ inputs.service }}
+        run: |
+          # Picks the short service id from whichever trigger fired, maps it to
+          # the compose service name (encoder -> encoder-service) and the env
+          # var deploy-scaleway.sh reads for that service's ref
+          # (encoder -> ENCODER_REF). A repository_dispatch additionally forces
+          # a rebuild — the entire point of the dispatch is new code to run.
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            short="$DISPATCH_SERVICE"
+            ref="$DISPATCH_REF"
+            force_build=true
+          else
+            short="$INPUT_SERVICE"
+            ref=""
+            force_build=false
+          fi
+
+          compose_service=""; ref_var=""
+          case "$short" in
+            "") ;;
+            encoder) compose_service="encoder-service"; ref_var="ENCODER_REF" ;;
+            merger)  compose_service="merger-service";  ref_var="MERGER_REF" ;;
+            stats)   compose_service="stats-service";   ref_var="STATS_REF" ;;
+            *) echo "::error::Unknown service '$short' — expected encoder, merger or stats."; exit 1 ;;
+          esac
+
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ -z "$ref" ]; then
+            echo "::error::repository_dispatch client_payload.ref is required."
+            exit 1
+          fi
+
+          {
+            echo "compose_service=$compose_service"
+            echo "ref_var=$ref_var"
+            echo "ref=$ref"
+            echo "force_build=$force_build"
+          } >> "$GITHUB_OUTPUT"
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SCALEWAY_SSH_KEY }}
@@ -77,6 +142,11 @@ jobs:
           # identifier (Variable), the invocation token is a per-service Secret.
           OBSTRUCTION_SERVICE_URL: ${{ vars.OBSTRUCTION_SERVICE_URL }}
           OBSTRUCTION_TOKEN: ${{ secrets.OBSTRUCTION_TOKEN }}
+          # Set only on a targeted deploy (see "Resolve the target service and
+          # ref override"): the <SERVICE>_REF variable deploy-scaleway.sh reads
+          # to pin that one microservice to a specific branch/tag.
+          REF_VAR_NAME: ${{ steps.target.outputs.ref_var }}
+          REF_VAR_VALUE: ${{ steps.target.outputs.ref }}
         run: |
           umask 077
           # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
@@ -119,6 +189,11 @@ jobs:
             "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN"; do
             [ -n "${kv#*=}" ] && printf '%s\n' "$kv" >> .env.runtime
           done
+          # The ref override's key name is itself dynamic (ENCODER_REF,
+          # MERGER_REF, ...), so it can't live in the fixed kv list above.
+          if [ -n "${REF_VAR_NAME:-}" ] && [ -n "${REF_VAR_VALUE:-}" ]; then
+            printf '%s=%s\n' "$REF_VAR_NAME" "$REF_VAR_VALUE" >> .env.runtime
+          fi
 
       - name: Copy env and deploy over SSH
         env:
@@ -127,6 +202,8 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           DEPLOY_REF: ${{ vars.DEPLOY_REF || 'master' }}
           BUILD: ${{ inputs.build }}
+          FORCE_BUILD: ${{ steps.target.outputs.force_build }}
+          COMPOSE_SERVICE: ${{ steps.target.outputs.compose_service }}
         run: |
           set -euo pipefail
           # Fail fast on missing connection config — clearer than a later SSH/cd error.
@@ -140,7 +217,14 @@ jobs:
           # IdentitiesOnly=yes: use only id_deploy, don't try other identities and
           # trip the server's auth-attempt limit.
           ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes"
-          build_flag=""; [ "$BUILD" = "true" ] && build_flag="--build"
+          build_flag=""
+          # A repository_dispatch's whole point is new code — build regardless
+          # of the (inapplicable, workflow_dispatch-only) `build` input.
+          if [ "$BUILD" = "true" ] || [ "$FORCE_BUILD" = "true" ]; then
+            build_flag="--build"
+          fi
+          service_flag=""
+          [ -n "$COMPOSE_SERVICE" ] && service_flag="--service $COMPOSE_SERVICE"
 
           # 1. Stream the rendered secrets to a FIXED remote path. The command is
           #    single-quoted so $HOME expands on the box (not locally) and no
@@ -149,11 +233,13 @@ jobs:
           #    remote login umask, often 644).
           ssh $ssh_opts "${USER_}@${HOST}" 'umask 077; cat > "$HOME/.lux_env.runtime"' < .env.runtime
 
-          # 2. Run the remote deploy. DEPLOY_PATH/DEPLOY_REF/build_flag are passed as
-          #    %q-quoted env vars so they reach the box as DATA, never as code — a
-          #    value containing quotes/semicolons can't break out and run commands.
-          #    The script body (single-quoted heredoc) references them as variables.
-          remote_env=$(printf 'DEPLOY_PATH=%q DEPLOY_REF=%q BUILD_FLAG=%q' "$DEPLOY_PATH" "$DEPLOY_REF" "$build_flag")
+          # 2. Run the remote deploy. DEPLOY_PATH/DEPLOY_REF/build_flag/service_flag
+          #    are passed as %q-quoted env vars so they reach the box as DATA,
+          #    never as code — a value containing quotes/semicolons can't break
+          #    out and run commands. The script body (single-quoted heredoc)
+          #    references them as variables.
+          remote_env=$(printf 'DEPLOY_PATH=%q DEPLOY_REF=%q BUILD_FLAG=%q SERVICE_FLAG=%q' \
+            "$DEPLOY_PATH" "$DEPLOY_REF" "$build_flag" "$service_flag")
           ssh $ssh_opts "${USER_}@${HOST}" "$remote_env bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
@@ -163,7 +249,7 @@ jobs:
           umask 077
           cat .env.scaleway.example "$HOME/.lux_env.runtime" > .env.scaleway
           shred -u "$HOME/.lux_env.runtime" 2>/dev/null || rm -f "$HOME/.lux_env.runtime"
-          bash deploy-scaleway.sh $BUILD_FLAG
+          bash deploy-scaleway.sh $BUILD_FLAG $SERVICE_FLAG
           REMOTE
 
       - name: Clean up local secrets

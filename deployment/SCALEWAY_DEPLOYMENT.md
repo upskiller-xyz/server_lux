@@ -46,7 +46,8 @@ renders them into the runtime `.env.scaleway` on the box and runs the deploy ove
 SSH. Nothing secret is committed, and nobody edits env files by hand on the box.
 
 Trigger it manually: **Actions → Deploy to Scaleway → Run workflow** (tick
-*build* to rebuild images).
+*build* to rebuild all images, or pick a single service in *service* to restart
+only that one — see [Per-service deploys](#per-service-deploys) below).
 
 ### One-time GitHub configuration
 
@@ -70,6 +71,62 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
 [.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
 on top of it.
+
+### Per-service deploys
+
+Each CPU microservice (encoder/merger/stats) is pinned to its own ref via
+`ENCODER_REF` / `MERGER_REF` / `STATS_REF` in `.env.scaleway` — default
+`master` if unset, so nothing changes unless a deploy explicitly sets one.
+`deploy-scaleway.sh --service <name>` restarts (and, with `--build`, rebuilds)
+only that one compose service, leaving the rest of the stack untouched
+(`--no-deps`, so `depends_on` can't widen the blast radius).
+
+Two ways this gets triggered:
+
+- **Manually**: **Actions → Deploy to Scaleway → Run workflow**, pick a
+  service in the *service* input. Redeploys that service's current
+  `*_REF` (or `master`) without touching the others.
+- **From a tag on the service's own repo**, via `repository_dispatch`. A tag
+  push on `server_encoder` (for example) sends a `service-tag` dispatch to
+  this repo carrying `{"service": "encoder", "ref": "<tag>"}`; this workflow
+  resolves that into `ENCODER_REF=<tag>` and `--service encoder-service`,
+  and forces a rebuild (the whole point of the dispatch is new code to run).
+
+  The service repo needs a small workflow of its own — this one isn't
+  committed here since `server_lux` doesn't contain those repos' checkouts.
+  For each of `server_encoder`, `server_merger`, `server_stats`, add
+  `.github/workflows/dispatch-deploy.yml`:
+
+  ```yaml
+  name: Dispatch deploy to server_lux
+
+  on:
+    push:
+      tags: ["v*"]
+
+  jobs:
+    dispatch:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Send service-tag dispatch
+          env:
+            # A fine-grained PAT (or GitHub App token) scoped to Contents:
+            # read and Actions: read-and-write on upskiller-xyz/server_lux —
+            # NOT the default GITHUB_TOKEN, which can't dispatch across repos.
+            TOKEN: ${{ secrets.SERVER_LUX_DISPATCH_TOKEN }}
+          run: |
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/upskiller-xyz/server_lux/dispatches \
+              -d "{\"event_type\":\"service-tag\",\"client_payload\":{\"service\":\"encoder\",\"ref\":\"${GITHUB_REF_NAME}\"}}"
+  ```
+
+  Change only `"service":"encoder"` per repo (`"merger"` / `"stats"`
+  respectively) — everything else is identical across the three. The deploy
+  key and all deploy logic stay in `server_lux`; the service repos only ever
+  need the one dispatch token, scoped to triggering this workflow and nothing
+  else.
 
 ### Manual deploy (fallback)
 

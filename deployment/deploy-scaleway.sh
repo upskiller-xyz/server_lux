@@ -9,9 +9,21 @@ set -euo pipefail
 # NOT a container here — server-lux calls Modal (set MODEL_SERVICE_URL + MODAL_*).
 #
 # Usage:
-#   bash deploy-scaleway.sh [--build] [--firewall]
-#     --build      force rebuild of all images
-#     --firewall   configure ufw on the instance to expose ONLY 22/80/443
+#   bash deploy-scaleway.sh [--build] [--firewall] [--service NAME]
+#     --build          force rebuild of all images (or just --service's, if given)
+#     --firewall       configure ufw on the instance to expose ONLY 22/80/443
+#     --service NAME   restart/rebuild only this compose service (--no-deps), e.g.
+#                       encoder-service. Other services are left untouched. The
+#                       microservice repos are still re-pinned to their configured
+#                       ref regardless (cheap — a single git fetch each), so the
+#                       *_REF variables stay the one source of truth for what is
+#                       checked out even on a targeted deploy.
+#
+# Each CPU microservice is pinned to a ref via <NAME>_REF in .env.scaleway
+# (ENCODER_REF, MERGER_REF, STATS_REF — default "master" if unset), not just
+# whatever its default branch currently points to. This is what lets a tagged
+# release of e.g. server_encoder be deployed deliberately instead of "whatever
+# master happened to be when someone last ran this script."
 #
 # Prereqs on the instance: docker + docker compose v2, git.
 
@@ -19,11 +31,15 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC
 
 FORCE_BUILD=false
 SETUP_FIREWALL=false
-for arg in "$@"; do
-  case $arg in
-    --build) FORCE_BUILD=true ;;
-    --firewall) SETUP_FIREWALL=true ;;
-    *) echo "Unknown option: $arg"; echo "Usage: bash deploy-scaleway.sh [--build] [--firewall]"; exit 1 ;;
+SERVICE_FILTER=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --build) FORCE_BUILD=true; shift ;;
+    --firewall) SETUP_FIREWALL=true; shift ;;
+    --service)
+      [[ $# -ge 2 ]] || { echo "--service requires a compose service name"; exit 1; }
+      SERVICE_FILTER="$2"; shift 2 ;;
+    *) echo "Unknown option: $1"; echo "Usage: bash deploy-scaleway.sh [--build] [--firewall] [--service NAME]"; exit 1 ;;
   esac
 done
 
@@ -44,6 +60,18 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# Validate --service against the compose file itself (not a hardcoded list),
+# so a typo or a renamed service fails here with a clear message instead of
+# deep inside docker compose's own error output.
+if [[ -n "$SERVICE_FILTER" ]]; then
+  known_services="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config --services)"
+  if ! grep -qx "$SERVICE_FILTER" <<< "$known_services"; then
+    echo -e "${RED}Unknown --service '$SERVICE_FILTER'${NC}. Known services:"
+    echo "$known_services" | sed 's/^/  /'
+    exit 1
+  fi
+fi
+
 # Sanity-check the Modal wiring early (fail before bringing the stack up).
 # shellcheck disable=SC1090
 set -a; source "$ENV_FILE"; set +a
@@ -57,7 +85,7 @@ else
   echo -e "${YELLOW}Inference: MODEL_SERVICE_URL is not a *.modal.run URL — no proxy-auth will be attached.${NC}"
 fi
 
-# ── 2. Clone/update the CPU microservices ────────────────────────────────────
+# ── 2. Pin/update the CPU microservices to their configured ref ─────────────
 # Not server_model (that's on Modal) and not server_obstruction (that's an
 # off-box Scaleway Serverless Container, deployed from the server_obstruction repo).
 mkdir -p services
@@ -66,13 +94,23 @@ declare -a REPOS=(
   "server_merger:https://github.com/upskiller-xyz/server_merger.git"
   "server_stats:https://github.com/upskiller-xyz/server_stats.git"
 )
-echo -e "${BLUE}Cloning/updating microservices...${NC}"
+echo -e "${BLUE}Pinning microservices to their configured ref...${NC}"
 for repo_info in "${REPOS[@]}"; do
   name="${repo_info%%:*}"; url="${repo_info#*:}"
+  # server_encoder -> ENCODER_REF, server_merger -> MERGER_REF, etc. Falls back
+  # to "master" so an unset *_REF behaves exactly like before this existed.
+  ref_var="$(echo "${name#server_}" | tr '[:lower:]' '[:upper:]')_REF"
+  ref="${!ref_var:-master}"
   if [[ -d "services/$name/.git" ]]; then
-    echo "  updating $name"; git -C "services/$name" pull --ff-only
+    echo "  $name @ $ref"
+    # Fetch exactly the configured ref (branch or tag — not a pull, since the
+    # ref can move backwards between deploys, e.g. a rollback to an older tag)
+    # and detach onto it, rather than trusting the branch already checked out.
+    git -C "services/$name" fetch --quiet --depth 1 origin "$ref"
+    git -C "services/$name" checkout --quiet --detach FETCH_HEAD
   else
-    echo "  cloning $name"; git clone --depth 1 "$url" "services/$name"
+    echo "  cloning $name @ $ref"
+    git clone --quiet --depth 1 --branch "$ref" "$url" "services/$name"
   fi
 done
 
@@ -97,12 +135,26 @@ fi
 
 # ── 5. Bring up the stack ────────────────────────────────────────────────────
 BUILD_FLAG=""; [[ "$FORCE_BUILD" == true ]] && BUILD_FLAG="--build"
-echo -e "${BLUE}Starting stack...${NC}"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
+if [[ -n "$SERVICE_FILTER" ]]; then
+  # --no-deps: restart exactly this container, not whatever it depends_on.
+  # None of encoder/merger/stats declare their own depends_on today, so this
+  # is a no-op in practice — kept so that stays true by construction, not by
+  # accident, if one of them ever gains a dependency.
+  echo -e "${BLUE}Starting stack (targeted: $SERVICE_FILTER)...${NC}"
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps $BUILD_FLAG "$SERVICE_FILTER"
+else
+  echo -e "${BLUE}Starting stack...${NC}"
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
+fi
 # Validate the live config before reloading so a failed reload fails the deploy
-# instead of leaving a stale edge policy behind while printing "Done".
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -t
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload
+# instead of leaving a stale edge policy behind while printing "Done". Skipped
+# on a targeted deploy that doesn't touch nginx: it would otherwise try to
+# reload an nginx that was never started as part of this run on a brand-new box.
+running_services="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --services --status running)"
+if grep -qx "nginx" <<< "$running_services"; then
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -t
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload
+fi
 
 echo -e "${GREEN}Done.${NC} Public entrypoint: http://<instance-ip>/ (via nginx)."
 echo "Internal services (encoder/obstruction/merger/stats/server-lux) are not host-published."
