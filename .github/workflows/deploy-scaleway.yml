@@ -94,6 +94,15 @@ jobs:
             force_build=false
           fi
 
+          # A repository_dispatch targets exactly ONE service — its payload
+          # pins that service's ref and forces its rebuild. An empty service
+          # must not widen that to a forced full-stack deploy: a malformed
+          # dispatch payload is a failed dispatch, not a bigger deploy.
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ -z "$short" ]; then
+            echo "::error::repository_dispatch client_payload.service is required (encoder, merger or stats)."
+            exit 1
+          fi
+
           compose_service=""; ref_var=""
           case "$short" in
             "") ;;
