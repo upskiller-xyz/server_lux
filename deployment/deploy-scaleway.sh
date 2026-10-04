@@ -110,6 +110,10 @@ declare -a REPOS=(
 # the checkout would silently fall back to master — replacing a tagged release
 # on the next rebuild. This file is the box's own record of its state; it lives
 # under services/ which is gitignored.
+#
+# Pins are recorded only AFTER Compose has successfully deployed the ref (see
+# the post-deploy step near the end), so the file always describes code that is
+# actually running — never a ref whose build or start failed halfway.
 PIN_FILE="services/.deployed-refs"
 
 read_pin() {  # $1 = short service name (encoder|merger|stats)
@@ -127,6 +131,11 @@ write_pin() {  # $1 = short name, $2 = ref
 }
 
 echo -e "${BLUE}Pinning microservices to their configured ref...${NC}"
+# Refs staged here are written to $PIN_FILE only once the whole deploy has
+# succeeded, and a ref that differs from the recorded one forces a rebuild —
+# without --build, Compose would restart the OLD image while the checkout sits
+# on the new ref, and the pin would then describe code that never ran.
+PENDING_PINS=()
 for repo_info in "${REPOS[@]}"; do
   name="${repo_info%%:*}"; url="${repo_info#*:}"
   short="${name#server_}"
@@ -154,7 +163,11 @@ for repo_info in "${REPOS[@]}"; do
     echo "  cloning $name @ $ref"
     git clone --quiet --depth 1 --branch "$ref" "$url" "services/$name"
   fi
-  write_pin "$short" "$ref"
+  if [[ "$ref" != "$(read_pin "$short")" ]]; then
+    echo "  ref changed for $short — forcing a rebuild so the image matches"
+    FORCE_BUILD=true
+  fi
+  PENDING_PINS+=("$short=$ref")
 done
 
 # ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
@@ -202,6 +215,15 @@ if [[ -z "$SERVICE_FILTER" || "$SERVICE_FILTER" == "nginx" ]]; then
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -t
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T nginx nginx -s reload
 fi
+
+# ── 6. Record the deployed refs — only now that the deploy has succeeded ─────
+# Compose is up (and the gateway validated, when this run touched it), so from
+# here on a failure aborts before any pin is written. Writing pins earlier —
+# right after the checkouts — would record refs whose build or start might
+# still fail, and the file would claim code that is not running.
+for pending in "${PENDING_PINS[@]}"; do
+  write_pin "${pending%%=*}" "${pending#*=}"
+done
 
 echo -e "${GREEN}Done.${NC} Public entrypoint: http://<instance-ip>/ (via nginx)."
 echo "Internal services (encoder/obstruction/merger/stats/server-lux) are not host-published."

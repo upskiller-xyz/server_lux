@@ -93,6 +93,10 @@ as they are, so a targeted deploy can never move code it isn't redeploying.
    quietly reverting to `master` on the next unrelated deploy.
 3. `master`.
 
+A pin is recorded only after Compose has successfully deployed that ref, and
+when the resolved ref differs from the recorded one the deploy forces a rebuild
+— so the pin always describes the image that is actually running.
+
 **A successful tag deploy writes (1) itself**, so the pin becomes the declared
 answer rather than only a box-local side effect — and therefore survives the
 instance being rebuilt. That write needs `DEPLOY_VARS_TOKEN`: a token allowed
