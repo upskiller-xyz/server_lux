@@ -93,9 +93,16 @@ as they are, so a targeted deploy can never move code it isn't redeploying.
    quietly reverting to `master` on the next unrelated deploy.
 3. `master`.
 
+The ref machinery covers the three CPU microservice checkouts (encoder,
+merger, stats) — the only services whose source is pinned on the box. A
+targeted `--service nginx` deploy touches no checkout, so it records no pins
+and only restarts and revalidates the gateway.
+
 A pin is recorded only after Compose has successfully deployed that ref, and
 when the resolved ref differs from the recorded one the deploy forces a rebuild
-— so the pin always describes the image that is actually running.
+— so the pin always describes the image that is actually running. This is
+locked by behaviour tests (`deployment/tests/test-deploy-scaleway.sh`, run in
+CI), not just stated here.
 
 **A successful tag deploy writes (1) itself**, so the pin becomes the declared
 answer rather than only a box-local side effect — and therefore survives the

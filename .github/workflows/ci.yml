@@ -114,6 +114,27 @@ jobs:
           docker run --rm --add-host server-lux:127.0.0.1 lux-gateway-test nginx -t
           echo "::endgroup::"
 
+  # The deploy workflow and script only run when something is actually being
+  # deployed, so a YAML or bash syntax error would otherwise surface for the
+  # first time with production down. Parse both on every push instead.
+  deploy-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: "3.12"
+
+      - name: Parse deploy-scaleway.yml as YAML
+        run: python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy-scaleway.yml')); yaml.safe_load(open('.github/workflows/ci.yml'))"
+
+      - name: bash -n the deploy script
+        run: bash -n deployment/deploy-scaleway.sh
+
+      - name: Deploy script behaviour tests (mocked docker/git)
+        run: bash deployment/tests/test-deploy-scaleway.sh
+
   pip-audit:
     runs-on: ubuntu-latest
     steps:
