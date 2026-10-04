@@ -127,7 +127,11 @@ jobs:
           python-version: "3.12"
 
       - name: Parse deploy-scaleway.yml as YAML
-        run: python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy-scaleway.yml')); yaml.safe_load(open('.github/workflows/ci.yml'))"
+        run: |
+          # Not in requirements.txt (app deps, hash-checked): a version pin in
+          # the same style as the other CI tool installs (ruff, pip-audit).
+          python -m pip install "pyyaml==6.0.2"
+          python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy-scaleway.yml')); yaml.safe_load(open('.github/workflows/ci.yml'))"
 
       - name: bash -n the deploy script
         run: bash -n deployment/deploy-scaleway.sh
