@@ -5,6 +5,138 @@ Follows DRY principle - define once, reference everywhere.
 """
 
 
+class ImageConversionError:
+    """Templates for the image-conversion failures raised by the converters."""
+    UNSUPPORTED_TYPE: str = (
+        "Unsupported image_data type: {actual}. "
+        "Expected numpy.ndarray, PIL.Image, or bytes."
+    )
+    CONVERSION_FAILED: str = "Failed to convert encoder output: {error}"
+    NO_NPZ_KEYS: str = "Could not find image/mask keys in NPZ. Available keys: {keys}"
+
+
+class MergeError:
+    """Templates for the inconsistencies detected while assembling the
+    per-window data for the merge step."""
+    NO_SIMULATION: str = "window '{window}' has no simulation result"
+    NO_MASK: str = "window '{window}' has no mask"
+    MASK_NOT_2D: str = "window '{window}' mask must be 2D, got {ndim}D with shape {shape}"
+    NO_IMAGE_DATA: str = (
+        "Encoder service did not return image data. Available keys: {keys}"
+    )
+
+
+class FieldPathBuilder:
+    """Builds the dotted path naming a nested request field
+    (``parameters`` + ``windows`` → ``parameters.windows``)."""
+    SEPARATOR: str = "."
+
+    @classmethod
+    def nested(cls, *segments: str) -> str:
+        return cls.SEPARATOR.join(segments)
+
+
+class WindowNameBuilder:
+    """Builds the positional window names used when a request lists windows
+    without naming them (``window_0``, ``window_1``, …)."""
+    TEMPLATE: str = "window_{index}"
+
+    @classmethod
+    def positional(cls, index: int) -> str:
+        return cls.TEMPLATE.format(index=index)
+
+
+class QuotaKeyBuilder:
+    """Builds the Redis keys for the rolling-window quota counter and the
+    identity they are keyed on."""
+    KEY_TEMPLATE: str = "{prefix}:{identity}"
+    BUCKET_TEMPLATE: str = "{bucket}:{identity}"
+    SUBJECT_TEMPLATE: str = "sub:{subject}"
+    IP_TEMPLATE: str = "ip:{address}"
+
+    @classmethod
+    def key(cls, prefix: str, identity: str) -> str:
+        return cls.KEY_TEMPLATE.format(prefix=prefix, identity=identity)
+
+    @classmethod
+    def bucketed(cls, bucket: str, identity: str) -> str:
+        """Separates the prediction bucket from the auxiliary one."""
+        return cls.BUCKET_TEMPLATE.format(bucket=bucket, identity=identity)
+
+    @classmethod
+    def subject(cls, subject: str) -> str:
+        return cls.SUBJECT_TEMPLATE.format(subject=subject)
+
+    @classmethod
+    def ip(cls, address: str) -> str:
+        return cls.IP_TEMPLATE.format(address=address)
+
+
+class ServiceUrlBuilder:
+    """Builds the outbound URL for a remote service call."""
+    TEMPLATE: str = "{base_url}/{endpoint}"
+    PATH_TEMPLATE: str = "{base_url}{path}"
+
+    @classmethod
+    def endpoint(cls, base_url: str, endpoint_value: str) -> str:
+        return cls.TEMPLATE.format(base_url=base_url, endpoint=endpoint_value)
+
+    @classmethod
+    def with_path(cls, base_url: str, path: str) -> str:
+        """For a path that already carries its own leading slash."""
+        return cls.PATH_TEMPLATE.format(base_url=base_url, path=path)
+
+
+class EndpointPathBuilder:
+    """Builds the leading-slash endpoint path used in outbound calls and in the
+    service-error reports (``obstruction`` → ``/obstruction``)."""
+    TEMPLATE: str = "/{endpoint}"
+
+    @classmethod
+    def path(cls, endpoint_value: str) -> str:
+        return cls.TEMPLATE.format(endpoint=endpoint_value)
+
+
+class ObstructionLogTemplate:
+    """Log-line templates for the obstruction calculators."""
+    DIRECTION_ERROR: str = "{message} (direction: {direction:.1f}\u00b0)"
+    PARALLEL_COMPLETED: str = "Completed {count} calculations in {seconds:.2f}s"
+    SINGLE_COMPLETED: str = "Completed obstruction calculation in {seconds:.2f}s"
+    UNKNOWN_FORMAT: str = "Unknown response format! Keys: {keys}"
+    EMPTY_ANGLES: str = "Empty angle arrays! Response keys: {keys}"
+    DIRECTION_FAILED: str = "Failed to calculate obstruction for direction {index}: {error}"
+    SERVICE_ERROR: str = "Obstruction service error: {error}"
+
+
+class AuthHeaderBuilder:
+    """Builds and parses the ``Authorization: Bearer <token>`` header.
+
+    One place for the scheme, so the senders and the validators cannot drift
+    apart on spelling or case handling.
+    """
+    SCHEME: str = "Bearer"
+    TEMPLATE: str = "{scheme} {token}"
+    EXPECTED_PARTS: int = 2
+
+    @classmethod
+    def bearer(cls, token: str) -> str:
+        """``"abc"`` → ``"Bearer abc"``."""
+        return cls.TEMPLATE.format(scheme=cls.SCHEME, token=token)
+
+    @classmethod
+    def extract_token(cls, auth_header: str) -> str:
+        """Token out of a ``Bearer`` header, or an empty string if malformed.
+
+        The scheme is matched case-insensitively, as HTTP requires.
+        """
+        parts = auth_header.split()
+        if len(parts) != cls.EXPECTED_PARTS:
+            return ""
+        if parts[0].lower() != cls.SCHEME.lower():
+            return ""
+        return parts[1]
+
+
 class ObstructionConcurrency:
     """Backpressure for calls to the obstruction service.
 
@@ -88,6 +220,7 @@ class ScalewayBackend:
     """
     HOST_SUFFIX: str = ".scw.cloud"
     TOKEN_ENV_SUFFIX: str = "_TOKEN"
+    TOKEN_ENV_TEMPLATE: str = "{service}{suffix}"
 
     @staticmethod
     def token_env(service_name: str) -> str:
@@ -97,7 +230,9 @@ class ScalewayBackend:
         token; takes the service name value (a str) rather than the enum to keep
         this constants module free of enum imports and dependency-light.
         """
-        return f"{service_name.upper()}{ScalewayBackend.TOKEN_ENV_SUFFIX}"
+        return ScalewayBackend.TOKEN_ENV_TEMPLATE.format(
+            service=service_name.upper(), suffix=ScalewayBackend.TOKEN_ENV_SUFFIX
+        )
 
 
 class CorsPolicy:

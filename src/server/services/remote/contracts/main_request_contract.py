@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
+from ....enums import RequestField
 from .base_contracts import RemoteServiceRequest
 from .encoder_contracts import Parameters
-from ....enums import RequestField
 
 
 @dataclass

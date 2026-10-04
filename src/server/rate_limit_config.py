@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+from .env_keys import EnvKey
 
 # Defaults kept as named constants so no magic numbers/strings leak into the code.
 DEFAULT_LIMIT_PER_DAY = 10
@@ -55,14 +56,14 @@ class RateLimitConfig:
         - ``RATE_LIMIT_TRUSTED_PROXY_HOPS`` (int, default 0; number of reverse
           proxies appending to X-Forwarded-For — 0 = don't trust the header)
         """
-        enabled = os.getenv("RATE_LIMIT_ENABLED", "false").strip().lower() == "true"
-        limit = int(os.getenv("RATE_LIMIT_PER_DAY", str(DEFAULT_LIMIT_PER_DAY)))
-        aux_limit = int(os.getenv("RATE_LIMIT_AUX_PER_DAY", str(DEFAULT_AUX_LIMIT_PER_DAY)))
-        window_hours = int(os.getenv("RATE_LIMIT_WINDOW_HOURS", str(DEFAULT_WINDOW_HOURS)))
-        redis_url = os.getenv("RATE_LIMIT_REDIS_URL") or os.getenv("REDIS_URL") or None
-        key_prefix = os.getenv("RATE_LIMIT_KEY_PREFIX", DEFAULT_KEY_PREFIX)
-        client_id = os.getenv("RATE_LIMIT_CLIENT_ID") or None
-        trusted_proxy_hops = int(os.getenv("RATE_LIMIT_TRUSTED_PROXY_HOPS", "0"))
+        enabled = os.getenv(EnvKey.RATE_LIMIT_ENABLED.value, "false").strip().lower() == "true"
+        limit = int(os.getenv(EnvKey.RATE_LIMIT_PER_DAY.value, str(DEFAULT_LIMIT_PER_DAY)))
+        aux_limit = int(os.getenv(EnvKey.RATE_LIMIT_AUX_PER_DAY.value, str(DEFAULT_AUX_LIMIT_PER_DAY)))
+        window_hours = int(os.getenv(EnvKey.RATE_LIMIT_WINDOW_HOURS.value, str(DEFAULT_WINDOW_HOURS)))
+        redis_url = os.getenv(EnvKey.RATE_LIMIT_REDIS_URL.value) or os.getenv(EnvKey.REDIS_URL.value) or None
+        key_prefix = os.getenv(EnvKey.RATE_LIMIT_KEY_PREFIX.value, DEFAULT_KEY_PREFIX)
+        client_id = os.getenv(EnvKey.RATE_LIMIT_CLIENT_ID.value) or None
+        trusted_proxy_hops = int(os.getenv(EnvKey.RATE_LIMIT_TRUSTED_PROXY_HOPS.value, "0"))
         return cls(
             enabled=enabled,
             limit=limit,

@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 import numpy as np
 
-from .base_contracts import RemoteServiceRequest, StandardResponse
-from ....enums import RequestField, ResponseKey
+from ....enums import RequestField, ResponseKey, ValidationMessage
 from ....exceptions import RequestValidationError
+from .base_contracts import RemoteServiceRequest, StandardResponse
 
 
 @dataclass
@@ -31,7 +32,9 @@ class StatsRequest(RemoteServiceRequest):
         mask = content.get(RequestField.MASK.value)
 
         if df_values is None:
-            raise RequestValidationError(f"Missing '{RequestField.RESULT.value}' field in request data")
+            raise RequestValidationError(
+                ValidationMessage.MISSING_IN_DATA.value.format(field=RequestField.RESULT.value)
+            )
 
         # Convert to numpy arrays if they're lists
         if isinstance(df_values, list):

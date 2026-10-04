@@ -1,13 +1,23 @@
 from typing import List
+
 from ...enums import NPZKey
+
+
+class NPZKeyBuilder:
+    """Builds the per-window NPZ archive keys (``<window><suffix>``)."""
+    TEMPLATE: str = "{window}{suffix}"
+
+    @classmethod
+    def suffixed(cls, window_name: str, suffix: str) -> str:
+        return cls.TEMPLATE.format(window=window_name, suffix=suffix)
 
 
 class NPZKeyExtractor:
 
     @staticmethod
     def extract_keys(window_name: str, npz_keys: List[str]) -> tuple[str | None, str | None]:
-        window_image_key = f"{window_name}{NPZKey.IMAGE_SUFFIX.value}"
-        window_mask_key = f"{window_name}{NPZKey.MASK_SUFFIX.value}"
+        window_image_key = NPZKeyBuilder.suffixed(window_name, NPZKey.IMAGE_SUFFIX.value)
+        window_mask_key = NPZKeyBuilder.suffixed(window_name, NPZKey.MASK_SUFFIX.value)
         if window_image_key in npz_keys:
             return (window_image_key, window_mask_key)
 

@@ -1,12 +1,14 @@
-from typing import Any, Dict, List, Callable
-import numpy as np
-import cv2
-from PIL import Image
-from io import BytesIO
-import zipfile
-
-from ...enums import ImageChannels
 import logging
+import zipfile
+from io import BytesIO
+from typing import Any, List
+
+import cv2
+import numpy as np
+from PIL import Image
+
+from ...constants import ImageConversionError
+
 logger = logging.getLogger('logger')
 
 class ImageDataConverter:
@@ -96,8 +98,7 @@ class ImageDataConverter:
                 return converter(image_data)
 
         raise ValueError(
-            f"Unsupported image_data type: {type(image_data)}. "
-            f"Expected numpy.ndarray, PIL.Image, or bytes."
+            ImageConversionError.UNSUPPORTED_TYPE.format(actual=type(image_data))
         )
 
 class EncoderOutputConverter:
@@ -127,7 +128,7 @@ class EncoderOutputConverter:
             with zipfile.ZipFile(zip_buffer, 'r') as zip_file:
                 with zip_file.open('image.npy') as npy_file:
                     image_array = np.load(npy_file)
-                    logger.info(f"Loaded encoder output: shape={image_array.shape}, dtype={image_array.dtype}")
+                    logger.info("Loaded encoder output: shape=%s, dtype=%s", image_array.shape, image_array.dtype)
 
                     # Normalize if needed (convert to 0-255 uint8 range)
                     if image_array.max() <= 1.0:
@@ -148,9 +149,9 @@ class EncoderOutputConverter:
                         raise ValueError("Failed to encode array to PNG")
 
                     png_bytes = buffer.tobytes()
-                    logger.info(f"Converted encoder output to PNG: {len(png_bytes)} bytes")
+                    logger.info("Converted encoder output to PNG: %s bytes", len(png_bytes))
                     return png_bytes
 
         except Exception as e:
-            logger.error(f"Failed to convert encoder output to PNG: {e}")
-            raise ValueError(f"Failed to convert encoder output: {e}")
+            logger.error("Failed to convert encoder output to PNG: %s", e)
+            raise ValueError(ImageConversionError.CONVERSION_FAILED.format(error=e))

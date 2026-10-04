@@ -3,14 +3,19 @@
 import pytest
 
 from src.server.constants import ModalBackend, ScalewayBackend
-from src.server.enums import ServiceBackend, ServiceName, ModalAuthHeader, ScalewayAuthHeader
+from src.server.enums import (
+    ModalAuthHeader,
+    ScalewayAuthHeader,
+    ServiceBackend,
+    ServiceName,
+)
 from src.server.exceptions import ModalCredentialsError, ScalewayCredentialsError
 from src.server.services.remote.outbound_auth import (
-    BackendResolver,
-    NoOutboundAuth,
-    ModalProxyAuth,
-    ScalewayTokenAuth,
     BackendAuthMap,
+    BackendResolver,
+    ModalProxyAuth,
+    NoOutboundAuth,
+    ScalewayTokenAuth,
 )
 
 

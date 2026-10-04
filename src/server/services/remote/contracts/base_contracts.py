@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 import numpy as np
 
-from ....enums import ResponseKey
+from ....enums import ResponseKey, ValidationMessage
 
 
 @dataclass
@@ -51,7 +52,9 @@ class RemoteServiceResponse(ABC):
 
     def _get_required(self, key: str, error_msg: str = "") -> Any:
         if key not in self._raw:
-            raise ValueError(error_msg or f"Missing required field: {key}")
+            raise ValueError(
+                error_msg or ValidationMessage.MISSING_FIELD.value.format(field=key)
+            )
         return self._raw[key]
 
     def _get_optional(self, key: str, default: Any = None) -> Any:

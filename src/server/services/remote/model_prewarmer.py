@@ -15,6 +15,7 @@ import threading
 import requests
 
 from ...config import get_service_config
+from ...constants import ServiceUrlBuilder
 from ...enums import ServiceBackend, ServiceName
 from .outbound_auth import BackendAuthMap, BackendResolver
 
@@ -46,8 +47,8 @@ class ModelPrewarmer:
             if cls._in_flight:
                 return  # a warm ping is already running — don't pile up threads
             cls._in_flight = True
-        warm_url = f"{base_url}{cls._WARM_PATH}"
-        logger.info(f"Prewarming model backend (fire-and-forget): {warm_url}")
+        warm_url = ServiceUrlBuilder.with_path(base_url, cls._WARM_PATH)
+        logger.info("Prewarming model backend (fire-and-forget): %s", warm_url)
         threading.Thread(target=cls._ping, args=(warm_url,), daemon=True).start()
 
     @classmethod
@@ -55,9 +56,9 @@ class ModelPrewarmer:
         try:
             headers = BackendAuthMap.get(ServiceBackend.MODAL).headers(ServiceName.MODEL)
             requests.get(warm_url, headers=headers, timeout=cls._TIMEOUT)
-            logger.debug(f"Prewarm ping sent to {warm_url}")
+            logger.debug("Prewarm ping sent to %s", warm_url)
         except Exception as e:  # best-effort — swallow everything (incl. missing creds)
-            logger.debug(f"Prewarm ping failed (ignored): {e}")
+            logger.debug("Prewarm ping failed (ignored): %s", e)
         finally:
             with cls._lock:
                 cls._in_flight = False

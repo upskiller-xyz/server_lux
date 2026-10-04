@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Union
-import logging
+from typing import Any, Dict, List, Optional, Union
 
-from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
 from ....constants import ObstructionRequestDefaults
 from ....enums import RequestField, ResponseKey
+from .base_contracts import RemoteServiceRequest, RemoteServiceResponse
 
 
 @dataclass

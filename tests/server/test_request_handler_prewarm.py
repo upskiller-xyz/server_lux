@@ -3,8 +3,8 @@
 import pytest
 
 from src.server import request_handler
-from src.server.request_handler import EndpointRequestHandler
 from src.server.enums import EndpointType
+from src.server.request_handler import EndpointRequestHandler
 
 
 @pytest.fixture

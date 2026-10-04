@@ -1,12 +1,12 @@
 import os
-from functools import wraps
-from typing import Callable, Any
-from flask import request
-from .enums import ErrorType
-from .response_builder import ErrorResponseBuilder
+from typing import Callable
+
 from .auth_config import AuthConfig
 from .auth_factory import AuthenticationStrategyFactory
 from .auth_strategies import AuthenticationStrategy, TokenAuthenticationStrategy
+from .constants import AuthHeaderBuilder
+from .env_keys import EnvKey
+from .response_builder import ErrorResponseBuilder
 
 
 class Authenticator:
@@ -57,7 +57,7 @@ class TokenAuthenticator(Authenticator):
     while using the new Strategy pattern implementation.
     """
 
-    def __init__(self, token_env_var: str = "API_TOKEN"):
+    def __init__(self, token_env_var: str = EnvKey.API_TOKEN.value):
         token = os.getenv(token_env_var)
         self._config = None
         self._factory = AuthenticationStrategyFactory()
@@ -73,7 +73,7 @@ class TokenAuthenticator(Authenticator):
         Returns:
             True if valid, False otherwise
         """
-        auth_header = f"Bearer {provided_token}"
+        auth_header = AuthHeaderBuilder.bearer(provided_token)
         is_valid, _ = self._strategy.validate_request(auth_header)
         return is_valid
 

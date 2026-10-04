@@ -6,10 +6,10 @@ called at all.
 """
 
 import io
+from unittest.mock import patch
 
 import numpy as np
 import pytest
-from unittest.mock import patch
 
 from src.server.constants import ObstructionAngleDefaults, ObstructionRequestDefaults
 from src.server.controllers.validation_strategy import ValidationStrategy

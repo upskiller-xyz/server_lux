@@ -1,12 +1,13 @@
-from dataclasses import dataclass, field
-from typing import Callable, Dict, Any, List, Optional
-import math
-import numpy as np
 import base64
 import logging
+import math
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional
 
-from .base_contracts import RemoteServiceRequest, StandardResponse
+import numpy as np
+
 from ....enums import RequestField, ResponseKey
+from .base_contracts import RemoteServiceRequest, StandardResponse
 
 logger = logging.getLogger('logger')
 

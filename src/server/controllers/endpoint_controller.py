@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from src.server.controllers.field_map import EndpointOrchestratorMap, FieldMap
 from src.server.controllers.validation_strategy import ValidationStrategy
@@ -32,7 +32,7 @@ class EndpointController:
         Raises:
             RequestValidationError: on missing/invalid input fields (mapped to 400)
         """
-        logger.info(f"Processing {endpoint.value} request")
+        logger.info("Processing %s request", endpoint.value)
 
         # Validate required fields using Strategy pattern. Missing or malformed
         # input raises instead of returning an error dict: dicts fall through

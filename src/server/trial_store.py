@@ -4,13 +4,18 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import redis
 
 from .trial_config import TrialConfig
 
 logger = logging.getLogger("logger")
+
+# Key layout kept exactly as it was: the deadline under "<prefix>:<domain>"
+# and its start timestamp as that key plus ":started".
+DEADLINE_KEY_TEMPLATE = "{prefix}:{domain}"
+STARTED_KEY_TEMPLATE = "{deadline}:started"
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ class InMemoryTrialStore(TrialStore):
         self._windows: Dict[str, Tuple[float, float]] = {}
 
     def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
-        key = f"{self._key_prefix}:{domain}"
+        key = DEADLINE_KEY_TEMPLATE.format(prefix=self._key_prefix, domain=domain)
         now = time.time()
         with self._lock:
             window = self._windows.get(key)
@@ -88,8 +93,8 @@ class RedisTrialStore(TrialStore):
         self._key_prefix = key_prefix
 
     def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
-        deadline_key = f"{self._key_prefix}:{domain}"
-        started_key = f"{deadline_key}:started"
+        deadline_key = DEADLINE_KEY_TEMPLATE.format(prefix=self._key_prefix, domain=domain)
+        started_key = STARTED_KEY_TEMPLATE.format(deadline=deadline_key)
         now = time.time()
         expires = int(now + duration_seconds)
         # Atomic NX pair: only the company's first request ever writes; later

@@ -2,7 +2,7 @@ from typing import Callable, Dict, List, Tuple
 
 from flask import Flask
 
-from .enums import EndpointType, Methods
+from .enums import ApiVersion, EndpointType, Methods
 
 
 class Route:
@@ -15,11 +15,51 @@ class Route:
         self.handler = handler
 
 
+class RoutePathBuilder:
+    """Builds versioned route paths, so the layout lives in one place."""
+
+    SEPARATOR = "/"
+    TEMPLATE = "/{version}/{segment}"
+
+    def __init__(self, api_version: str):
+        self._api_version = api_version
+
+    def build(self, segment: str) -> str:
+        """``"run/detailed"`` → ``"/v1/run/detailed"``; an empty segment → ``"/"``."""
+        if not segment:
+            return self.SEPARATOR
+        return self.TEMPLATE.format(version=self._api_version, segment=segment)
+
+
 class RouteBuilder:
     """Builds route configurations based on API version"""
 
-    def __init__(self, version: str):
-        self._version = "v1"
+    # (path segment below the version prefix, endpoint, methods). The empty
+    # segment is the unversioned health check at "/".
+    ROUTE_SPECS: List[Tuple[str, EndpointType, List[str]]] = [
+        ("", EndpointType.STATUS, [Methods.GET.value]),
+        ("simulate", EndpointType.SIMULATE, [Methods.POST.value]),
+        ("stats", EndpointType.STATS_CALCULATE, [Methods.POST.value]),
+        ("horizon", EndpointType.HORIZON, [Methods.POST.value]),
+        ("zenith", EndpointType.ZENITH, [Methods.POST.value]),
+        ("obstruction", EndpointType.OBSTRUCTION, [Methods.POST.value]),
+        ("obstruction_all", EndpointType.OBSTRUCTION_ALL, [Methods.POST.value]),
+        ("obstruction_multi", EndpointType.OBSTRUCTION_MULTI, [Methods.POST.value]),
+        ("obstruction_parallel", EndpointType.OBSTRUCTION_PARALLEL, [Methods.POST.value]),
+        ("encode_raw", EndpointType.ENCODE_RAW, [Methods.POST.value]),
+        ("encode", EndpointType.ENCODE, [Methods.POST.value]),
+        ("calculate-direction", EndpointType.CALCULATE_DIRECTION, [Methods.POST.value]),
+        ("get-reference-point", EndpointType.REFERENCE_POINT, [Methods.POST.value]),
+        ("run", EndpointType.RUN, [Methods.POST.value]),
+        ("run/detailed", EndpointType.RUN_DETAILED, [Methods.POST.value]),
+        ("merge", EndpointType.MERGE, [Methods.POST.value]),
+        ("trial/status", EndpointType.TRIAL_STATUS, [Methods.GET.value]),
+    ]
+
+    def __init__(self, api_version: str = ApiVersion.V1.value):
+        # The API version is the URL prefix (``v1``), deliberately independent
+        # of the package version — a patch release must not move the routes.
+        self._paths = RoutePathBuilder(api_version)
 
     def build_routes(self, handlers: Dict[EndpointType, Callable]) -> List[Route]:
         """Build all route configurations
@@ -31,23 +71,8 @@ class RouteBuilder:
             List of Route objects
         """
         return [
-            Route("/", EndpointType.STATUS, [Methods.GET.value], handlers.get(EndpointType.STATUS)),
-            Route(f"/{self._version}/simulate", EndpointType.SIMULATE, [Methods.POST.value], handlers.get(EndpointType.SIMULATE)),
-            Route(f"/{self._version}/stats", EndpointType.STATS_CALCULATE, [Methods.POST.value], handlers.get(EndpointType.STATS_CALCULATE)),
-            Route(f"/{self._version}/horizon", EndpointType.HORIZON, [Methods.POST.value], handlers.get(EndpointType.HORIZON)),
-            Route(f"/{self._version}/zenith", EndpointType.ZENITH, [Methods.POST.value], handlers.get(EndpointType.ZENITH)),
-            Route(f"/{self._version}/obstruction", EndpointType.OBSTRUCTION, [Methods.POST.value], handlers.get(EndpointType.OBSTRUCTION)),
-            Route(f"/{self._version}/obstruction_all", EndpointType.OBSTRUCTION_ALL, [Methods.POST.value], handlers.get(EndpointType.OBSTRUCTION_ALL)),
-            Route(f"/{self._version}/obstruction_multi", EndpointType.OBSTRUCTION_MULTI, [Methods.POST.value], handlers.get(EndpointType.OBSTRUCTION_MULTI)),
-            Route(f"/{self._version}/obstruction_parallel", EndpointType.OBSTRUCTION_PARALLEL, [Methods.POST.value], handlers.get(EndpointType.OBSTRUCTION_PARALLEL)),
-            Route(f"/{self._version}/encode_raw", EndpointType.ENCODE_RAW, [Methods.POST.value], handlers.get(EndpointType.ENCODE_RAW)),
-            Route(f"/{self._version}/encode", EndpointType.ENCODE, [Methods.POST.value], handlers.get(EndpointType.ENCODE)),
-            Route(f"/{self._version}/calculate-direction", EndpointType.CALCULATE_DIRECTION, [Methods.POST.value], handlers.get(EndpointType.CALCULATE_DIRECTION)),
-            Route(f"/{self._version}/get-reference-point", EndpointType.REFERENCE_POINT, [Methods.POST.value], handlers.get(EndpointType.REFERENCE_POINT)),
-            Route(f"/{self._version}/run", EndpointType.RUN, [Methods.POST.value], handlers.get(EndpointType.RUN)),
-            Route(f"/{self._version}/run/detailed", EndpointType.RUN_DETAILED, [Methods.POST.value], handlers.get(EndpointType.RUN_DETAILED)),
-            Route(f"/{self._version}/merge", EndpointType.MERGE, [Methods.POST.value], handlers.get(EndpointType.MERGE)),
-            Route(f"/{self._version}/trial/status", EndpointType.TRIAL_STATUS, [Methods.GET.value], handlers.get(EndpointType.TRIAL_STATUS)),
+            Route(self._paths.build(segment), endpoint, methods, handlers.get(endpoint))
+            for segment, endpoint, methods in self.ROUTE_SPECS
         ]
 
 

@@ -1,13 +1,28 @@
-import logging
-from typing import Dict, Any, List, Optional
-import time
-import math
-import aiohttp
 import asyncio
-from ...enums import EndpointType, RequestField, ResponseKey, ServiceName, HTTPHeader, HTTPContentType
-from ...exceptions import ServiceConnectionError, ServiceTimeoutError, ServiceResponseError, ServiceAuthorizationError
-from .config import WindowGeometry, ObstructionCalculationConfig, ObstructionResult
+import logging
+import math
+import time
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
+from ...constants import AuthHeaderBuilder, EndpointPathBuilder, ObstructionLogTemplate
+from ...enums import (
+    EndpointType,
+    HTTPContentType,
+    HTTPHeader,
+    RequestField,
+    ResponseKey,
+    ServiceName,
+)
+from ...exceptions import (
+    ServiceAuthorizationError,
+    ServiceConnectionError,
+    ServiceResponseError,
+    ServiceTimeoutError,
+)
 from .calculator_interface import IObstructionCalculator
+from .config import ObstructionCalculationConfig, ObstructionResult, WindowGeometry
 
 
 class ParallelObstructionCalculator(IObstructionCalculator):
@@ -39,7 +54,9 @@ class ParallelObstructionCalculator(IObstructionCalculator):
         obstruction_results = []
         for i, (direction_angle, result) in enumerate(zip(direction_angles, results)):
             if isinstance(result, Exception):
-                self._logger.error(f"Failed to calculate obstruction for direction {i}: {str(result)}")
+                self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_FAILED.format(index=i, error=result)
+                )
                 raise result
 
             data = result[ResponseKey.DATA.value]
@@ -52,7 +69,11 @@ class ParallelObstructionCalculator(IObstructionCalculator):
             ))
 
         total_time = time.time() - start_time
-        self._logger.info(f"Completed {len(obstruction_results)} calculations in {total_time:.2f}s")
+        self._logger.info(
+            ObstructionLogTemplate.PARALLEL_COMPLETED.format(
+                count=len(obstruction_results), seconds=total_time
+            )
+        )
         return obstruction_results
 
     async def _calculate_single_direction(
@@ -77,7 +98,7 @@ class ParallelObstructionCalculator(IObstructionCalculator):
 
         headers = {HTTPHeader.CONTENT_TYPE.value: HTTPContentType.JSON.value}
         if self._api_token:
-            headers[HTTPHeader.AUTHORIZATION.value] = f"Bearer {self._api_token}"
+            headers[HTTPHeader.AUTHORIZATION.value] = AuthHeaderBuilder.bearer(self._api_token)
 
         try:
             timeout_obj = aiohttp.ClientTimeout(total=timeout)
@@ -88,43 +109,63 @@ class ParallelObstructionCalculator(IObstructionCalculator):
             if e.status == 403:
                 error = ServiceAuthorizationError(
                     service_name=ServiceName.OBSTRUCTION.value,
-                    endpoint=f"/{EndpointType.OBSTRUCTION.value}",
+                    endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION.value),
                     error_message=e.message
                 )
-                self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
+                self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_ERROR.format(
+                        message=error.get_log_message(), direction=direction_deg
+                    )
+                )
                 raise error
             else:
                 error = ServiceResponseError(
                     service_name=ServiceName.OBSTRUCTION.value,
-                    endpoint=f"/{EndpointType.OBSTRUCTION.value}",
+                    endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION.value),
                     status_code=e.status,
                     error_message=e.message
                 )
-                self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
+                self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_ERROR.format(
+                        message=error.get_log_message(), direction=direction_deg
+                    )
+                )
                 raise error
         except aiohttp.ClientConnectorError as e:
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION.value),
                 address=self._api_url,
                 original_error=e
             )
-            self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
+            self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_ERROR.format(
+                        message=error.get_log_message(), direction=direction_deg
+                    )
+                )
             raise error
         except aiohttp.ClientError as e:
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION.value),
                 address=self._api_url,
                 original_error=e
             )
-            self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
+            self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_ERROR.format(
+                        message=error.get_log_message(), direction=direction_deg
+                    )
+                )
             raise error
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError:
             error = ServiceTimeoutError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION.value),
                 timeout_seconds=timeout
             )
-            self._logger.error(f"{error.get_log_message()} (direction: {direction_deg:.1f}°)")
+            self._logger.error(
+                    ObstructionLogTemplate.DIRECTION_ERROR.format(
+                        message=error.get_log_message(), direction=direction_deg
+                    )
+                )
             raise error

@@ -1,11 +1,13 @@
-from dataclasses import dataclass
-from typing import Dict, Any, List
-import numpy as np
 import io
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
+import numpy as np
+
+from ....constants import ImageConversionError, WindowNameBuilder
+from ....enums import NPZKey, RequestField, ResponseKey
 from .base_contracts import RemoteServiceRequest, StandardResponse
-from .domain_models import WindowGeometry, RoomPolygon
-from ....enums import RequestField, ResponseKey, NPZKey
+from .domain_models import RoomPolygon, WindowGeometry
 
 
 @dataclass
@@ -73,7 +75,10 @@ class Parameters(RemoteServiceRequest):
 
     @classmethod
     def _parse_window_list(cls, windows: list[dict[Any:Any]]) -> list[tuple[str, WindowGeometry]]:
-        return [(f"window_{i}", WindowGeometry.from_dict(w)) for i, w in enumerate(windows)]
+        return [
+            (WindowNameBuilder.positional(i), WindowGeometry.from_dict(w))
+            for i, w in enumerate(windows)
+        ]
 
     @classmethod
     def _normalize_to_dict(cls, field):
@@ -117,7 +122,7 @@ class EncoderResponse(StandardResponse):
         mask_key = mask_keys[0] if mask_keys else None
 
         if not image_key or not mask_key:
-            raise ValueError(f"Could not find image/mask keys in NPZ. Available keys: {keys}")
+            raise ValueError(ImageConversionError.NO_NPZ_KEYS.format(keys=keys))
 
         image = npz_data[image_key]
         mask = npz_data[mask_key]

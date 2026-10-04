@@ -1,12 +1,30 @@
 from __future__ import annotations
+
 from typing import Dict
 
-from .contracts import RemoteServiceRequest, ObstructionRequest, MergerRequest, StatsRequest, MainRequest, ModelRequest, ModelSpecRequest
-from ...maps import StandardMap
-from src.server.enums import ServiceName, EndpointType
-from .base import RemoteService
-from . import MergerService, EncoderService, DirectionAngleService, ReferencePointService, ExternalReferencePointService, ObstructionService, ModelService, StatsService, ModelSpecService
+from src.server.enums import EndpointType, ServiceName
 
+from ...maps import StandardMap
+from . import (
+    DirectionAngleService,
+    EncoderService,
+    ExternalReferencePointService,
+    MergerService,
+    ModelService,
+    ModelSpecService,
+    ObstructionService,
+    ReferencePointService,
+    StatsService,
+)
+from .base import RemoteService
+from .contracts import (
+    MainRequest,
+    MergerRequest,
+    ModelRequest,
+    ObstructionRequest,
+    RemoteServiceRequest,
+    StatsRequest,
+)
 
 
 class ServiceRegistryMap(StandardMap):

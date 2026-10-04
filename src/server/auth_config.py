@@ -1,7 +1,33 @@
 import os
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
+
 from .enums import AuthType, JwtAlgorithm
+from .env_keys import EnvKey
+
+
+class Auth0UrlBuilder:
+    """Builds the Auth0 URLs derived from the tenant domain."""
+    ISSUER: str = "https://{domain}/"
+    JWKS: str = "https://{domain}/.well-known/jwks.json"
+
+    @classmethod
+    def issuer(cls, domain: str) -> str:
+        return cls.ISSUER.format(domain=domain)
+
+    @classmethod
+    def jwks(cls, domain: str) -> str:
+        return cls.JWKS.format(domain=domain)
+
+
+class AuthConfigError:
+    """Templates for the configuration errors raised in this module."""
+    ASYMMETRIC_ONLY: str = (
+        "AUTH0_ALGORITHMS must list asymmetric algorithms only ({allowed}); rejected: {rejected}"
+    )
+    UNSUPPORTED_AUTH_TYPE: str = "Unsupported AUTH_TYPE '{actual}'; expected one of {expected}"
+    AUTH0_CONFIG: str = "Auth0 configuration error: {error}"
+    ALGORITHM_SEPARATOR: str = ", "
 
 
 @dataclass(frozen=True)
@@ -23,9 +49,9 @@ class Auth0Config:
         Raises:
             ValueError: If required environment variables are missing
         """
-        domain = os.getenv('AUTH0_DOMAIN')
-        audience = os.getenv('AUTH0_AUDIENCE')
-        algorithms_str = os.getenv('AUTH0_ALGORITHMS', 'RS256')
+        domain = os.getenv(EnvKey.AUTH0_DOMAIN.value)
+        audience = os.getenv(EnvKey.AUTH0_AUDIENCE.value)
+        algorithms_str = os.getenv(EnvKey.AUTH0_ALGORITHMS.value, JwtAlgorithm.RS256.value)
 
         if not domain:
             raise ValueError("AUTH0_DOMAIN environment variable is required")
@@ -33,7 +59,7 @@ class Auth0Config:
             raise ValueError("AUTH0_AUDIENCE environment variable is required")
 
         algorithms = cls._parse_algorithms(algorithms_str)
-        issuer = f"https://{domain}/"
+        issuer = Auth0UrlBuilder.issuer(domain)
 
         return cls(
             domain=domain,
@@ -54,15 +80,19 @@ class Auth0Config:
         rejected = [alg for alg in algorithms if alg not in allowed]
         if not algorithms or rejected:
             raise ValueError(
-                f"AUTH0_ALGORITHMS must list asymmetric algorithms only "
-                f"({', '.join(a.value for a in JwtAlgorithm)}); rejected: {rejected}"
+                AuthConfigError.ASYMMETRIC_ONLY.format(
+                    allowed=AuthConfigError.ALGORITHM_SEPARATOR.join(
+                        a.value for a in JwtAlgorithm
+                    ),
+                    rejected=rejected,
+                )
             )
         return algorithms
 
     @property
     def jwks_url(self) -> str:
         """Get the JWKS URL for token verification"""
-        return f"https://{self.domain}/.well-known/jwks.json"
+        return Auth0UrlBuilder.jwks(self.domain)
 
 
 class AuthConfig:
@@ -81,7 +111,7 @@ class AuthConfig:
         Returns:
             AuthType enum value
         """
-        auth_type_str = os.getenv('AUTH_TYPE', AuthType.TOKEN.value).strip().lower()
+        auth_type_str = os.getenv(EnvKey.AUTH_TYPE.value, AuthType.TOKEN.value).strip().lower()
 
         auth_type_map = {auth_type.value: auth_type for auth_type in AuthType}
 
@@ -89,14 +119,16 @@ class AuthConfig:
         if auth_type is None:
             # Fail closed: a typo must not silently pick a weaker mode.
             raise ValueError(
-                f"Unsupported AUTH_TYPE '{auth_type_str}'; expected one of {sorted(auth_type_map)}"
+                AuthConfigError.UNSUPPORTED_AUTH_TYPE.format(
+                    actual=auth_type_str, expected=sorted(auth_type_map)
+                )
             )
         return auth_type
 
     def _initialize_config(self) -> None:
         """Initialize configuration based on auth type"""
         if self._auth_type == AuthType.TOKEN:
-            self._token = os.getenv('API_TOKEN')
+            self._token = os.getenv(EnvKey.API_TOKEN.value)
             if not self._token:
                 # Fail closed: token auth without a token would accept any bearer.
                 raise ValueError("AUTH_TYPE=token requires a non-empty API_TOKEN")
@@ -104,7 +136,7 @@ class AuthConfig:
             try:
                 self._auth0_config = Auth0Config.from_environment()
             except ValueError as e:
-                raise ValueError(f"Auth0 configuration error: {e}")
+                raise ValueError(AuthConfigError.AUTH0_CONFIG.format(error=e))
 
     @property
     def auth_type(self) -> AuthType:

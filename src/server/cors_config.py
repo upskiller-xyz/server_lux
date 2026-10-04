@@ -7,11 +7,11 @@ from flask import Flask
 from flask_cors import CORS
 
 from .enums import HTTPHeader
+from .env_keys import EnvKey
 from .rate_limiter import HEADER_LIMIT, HEADER_REMAINING, HEADER_RESET
 
 logger = logging.getLogger("logger")
 
-CORS_ORIGINS_ENV = "CORS_ORIGINS"
 ALLOW_ALL_ORIGINS = "*"
 
 # The API is called with a bearer token (no cookies), so credentials stay off.
@@ -34,7 +34,7 @@ class CorsConfig:
 
     @classmethod
     def from_environment(cls) -> "CorsConfig":
-        raw = os.getenv(CORS_ORIGINS_ENV, "")
+        raw = os.getenv(EnvKey.CORS_ORIGINS.value, "")
         origins = tuple(origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip())
         return cls(origins or (ALLOW_ALL_ORIGINS,))
 
@@ -53,7 +53,7 @@ class CorsConfig:
 
     def apply(self, app: Flask) -> None:
         if self.allows_all:
-            logger.warning(f"{CORS_ORIGINS_ENV} not set — CORS allows every origin")
+            logger.warning("%s not set — CORS allows every origin", EnvKey.CORS_ORIGINS.value)
         else:
-            logger.info(f"CORS origins: {', '.join(self.origins)}")
+            logger.info("CORS origins: %s", ', '.join(self.origins))
         CORS(app, **self.flask_cors_options())

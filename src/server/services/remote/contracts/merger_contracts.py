@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import numpy as np
 
-from .base_contracts import RemoteServiceRequest, StandardResponse
-from .domain_models import WindowGeometry, Simulation
 from ....enums import RequestField, ResponseKey
+from .base_contracts import RemoteServiceRequest, StandardResponse
+from .domain_models import Simulation, WindowGeometry
 
 
 @dataclass

@@ -7,13 +7,13 @@ Scaleway serverless endpoint (``*.scw.cloud``) requires the invocation token in
 maps a URL to a :class:`ServiceBackend`, and ``BackendAuthMap`` maps that backend to
 the strategy producing the right headers.
 """
+import os
 from abc import ABC, abstractmethod
 from typing import Dict
 from urllib.parse import urlparse
-import os
 
-from ...enums import ServiceBackend, ServiceName, ModalAuthHeader, ScalewayAuthHeader
 from ...constants import ModalBackend, ScalewayBackend
+from ...enums import ModalAuthHeader, ScalewayAuthHeader, ServiceBackend, ServiceName
 from ...exceptions import ModalCredentialsError, ScalewayCredentialsError
 from ...maps import StandardMap
 

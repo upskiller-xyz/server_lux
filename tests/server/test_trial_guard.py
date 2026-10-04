@@ -10,10 +10,15 @@ from unittest.mock import patch
 import pytest
 from flask import Flask, g, jsonify
 
-from src.server.enums import ErrorType, HTTPHeader, HTTPStatus, ResponseKey
-from src.server.rate_limiter import AUTH_CLIENT_ID_KEY
+from src.server.enums import (
+    AuthContextKey,
+    ErrorType,
+    HTTPHeader,
+    HTTPStatus,
+    ResponseKey,
+)
 from src.server.trial_config import TrialConfig
-from src.server.trial_guard import AUTH_DOMAIN_KEY, TrialGuard
+from src.server.trial_guard import TrialGuard
 from src.server.trial_store import (
     InMemoryTrialStore,
     NullTrialStore,
@@ -65,9 +70,9 @@ def _app_with_route(
     @app.before_request
     def _set_identity():
         if client_id is not None:
-            setattr(g, AUTH_CLIENT_ID_KEY, client_id)
+            setattr(g, AuthContextKey.CLIENT_ID.value, client_id)
         if domain is not None:
-            setattr(g, AUTH_DOMAIN_KEY, domain)
+            setattr(g, AuthContextKey.DOMAIN.value, domain)
 
     return app
 

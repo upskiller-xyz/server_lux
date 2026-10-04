@@ -1,10 +1,10 @@
-from typing import Any, Dict
 import logging
+from typing import Any, Dict
 
-from .contracts import ModelSpecRequest, ModelSpecResponse
-from .base import RemoteService
-from ...enums import ServiceName, EndpointType
+from ...enums import EndpointType, ServiceName
 from ...exceptions import ServiceResponseError
+from .base import RemoteService
+from .contracts import ModelSpecRequest, ModelSpecResponse
 
 logger = logging.getLogger("logger")
 

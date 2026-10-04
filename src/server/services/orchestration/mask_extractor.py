@@ -1,7 +1,8 @@
-from typing import Dict, Any
 import io
-import numpy as np
 import logging
+from typing import Any, Dict
+
+import numpy as np
 
 from ...enums import NPZKey, RequestField
 
@@ -41,7 +42,7 @@ class MaskExtractor:
             return masks
 
         except Exception as e:
-            logger.error(f"Failed to extract mask from encoder NPZ: {str(e)}")
+            logger.error("Failed to extract mask from encoder NPZ: %s", str(e))
             return {}
 
     @staticmethod

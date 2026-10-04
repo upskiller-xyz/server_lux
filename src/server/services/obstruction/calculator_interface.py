@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
-from .config import WindowGeometry, ObstructionCalculationConfig, ObstructionResult
+
+from .config import ObstructionCalculationConfig, ObstructionResult, WindowGeometry
 
 
 class IObstructionCalculator(ABC):

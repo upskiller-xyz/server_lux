@@ -15,13 +15,13 @@ from src.server.auth import Authenticator, TokenAuthenticator
 from src.server.auth_config import Auth0Config, AuthConfig
 from src.server.auth_factory import AuthenticationStrategyFactory
 from src.server.auth_strategies import (
-    TRIAL_DOMAIN_CLAIM,
     Auth0AuthenticationStrategy,
     JwksProvider,
     NoAuthenticationStrategy,
     TokenAuthenticationStrategy,
 )
-from src.server.enums import AuthType, ErrorType
+from src.server.constants import AuthHeaderBuilder
+from src.server.enums import AuthType, ErrorType, HTTPHeader, TokenClaim
 
 
 def _generate_rsa_key_pair():
@@ -380,12 +380,13 @@ class TestAuth0AuthenticationStrategy:
         three must land on flask.g inside a request context.
         """
         strategy, private_key = strategy_with_jwks
-        extra_claims = {"azp": "lux-revit-trial", TRIAL_DOMAIN_CLAIM: "foretagx.se"}
+        extra_claims = {"azp": "lux-revit-trial", TokenClaim.TRIAL_DOMAIN.value: "foretagx.se"}
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, extra_claims=extra_claims)
 
         app = Flask(__name__)
-        with app.test_request_context("/", headers={"Authorization": f"Bearer {token}"}):
-            is_valid, error = strategy.validate_request(f"Bearer {token}")
+        auth_header = AuthHeaderBuilder.bearer(token)
+        with app.test_request_context("/", headers={HTTPHeader.AUTHORIZATION.value: auth_header}):
+            is_valid, error = strategy.validate_request(auth_header)
             assert is_valid is True
             assert error is None
             assert g.auth_subject == "test-user"
