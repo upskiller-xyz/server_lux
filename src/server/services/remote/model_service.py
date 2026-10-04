@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from ...enums import EndpointType, RequestField, ServiceName
+from ..helpers.call_recorder import CallRecorder
 from .base import RemoteService, ServiceResponseMap
 from .contracts import ModelRequest, RemoteServiceRequest, RemoteServiceResponse
 from .image_converters import EncoderOutputConverter
@@ -61,7 +62,8 @@ class ModelService(RemoteService):
         if request.cond_vec is not None:
             form_data[RequestField.COND_VEC.value] = json.dumps(request.cond_vec.tolist())
 
-        response_dict = cls._http_client.post_multipart(url, files, form_data, headers=cls._auth_headers(url))
+        with CallRecorder(cls.name, endpoint.value):
+            response_dict = cls._http_client.post_multipart(url, files, form_data, headers=cls._auth_headers(url))
 
         # Use provided response_class or fall back to service's default
         if response_class is None:

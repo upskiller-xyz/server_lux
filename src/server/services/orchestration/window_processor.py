@@ -62,13 +62,13 @@ class WindowProcessor:
         ]
 
         async def process_all():
-            loop = asyncio.get_event_loop()
+            # to_thread (not run_in_executor): run_in_executor does NOT copy the
+            # calling context into the worker thread, so a correlation id or
+            # span set as a contextvar would be invisible inside the fan-out —
+            # every per-window [call] record would lose its rid. to_thread uses
+            # contextvars.copy_context(), keeping one id per pipeline run.
             tasks = [
-                loop.run_in_executor(
-                    None,
-                    self.process_single_window,
-                    *args
-                )
+                asyncio.to_thread(self.process_single_window, *args)
                 for args in args_list
             ]
             return await asyncio.gather(*tasks)

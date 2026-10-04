@@ -18,6 +18,7 @@ from ...enums import (
     ServiceName,
 )
 from ...exceptions import ServiceResponseError
+from ...services.helpers.call_recorder import CallRecorder
 from ...services.obstruction.empty_mesh_policy import EmptyMeshPolicy
 from .base import RemoteService
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
@@ -146,12 +147,13 @@ class ObstructionService(RemoteService):
             RequestField.MESH.value: ("mesh.npy", mesh_bytes, "application/octet-stream")
         }
         logger.info("[%s] Calling binary endpoint: %s", cls.name.value, url)
-        response_dict = cls._http_client.post_multipart(
-            url,
-            files=files,
-            data={"params": orjson.dumps(params).decode()},
-            headers=cls._auth_headers(url),
-        )
+        with CallRecorder(cls.name, EndpointType.OBSTRUCTION_PARALLEL.value + cls._BIN_SUFFIX):
+            response_dict = cls._http_client.post_multipart(
+                url,
+                files=files,
+                data={"params": orjson.dumps(params).decode()},
+                headers=cls._auth_headers(url),
+            )
         if response_dict is None:
             raise ServiceResponseError(
                 cls.name.value, url, HTTPStatus.BAD_GATEWAY.value,

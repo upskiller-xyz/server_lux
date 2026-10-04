@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict
 
 from src.server.config import get_service_config
+from src.server.services.helpers.call_recorder import CallRecorder
 from src.server.services.helpers.logging_utils import LoggingFormatter
 from src.server.services.http_client import HTTPClient
 
@@ -104,7 +105,8 @@ class RemoteService:
         formatted_request = LoggingFormatter.format_for_logging(request_dict)
         logger.debug("[%s] Request data: %s", cls.name.value, formatted_request)
 
-        response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
+        with CallRecorder(cls.name, endpoint.value):
+            response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
 
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
         logger.debug("[%s] Response received: %s", cls.name.value, formatted_response)
@@ -141,10 +143,11 @@ class RemoteService:
         # Convert request to dict
         request_dict = request.to_dict
 
-        binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
-        
+        with CallRecorder(cls.name, endpoint.value):
+            binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
+
         # Factory Pattern: Check for explicit marker
-        
+
         return response_class(binary_data)
 
 
