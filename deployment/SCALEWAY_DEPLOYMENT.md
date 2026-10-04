@@ -86,7 +86,7 @@ as they are, so a targeted deploy can never move code it isn't redeploying.
 
 1. `ENCODER_REF` / `MERGER_REF` / `STATS_REF` — from the GitHub Variables of
    the same name, which the workflow renders on **every** run, overridden for
-   a single run by the tag in a `repository_dispatch`.
+   a single run by the `service_ref` input a tag deploy passes.
 2. `deployment/services/.deployed-refs` on the box — what it last deployed for
    that service. The runtime `.env.scaleway` is rebuilt from scratch on every
    deploy, so this on-box record is what keeps a tag dispatch's pin from
@@ -133,60 +133,44 @@ Two ways to trigger:
   service in the *service* input. Redeploys that service at its current
   resolved ref — the Variable if set, otherwise the ref the box last
   deployed — without touching the others.
-- **From a tag on the service's own repo**, via `repository_dispatch`. A tag
-  push on `server_encoder` (for example) sends a `service-tag` dispatch to
-  this repo carrying `{"service": "encoder", "ref": "<tag>"}`; the workflow
-  resolves that into `ENCODER_REF=<tag>` and `--service encoder-service`, and
-  forces a rebuild (the whole point of the dispatch is new code to run).
-  Dispatch refs — and the `ENCODER_REF` / `MERGER_REF` / `STATS_REF` GitHub
-  Variables — are validated against `[A-Za-z0-9._/-]` before being used,
-  since every one of them reaches a file the deploy script `source`s on the VM.
+- **From a tag on the service's own repo.** A tag push on `server_encoder`
+  (for example) triggers this workflow with
+  `inputs: {service: encoder, service_ref: <tag>}`; it pins `ENCODER_REF` to
+  that tag, runs `--service encoder-service --build`, and leaves the other
+  services alone. A supplied `service_ref` is what forces the rebuild, so a
+  tag deploy always ships new code while a manual run without one respects the
+  *build* checkbox.
 
-  The service repo needs a small workflow of its own — not committed here,
-  since `server_lux` doesn't contain those repos' checkouts. For each of
-  `server_encoder`, `server_merger`, `server_stats`, add
-  `.github/workflows/dispatch-deploy.yml`:
+  Every ref is validated against `[A-Za-z0-9._/-]` plus the usual git ref-name
+  rules before use — the dispatched one *and* the `ENCODER_REF` /
+  `MERGER_REF` / `STATS_REF` Variables, since all of them reach a file the
+  deploy script `source`s on the VM.
 
-  ```yaml
-  name: Dispatch deploy to server_lux
+  The sending workflow lives in each service repo as
+  `.github/workflows/deploy-on-tag.yml`
+  ([encoder](https://github.com/upskiller-xyz/server_encoder/blob/master/.github/workflows/deploy-on-tag.yml),
+  [merger](https://github.com/upskiller-xyz/server_merger/blob/master/.github/workflows/deploy-on-tag.yml),
+  [stats](https://github.com/upskiller-xyz/server_stats/blob/master/.github/workflows/deploy-on-tag.yml)).
+  They are identical apart from the service name; deliberately not copied into
+  this document, so there is one place to change rather than two that drift.
 
-  on:
-    push:
-      tags: ["v*"]
+  **The token they need: `SERVER_LUX_DISPATCH_TOKEN`, with `Actions: write` on
+  this repo** — that is all `POST /repos/.../actions/workflows/{id}/dispatches`
+  requires. The default `GITHUB_TOKEN` of another repo cannot dispatch here at
+  all.
 
-  jobs:
-    dispatch:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Send service-tag dispatch
-          env:
-            # Fine-grained PAT (or GitHub App token) on
-            # upskiller-xyz/server_lux with **Contents: write** — that is what
-            # POST /repos/{owner}/{repo}/dispatches requires; Contents: read
-            # plus Actions: write returns 403. NOT the default GITHUB_TOKEN,
-            # which cannot dispatch across repositories.
-            TOKEN: ${{ secrets.SERVER_LUX_DISPATCH_TOKEN }}
-          run: |
-            curl -fsS -X POST \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/upskiller-xyz/server_lux/dispatches \
-              -d "{\"event_type\":\"service-tag\",\"client_payload\":{\"service\":\"encoder\",\"ref\":\"${GITHUB_REF_NAME}\"}}"
-  ```
+  This is why the trigger is `workflow_dispatch` and not `repository_dispatch`:
+  the latter sits under `Contents: write`, which would also let a service
+  repo's token push code to `server_lux`. Same capability, a token that cannot
+  modify this repository.
 
-  Change only `"service":"encoder"` per repo (`"merger"` / `"stats"`
-  respectively) — everything else is identical across the three.
-
-  **On the privilege this token carries.** The deploy key and all deploy logic
-  stay in `server_lux`, so the service repos never hold SSH or Scaleway
-  credentials. But `Contents: write` on `server_lux` is not a
-  "trigger-this-workflow-only" permission — it also allows pushing to that
-  repo. GitHub has no narrower scope for repository dispatch. Treat it
-  accordingly: issue a dedicated token per service repo rather than sharing
-  one, keep it out of every other workflow in that repo, and rotate it on the
-  same schedule as the deploy key. A GitHub App installation token, restricted
-  to `server_lux` and used only by this workflow, is the tighter option if the
-  extra setup is worth it.
+  `Actions: write` is still not nothing — it can cancel or re-run other
+  workflow runs here and delete their logs. The deploy key and the Scaleway
+  credentials never leave `server_lux`, so a leaked sender token cannot reach
+  the box directly, but issue one token per service repo rather than sharing
+  one, keep it out of that repo's other workflows, and rotate it with the
+  deploy key. A GitHub App installation token is the tighter option, and also
+  survives the person who created it leaving the org.
 
 ### Manual deploy (fallback)
 
