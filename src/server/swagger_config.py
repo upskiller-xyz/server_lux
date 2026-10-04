@@ -4,6 +4,15 @@ from src.__version__ import version
 from src.server.auth_config import AuthConfig
 from src.server.enums import AuthType
 
+DESCRIPTION_TEMPLATE = """API documentation for Server Lux services{auth_info}
+
+**Note:** When testing endpoints in Swagger UI, use valid example data:
+- Mesh must contain complete triangles (vertices in multiples of 3)
+- Each vertex must have [x, y, z] coordinates
+- See individual endpoint examples for valid request formats
+- For working examples, refer to example/demo.ipynb in the repository
+"""
+
 
 def get_swagger_template() -> dict:
     """Get Swagger template with API info and reusable definitions
@@ -44,14 +53,7 @@ def get_swagger_template() -> dict:
         'info': {
             'title': 'Server Lux API',
             'version': version,
-            'description': f'''API documentation for Server Lux services{auth_info}
-
-**Note:** When testing endpoints in Swagger UI, use valid example data:
-- Mesh must contain complete triangles (vertices in multiples of 3)
-- Each vertex must have [x, y, z] coordinates
-- See individual endpoint examples for valid request formats
-- For working examples, refer to example/demo.ipynb in the repository
-'''
+            'description': DESCRIPTION_TEMPLATE.format(auth_info=auth_info)
         },
         'definitions': {
             'Mesh': {

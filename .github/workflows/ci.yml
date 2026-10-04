@@ -15,7 +15,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with:
@@ -38,10 +38,9 @@ jobs:
           # Project convention: .format()/%-formatting and named template
           # classes instead of f-strings, so messages stay greppable and log
           # calls stay lazy. Keep this gate green rather than adding exceptions.
-          if grep -rnE '(^|[^A-Za-z0-9_-])f"' src tests --include='*.py'; then
-            echo "::error::f-strings are not allowed — use .format() or a template class"
-            exit 1
-          fi
+          # AST-based: a grep for `f"` misses f'...', f'''...''' and friends,
+          # so the gate would pass while prohibited code remained.
+          python scripts/check_no_fstrings.py src tests
 
       - name: Run tests
         run: python -m pytest tests -q
@@ -53,7 +52,7 @@ jobs:
   gateway-config:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate the gateway config in nginx
         working-directory: deployment
@@ -118,7 +117,7 @@ jobs:
   pip-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
         with:

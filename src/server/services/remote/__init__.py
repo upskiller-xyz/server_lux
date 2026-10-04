@@ -16,6 +16,8 @@ from .contracts import (
     MergerResponse,
     ModelRequest,
     ModelResponse,
+    ModelSpecRequest,
+    ModelSpecResponse,
     ObstructionMultiRequest,
     ObstructionParallelRequest,
     ObstructionRequest,
