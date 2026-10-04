@@ -67,7 +67,7 @@ services:
       # == the container's max-scale.
       - OBSTRUCTION_SERVICE_URL=${OBSTRUCTION_SERVICE_URL}
       - OBSTRUCTION_TOKEN=${OBSTRUCTION_TOKEN}
-      - OBSTRUCTION_MAX_CONCURRENCY=${OBSTRUCTION_MAX_CONCURRENCY:-10}
+      - OBSTRUCTION_MAX_CONCURRENCY=${OBSTRUCTION_MAX_CONCURRENCY:-12}
       - MERGER_SERVICE_URL=http://merger-service:8084
       - STATS_SERVICE_URL=http://stats-service:8085
       # Inference on Modal — *.modal.run is auto-detected and gets proxy-auth.
