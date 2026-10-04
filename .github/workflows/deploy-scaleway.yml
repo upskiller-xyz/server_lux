@@ -21,7 +21,18 @@ name: Deploy to Scaleway
 #              Required: AUTH_TYPE (auth0|token|none), SSH_KNOWN_HOSTS (pinned
 #              host key, output of `ssh-keyscan <host>`).
 #
-# Manual trigger only (a prod box should not redeploy on every push).
+# Two ways to trigger a deploy:
+#   - workflow_dispatch: manual, from this repo. Optionally targets one
+#     service (encoder/merger/stats) instead of redeploying the whole stack.
+#   - repository_dispatch (type "service-tag"): sent BY a microservice repo's
+#     own workflow when it pushes a tag, carrying
+#     client_payload: {service: "encoder"|"merger"|"stats", ref: "<tag>"}.
+#     This is how a tag on e.g. server_encoder redeploys ONLY that service,
+#     pinned to that tag — the deploy key and this logic stay in this one
+#     repo rather than being duplicated (and re-rotated) in every service repo.
+#     The sending workflow needs a token with `repo` scope on THIS repo (a
+#     fine-grained PAT or a GitHub App install token) — the default
+#     GITHUB_TOKEN of a different repository cannot dispatch across repos.
 
 on:
   workflow_dispatch:
@@ -30,6 +41,17 @@ on:
         description: "Force rebuild of all images"
         type: boolean
         default: false
+      service:
+        description: "Restart only this service (empty = full stack)"
+        type: choice
+        default: ""
+        options:
+          - ""
+          - encoder
+          - merger
+          - stats
+  repository_dispatch:
+    types: [service-tag]
 
 # Never run two deploys against the same box at once.
 concurrency:
@@ -42,6 +64,114 @@ jobs:
     # Scopes the secrets to this environment and allows required-reviewer gating.
     environment: prod
     steps:
+      - name: Resolve the target service and the per-service refs
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SERVICE: ${{ github.event.client_payload.service }}
+          DISPATCH_REF: ${{ github.event.client_payload.ref }}
+          INPUT_SERVICE: ${{ inputs.service }}
+          # Durable per-service pins. These are the source of truth a deploy
+          # starts from; a tag dispatch overrides only its own service, for its
+          # own run. Unset is fine — deploy-scaleway.sh then falls back to what
+          # the box last deployed, and only then to master.
+          VAR_ENCODER_REF: ${{ vars.ENCODER_REF }}
+          VAR_MERGER_REF: ${{ vars.MERGER_REF }}
+          VAR_STATS_REF: ${{ vars.STATS_REF }}
+        run: |
+          set -euo pipefail
+          # Picks the short service id from whichever trigger fired and maps it
+          # to the compose service name (encoder -> encoder-service). A
+          # repository_dispatch additionally forces a rebuild — the entire point
+          # of the dispatch is new code to run.
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            short="$DISPATCH_SERVICE"
+            ref="$DISPATCH_REF"
+            force_build=true
+          else
+            short="$INPUT_SERVICE"
+            ref=""
+            force_build=false
+          fi
+
+          # A repository_dispatch targets exactly ONE service — its payload
+          # pins that service's ref and forces its rebuild. An empty service
+          # must not widen that to a forced full-stack deploy: a malformed
+          # dispatch payload is a failed dispatch, not a bigger deploy.
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ -z "$short" ]; then
+            echo "::error::repository_dispatch client_payload.service is required (encoder, merger or stats)."
+            exit 1
+          fi
+
+          compose_service=""; ref_var=""
+          case "$short" in
+            "") ;;
+            encoder|merger|stats)
+              compose_service="${short}-service"
+              ref_var="$(echo "$short" | tr '[:lower:]' '[:upper:]')_REF" ;;
+            *) echo "::error::Unknown service '$short' — expected encoder, merger or stats."; exit 1 ;;
+          esac
+
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ -z "$ref" ]; then
+            echo "::error::repository_dispatch client_payload.ref is required."
+            exit 1
+          fi
+
+          # validate_ref <value> <name>: every ref below is emitted to
+          # $GITHUB_OUTPUT, written into .env.scaleway and `source`d by
+          # deploy-scaleway.sh on the VM — a value like '$(curl … | sh)' or one
+          # containing a newline would execute as shell there, or inject extra
+          # env assignments. Restrict every ref to what git branch/tag names
+          # actually need before it is written anywhere. This covers the
+          # dispatch payload AND the ENCODER_REF/MERGER_REF/STATS_REF GitHub
+          # Variables: a Variable is admin-controlled, but it reaches the same
+          # sourced file, so it gets the same treatment rather than trust.
+          validate_ref() {
+            local value="$1" name="$2"
+            case "$value" in
+              *[!A-Za-z0-9._/-]*)
+                echo "::error::${name} '${value}' contains characters outside [A-Za-z0-9._/-]."
+                exit 1 ;;
+            esac
+            case "$value" in
+              -*|/*|*/|*..*|*.lock)
+                echo "::error::${name} '${value}' is not a well-formed branch or tag name."
+                exit 1 ;;
+            esac
+            if [ "${#value}" -gt 200 ]; then
+              echo "::error::${name} is longer than 200 characters."
+              exit 1
+            fi
+          }
+
+          [ -n "$ref" ] && validate_ref "$ref" "repository_dispatch ref"
+
+          # Render all three pins every run, overriding only the targeted one.
+          # Emitting just the dispatch's ref would drop the other two services'
+          # pins from the rebuilt .env.scaleway on the box.
+          encoder_ref="$VAR_ENCODER_REF"
+          merger_ref="$VAR_MERGER_REF"
+          stats_ref="$VAR_STATS_REF"
+          case "$short" in
+            encoder) [ -n "$ref" ] && encoder_ref="$ref" ;;
+            merger)  [ -n "$ref" ] && merger_ref="$ref" ;;
+            stats)   [ -n "$ref" ] && stats_ref="$ref" ;;
+          esac
+          # The dispatch ref is validated above; these checks are what guard
+          # the three GitHub Variable values.
+          [ -n "$encoder_ref" ] && validate_ref "$encoder_ref" "ENCODER_REF variable"
+          [ -n "$merger_ref" ] && validate_ref "$merger_ref" "MERGER_REF variable"
+          [ -n "$stats_ref" ] && validate_ref "$stats_ref" "STATS_REF variable"
+
+          {
+            echo "compose_service=$compose_service"
+            echo "ref_var=$ref_var"
+            echo "ref=$ref"
+            echo "encoder_ref=$encoder_ref"
+            echo "merger_ref=$merger_ref"
+            echo "stats_ref=$stats_ref"
+            echo "force_build=$force_build"
+          } >> "$GITHUB_OUTPUT"
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.SCALEWAY_SSH_KEY }}
@@ -77,6 +207,12 @@ jobs:
           # identifier (Variable), the invocation token is a per-service Secret.
           OBSTRUCTION_SERVICE_URL: ${{ vars.OBSTRUCTION_SERVICE_URL }}
           OBSTRUCTION_TOKEN: ${{ secrets.OBSTRUCTION_TOKEN }}
+          # Per-service pins, resolved in the step above (GitHub Variable,
+          # overridden by a tag dispatch for its own service). Rendered on every
+          # run so no service's pin is lost when another one is deployed.
+          ENCODER_REF: ${{ steps.target.outputs.encoder_ref }}
+          MERGER_REF: ${{ steps.target.outputs.merger_ref }}
+          STATS_REF: ${{ steps.target.outputs.stats_ref }}
         run: |
           umask 077
           # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
@@ -116,7 +252,10 @@ jobs:
             "SCW_ACCESS_KEY=$SCW_ACCESS_KEY" \
             "SCW_SECRET_KEY=$SCW_SECRET_KEY" \
             "OBSTRUCTION_SERVICE_URL=$OBSTRUCTION_SERVICE_URL" \
-            "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN"; do
+            "OBSTRUCTION_TOKEN=$OBSTRUCTION_TOKEN" \
+            "ENCODER_REF=$ENCODER_REF" \
+            "MERGER_REF=$MERGER_REF" \
+            "STATS_REF=$STATS_REF"; do
             [ -n "${kv#*=}" ] && printf '%s\n' "$kv" >> .env.runtime
           done
 
@@ -127,6 +266,8 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           DEPLOY_REF: ${{ vars.DEPLOY_REF || 'master' }}
           BUILD: ${{ inputs.build }}
+          FORCE_BUILD: ${{ steps.target.outputs.force_build }}
+          COMPOSE_SERVICE: ${{ steps.target.outputs.compose_service }}
         run: |
           set -euo pipefail
           # Fail fast on missing connection config — clearer than a later SSH/cd error.
@@ -140,7 +281,14 @@ jobs:
           # IdentitiesOnly=yes: use only id_deploy, don't try other identities and
           # trip the server's auth-attempt limit.
           ssh_opts="-i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes"
-          build_flag=""; [ "$BUILD" = "true" ] && build_flag="--build"
+          build_flag=""
+          # A repository_dispatch's whole point is new code — build regardless
+          # of the (inapplicable, workflow_dispatch-only) `build` input.
+          if [ "$BUILD" = "true" ] || [ "$FORCE_BUILD" = "true" ]; then
+            build_flag="--build"
+          fi
+          service_flag=""
+          [ -n "$COMPOSE_SERVICE" ] && service_flag="--service $COMPOSE_SERVICE"
 
           # 1. Stream the rendered secrets to a FIXED remote path. The command is
           #    single-quoted so $HOME expands on the box (not locally) and no
@@ -149,11 +297,13 @@ jobs:
           #    remote login umask, often 644).
           ssh $ssh_opts "${USER_}@${HOST}" 'umask 077; cat > "$HOME/.lux_env.runtime"' < .env.runtime
 
-          # 2. Run the remote deploy. DEPLOY_PATH/DEPLOY_REF/build_flag are passed as
-          #    %q-quoted env vars so they reach the box as DATA, never as code — a
-          #    value containing quotes/semicolons can't break out and run commands.
-          #    The script body (single-quoted heredoc) references them as variables.
-          remote_env=$(printf 'DEPLOY_PATH=%q DEPLOY_REF=%q BUILD_FLAG=%q' "$DEPLOY_PATH" "$DEPLOY_REF" "$build_flag")
+          # 2. Run the remote deploy. DEPLOY_PATH/DEPLOY_REF/build_flag/service_flag
+          #    are passed as %q-quoted env vars so they reach the box as DATA,
+          #    never as code — a value containing quotes/semicolons can't break
+          #    out and run commands. The script body (single-quoted heredoc)
+          #    references them as variables.
+          remote_env=$(printf 'DEPLOY_PATH=%q DEPLOY_REF=%q BUILD_FLAG=%q SERVICE_FLAG=%q' \
+            "$DEPLOY_PATH" "$DEPLOY_REF" "$build_flag" "$service_flag")
           ssh $ssh_opts "${USER_}@${HOST}" "$remote_env bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
@@ -163,8 +313,37 @@ jobs:
           umask 077
           cat .env.scaleway.example "$HOME/.lux_env.runtime" > .env.scaleway
           shred -u "$HOME/.lux_env.runtime" 2>/dev/null || rm -f "$HOME/.lux_env.runtime"
-          bash deploy-scaleway.sh $BUILD_FLAG
+          bash deploy-scaleway.sh $BUILD_FLAG $SERVICE_FLAG
           REMOTE
+
+      - name: Persist the deployed ref as a GitHub Variable
+        # Only a dispatch carries a new ref worth recording; a manual run
+        # supplies none and already deploys whatever the current pin resolves
+        # to. Runs AFTER the deploy step and only on success, so the Variable
+        # can never claim a ref that is not actually running.
+        if: ${{ success() && github.event_name == 'repository_dispatch' }}
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_VARS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          REF_VAR_NAME: ${{ steps.target.outputs.ref_var }}
+          REF_VALUE: ${{ steps.target.outputs.ref }}
+        run: |
+          set -uo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::DEPLOY_VARS_TOKEN is not set. The pin was recorded on the box (services/.deployed-refs) but not as a GitHub Variable, so it will not survive the instance being rebuilt."
+            exit 0
+          fi
+          # Deliberately non-fatal. The deploy itself already succeeded and the
+          # on-box record already holds the pin, so failing the run here would
+          # misreport a deploy that worked. The warning is the signal that
+          # durable persistence degraded to the box-local record.
+          # --env must match this job's `environment:` so the value is read back
+          # by vars.<NAME>_REF on the next run.
+          if gh variable set "$REF_VAR_NAME" --env prod --body "$REF_VALUE"; then
+            echo "Recorded ${REF_VAR_NAME}=${REF_VALUE} (environment: prod)."
+          else
+            echo "::warning::Could not set ${REF_VAR_NAME}. Check DEPLOY_VARS_TOKEN's permission to write Actions variables for the prod environment. The pin is still recorded on the box."
+          fi
 
       - name: Clean up local secrets
         if: always()
