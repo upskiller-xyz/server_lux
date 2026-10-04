@@ -4,12 +4,15 @@ Shaped after :class:`StageTimer` (same context-manager pattern, same
 ``[prefix]`` greppability) but emits structured JSON rather than prose, so a
 reduce script can compute percentiles/error rates without parsing log text.
 
-    with CallRecorder(EncoderService.name, "/encode") as record:
+    with CallRecorder(EncoderService.name, "encode") as record:
         response = client.post(url, payload)
 
     # on exit, always (ok or error):
-    # [call] {"rid": "...", "service": "encoder", "endpoint": "/encode",
+    # [call] {"rid": "...", "service": "encoder", "endpoint": "encode",
     #         "ms": 842, "outcome": "ok"}
+
+The endpoint label is ``endpoint.value`` ("encode", not "/encode") — the same
+form ``EndpointType`` carries, with no leading slash.
 
 The correlation id (``rid``) comes from nginx's ``$request_id``, forwarded as
 ``X-Request-Id`` and read into a contextvar by :class:`RequestIdMiddleware`.
@@ -52,6 +55,7 @@ class CallRecord:
     ENDPOINT = "endpoint"
     MS = "ms"
     OUTCOME = "outcome"
+    WAIT_MS = "wait_ms"
 
 
 class RequestIdContext:
@@ -105,8 +109,13 @@ class RequestIdMiddleware:
         setattr(g, self._TOKEN_KEY, RequestIdContext.set(HeaderValueSanitizer.sanitize(raw)))
 
     def _echo(self, response):
+        # A before_request that short-circuits (auth guard, maintenance mode)
+        # skips _capture, but after_request still runs — getattr default keeps
+        # that from turning into an AttributeError/500 on every request.
         response.headers[HTTPHeader.REQUEST_ID.value] = RequestIdContext.get()
-        RequestIdContext.reset(getattr(g, self._TOKEN_KEY))
+        token = getattr(g, self._TOKEN_KEY, None)
+        if token is not None:
+            RequestIdContext.reset(token)
         return response
 
 
@@ -117,6 +126,11 @@ class CallRecorder:
     parsed from the URL): ``HTTPClient._parse_service_name`` returns the first
     *path segment*, which mislabels every call ("encode" for the encoder, not
     "encoder").
+
+    ``wait_ms`` records time spent acquiring a gate before the call (e.g. the
+    obstruction concurrency semaphore). Unset for ungated calls — a reduce
+    script treats a missing key as no wait, rather than 0, so "no gate" and
+    "instant gate" stay distinguishable.
     """
 
     LOG_PREFIX = "[call]"
@@ -125,6 +139,7 @@ class CallRecorder:
         self._service = service
         self._endpoint = endpoint
         self._t0 = 0.0
+        self._wait_ms: float | None = None
 
     @property
     def service(self) -> ServiceName:
@@ -133,6 +148,11 @@ class CallRecorder:
     @property
     def endpoint(self) -> str:
         return self._endpoint
+
+    def record_wait(self, wait_ms: float) -> None:
+        """Stamp a gate-acquisition time measured by the caller (the caller
+        wraps the gate, not this recorder — it cannot see the wait itself)."""
+        self._wait_ms = wait_ms
 
     def __enter__(self) -> "CallRecorder":
         self._t0 = time.perf_counter()
@@ -150,7 +170,7 @@ class CallRecorder:
 
     def build_record(self, outcome: str) -> dict:
         elapsed_ms = (time.perf_counter() - self._t0) * 1000
-        return {
+        record = {
             CallRecord.TS: time.time(),
             CallRecord.RID: RequestIdContext.get(),
             CallRecord.SERVICE: self._service.value,
@@ -158,3 +178,6 @@ class CallRecorder:
             CallRecord.MS: round(elapsed_ms, 1),
             CallRecord.OUTCOME: outcome,
         }
+        if self._wait_ms is not None:
+            record[CallRecord.WAIT_MS] = round(self._wait_ms, 1)
+        return record

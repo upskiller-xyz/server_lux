@@ -12,7 +12,7 @@ import json
 import logging
 import threading
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, make_response
 
 from src.server.enums import HTTPHeader, ServiceName
 from src.server.services.helpers.call_recorder import (
@@ -73,10 +73,22 @@ class TestCallRecorder:
 
     def test_rid_defaults_to_unknown_without_a_request(self, caplog):
         with caplog.at_level(logging.INFO, logger="logger"):
-            with CallRecorder(ServiceName.MERGER, "/merge"):
+            with CallRecorder(ServiceName.MERGER, "merge"):
                 pass
 
         assert _records(caplog)[0][CallRecord.RID] == UNKNOWN_REQUEST_ID
+
+    def test_wait_ms_stamped_when_recorded_and_absent_when_not(self, caplog):
+        with caplog.at_level(logging.INFO, logger="logger"):
+            with CallRecorder(ServiceName.OBSTRUCTION, "obstruction_parallel_bin") as recorder:
+                recorder.record_wait(1234.5)
+            with CallRecorder(ServiceName.ENCODER, "encode"):
+                pass
+
+        stamped, unstamped = _records(caplog)
+        assert stamped[CallRecord.WAIT_MS] == 1234.5
+        # Missing key, not 0: "no gate" and "instant gate" stay distinguishable.
+        assert CallRecord.WAIT_MS not in unstamped
 
 
 class TestRequestIdContext:
@@ -162,3 +174,27 @@ class TestRequestIdMiddleware:
         response = client.get("/ping")
 
         assert response.get_json()["rid"] == UNKNOWN_REQUEST_ID
+
+    def test_contextvar_reset_after_response(self):
+        # The id must not survive the request: gunicorn reuses worker threads,
+        # and a leaked id would stamp the next request's records. _capture
+        # always sets, so a regression here would never surface without an
+        # explicit assertion.
+        client = self._app().test_client()
+        assert RequestIdContext.get() == UNKNOWN_REQUEST_ID
+        client.get("/ping", headers={HTTPHeader.REQUEST_ID.value: "leaky"})
+        assert RequestIdContext.get() == UNKNOWN_REQUEST_ID
+
+    def test_echo_tolerates_a_short_circuited_before_request(self):
+        # A before_request that returns a response (auth guard, maintenance
+        # mode) skips _capture, but after_request still runs — _echo must not
+        # turn that into an AttributeError/500 on every request.
+        app = Flask(__name__)
+        RequestIdMiddleware().register(app)
+
+        @app.before_request
+        def _short_circuit():
+            return make_response("maintenance", 503)
+
+        response = app.test_client().get("/ping")
+        assert response.status_code == 503

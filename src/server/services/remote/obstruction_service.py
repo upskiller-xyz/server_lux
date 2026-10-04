@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 from typing import Any, Dict, Union, cast
 
 import orjson
@@ -50,6 +51,30 @@ def _resolve_obstruction_concurrency() -> int:
     return max(1, value)
 
 
+class SemaphoreWaitTimer:
+    """Measures the time spent acquiring the concurrency semaphore.
+
+    The [call] record for the obstruction call measures only the remote hop
+    (the recorder sits inside the gate), so a burst queuing on the semaphore
+    would be invisible — the exact blind spot the Modal finding was about
+    (queue, not execution). The measured wait is stamped onto the call's
+    record as ``wait_ms`` before the recorder emits it.
+    """
+
+    def __init__(self):
+        self._t0 = 0.0
+        self.wait_ms: float | None = None
+
+    def __enter__(self) -> "SemaphoreWaitTimer":
+        self._t0 = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if exc_type is None:
+            self.wait_ms = (time.perf_counter() - self._t0) * 1000
+        return False  # never suppress exceptions
+
+
 class ObstructionService(RemoteService):
     """Service for obstruction angle calculations"""
     name: ServiceName = ServiceName.OBSTRUCTION
@@ -90,12 +115,15 @@ class ObstructionService(RemoteService):
         # binary endpoint as multipart — lux never parses it. A JSON (list) mesh
         # takes the standard JSON path. Both remote calls are gated by the
         # concurrency semaphore so a burst of windows queues here instead of
-        # overwhelming the obstruction backend.
-        with cls._concurrency:
+        # overwhelming the obstruction backend. The gate wait is measured and
+        # stamped onto the call's [call] record as wait_ms — without it, the
+        # record sees only the hop and a queuing burst is invisible.
+        gate = SemaphoreWaitTimer()
+        with cls._concurrency, gate:
             if isinstance(obstruction_request.mesh, (bytes, bytearray)):
-                response = cls._run_binary(obstruction_request, response_class)
+                response = cls._run_binary(obstruction_request, response_class, gate.wait_ms)
             else:
-                response = super().run(endpoint, request, file, response_class)
+                response = super().run(endpoint, request, file, response_class, gate.wait_ms)
         response = cast(ObstructionResponse, response)
 
         window_name = obstruction_request.window_name
@@ -124,6 +152,7 @@ class ObstructionService(RemoteService):
         cls,
         request: ObstructionRequest,
         response_class: type[RemoteServiceResponse],
+        wait_ms: float | None = None,
     ) -> RemoteServiceResponse:
         """Forward a binary mesh to obstruction's binary endpoint as multipart.
 
@@ -136,6 +165,7 @@ class ObstructionService(RemoteService):
         lux never parses the mesh: the raw .npy/gzip bytes are forwarded through
         as a multipart file, with the small window fields in a JSON ``params`` form field. Reuses the same response parsing as the JSON path.
         """
+        endpoint = cls._binary_endpoint()
         url = cls._get_url(EndpointType.OBSTRUCTION_PARALLEL) + cls._BIN_SUFFIX
         params = {
             k: v for k, v in request.to_dict.items() if k != RequestField.MESH.value
@@ -147,7 +177,10 @@ class ObstructionService(RemoteService):
             RequestField.MESH.value: ("mesh.npy", mesh_bytes, "application/octet-stream")
         }
         logger.info("[%s] Calling binary endpoint: %s", cls.name.value, url)
-        with CallRecorder(cls.name, EndpointType.OBSTRUCTION_PARALLEL.value + cls._BIN_SUFFIX):
+        recorder = CallRecorder(cls.name, endpoint)
+        if wait_ms is not None:
+            recorder.record_wait(wait_ms)
+        with recorder:
             response_dict = cls._http_client.post_multipart(
                 url,
                 files=files,
@@ -160,5 +193,11 @@ class ObstructionService(RemoteService):
                 "obstruction binary endpoint returned no response",
             )
         return response_class.parse(response_dict)
+
+    @classmethod
+    def _binary_endpoint(cls) -> str:
+        """The endpoint label for the binary transport route — one place, so
+        the [call] record's endpoint cannot drift from the URL actually called."""
+        return EndpointType.OBSTRUCTION_PARALLEL.value + cls._BIN_SUFFIX
     
 
