@@ -1,4 +1,5 @@
-from typing import List, Tuple, Callable, Dict
+from typing import Callable, Dict, List, Tuple
+
 from flask import Flask
 
 from .enums import EndpointType, Methods
@@ -46,6 +47,7 @@ class RouteBuilder:
             Route(f"/{self._version}/run", EndpointType.RUN, [Methods.POST.value], handlers.get(EndpointType.RUN)),
             Route(f"/{self._version}/run/detailed", EndpointType.RUN_DETAILED, [Methods.POST.value], handlers.get(EndpointType.RUN_DETAILED)),
             Route(f"/{self._version}/merge", EndpointType.MERGE, [Methods.POST.value], handlers.get(EndpointType.MERGE)),
+            Route(f"/{self._version}/trial/status", EndpointType.TRIAL_STATUS, [Methods.GET.value], handlers.get(EndpointType.TRIAL_STATUS)),
         ]
 
 

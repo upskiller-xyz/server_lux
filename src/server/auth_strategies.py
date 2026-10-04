@@ -3,17 +3,24 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, Any, Optional
 from functools import wraps
-from flask import request, g, has_app_context
-import requests
+from typing import Any, Callable, Optional
+
 import jwt
+import requests
+from flask import g, has_app_context, request
 from jwt import PyJWK, PyJWTError
-from .enums import ErrorType, AuthType
+
+from .auth_config import Auth0Config, AuthConfig
+from .enums import AuthType, ErrorType
 from .response_builder import ErrorResponseBuilder
-from .auth_config import AuthConfig, Auth0Config
 
 logger = logging.getLogger("logger")
+
+# Custom namespace-qualified claim the trial login Action stamps on the token
+# with the caller's email domain (e.g. "foretagx.se"). The trial guard keys the
+# company-wide trial clock on this value.
+TRIAL_DOMAIN_CLAIM = "https://upskiller/trial_domain"
 
 
 class AuthenticationStrategy(ABC):
@@ -266,6 +273,7 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
             if has_app_context():
                 g.auth_subject = payload.get("sub")
                 g.auth_client_id = payload.get("azp")
+                g.auth_domain = payload.get(TRIAL_DOMAIN_CLAIM)
 
             # Token is valid
             return True, None

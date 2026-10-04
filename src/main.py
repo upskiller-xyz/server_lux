@@ -39,6 +39,7 @@ from src.server.services.remote import (
 )
 from src.server.swagger_config import get_swagger_config, get_swagger_template
 from src.server.telemetry import TelemetryMiddleware
+from src.server.trial_guard import TrialGuard
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,6 +96,10 @@ class ServerApplication:
         logger.info(
             f"Per-user rate limiting: {'enabled' if self._rate_limiter.is_enabled else 'disabled'}"
         )
+        self._trial_guard = TrialGuard.from_environment()
+        logger.info(
+            f"Trial guard: {'enabled' if self._trial_guard.is_enabled else 'disabled'}"
+        )
 
         # Log authentication mode for visibility
         auth_type = os.getenv('AUTH_TYPE', 'token').lower()
@@ -116,33 +121,43 @@ class ServerApplication:
         auth = self._authenticator.require_auth
         quota = self._rate_limiter.require_quota          # prediction bucket (10/day)
         aux_quota = self._rate_limiter.require_aux_quota  # supporting compute (ceiling)
+        # Trial guard: time-limits only the trial Auth0 client (TRIAL_CLIENT_ID);
+        # paying customers and the web app pass through. Outermost after auth so
+        # it can gate every trial request, including the aux endpoints.
+        trial = self._trial_guard.require_trial
 
         handlers = {
             EndpointType.STATUS: self._get_status,
+            # Read-only trial status for the plugin. NOT wrapped in the trial
+            # guard — the guard would 403 an expired trial before this could
+            # report it. get_status() performs the lookup itself and reports
+            # "expired" instead of rejecting; only authentication applies.
+            EndpointType.TRIAL_STATUS: auth(self._trial_guard.get_status),
             # Auth outer, quota inner: authentication runs first and sets the
             # subject + client id the rate limiter keys/gates the daily quota on.
             # The web daylight tool predicts via /run (and /run/detailed in debug);
             # /simulate is covered too for defence-in-depth. The quota only counts
             # requests from the web app's Auth0 client (RATE_LIMIT_CLIENT_ID), so
             # the Revit add-in stays unlimited even on these shared endpoints.
-            EndpointType.SIMULATE: auth(quota(self._endpoint_handlers.handle_simulate)),
+            EndpointType.SIMULATE: auth(trial(quota(self._endpoint_handlers.handle_simulate))),
             # Supporting compute endpoints — the generous aux ceiling (stops
-            # hammering; a normal run makes several of these calls).
-            EndpointType.STATS_CALCULATE: auth(aux_quota(self._endpoint_handlers.handle_stats)),
-            EndpointType.HORIZON: auth(aux_quota(self._endpoint_handlers.handle_horizon)),
-            EndpointType.ZENITH: auth(aux_quota(self._endpoint_handlers.handle_zenith)),
-            EndpointType.OBSTRUCTION: auth(aux_quota(self._endpoint_handlers.handle_obstruction)),
-            EndpointType.OBSTRUCTION_ALL: auth(aux_quota(self._endpoint_handlers.handle_obstruction_all)),
-            EndpointType.OBSTRUCTION_MULTI: auth(aux_quota(self._endpoint_handlers.handle_obstruction_multi)),
-            EndpointType.OBSTRUCTION_PARALLEL: auth(aux_quota(self._endpoint_handlers.handle_obstruction_parallel)),
-            EndpointType.ENCODE_RAW: auth(aux_quota(self._endpoint_handlers.handle_encode_raw)),
-            EndpointType.ENCODE: auth(aux_quota(self._endpoint_handlers.handle_encode)),
-            EndpointType.CALCULATE_DIRECTION: auth(aux_quota(self._endpoint_handlers.handle_calculate_direction)),
-            EndpointType.REFERENCE_POINT: auth(aux_quota(self._endpoint_handlers.handle_reference_point)),
+            # hammering; a normal run makes several of these calls). Trial callers
+            # are additionally time-limited by the trial guard.
+            EndpointType.STATS_CALCULATE: auth(trial(aux_quota(self._endpoint_handlers.handle_stats))),
+            EndpointType.HORIZON: auth(trial(aux_quota(self._endpoint_handlers.handle_horizon))),
+            EndpointType.ZENITH: auth(trial(aux_quota(self._endpoint_handlers.handle_zenith))),
+            EndpointType.OBSTRUCTION: auth(trial(aux_quota(self._endpoint_handlers.handle_obstruction))),
+            EndpointType.OBSTRUCTION_ALL: auth(trial(aux_quota(self._endpoint_handlers.handle_obstruction_all))),
+            EndpointType.OBSTRUCTION_MULTI: auth(trial(aux_quota(self._endpoint_handlers.handle_obstruction_multi))),
+            EndpointType.OBSTRUCTION_PARALLEL: auth(trial(aux_quota(self._endpoint_handlers.handle_obstruction_parallel))),
+            EndpointType.ENCODE_RAW: auth(trial(aux_quota(self._endpoint_handlers.handle_encode_raw))),
+            EndpointType.ENCODE: auth(trial(aux_quota(self._endpoint_handlers.handle_encode))),
+            EndpointType.CALCULATE_DIRECTION: auth(trial(aux_quota(self._endpoint_handlers.handle_calculate_direction))),
+            EndpointType.REFERENCE_POINT: auth(trial(aux_quota(self._endpoint_handlers.handle_reference_point))),
             # Prediction endpoints — the 10/day quota.
-            EndpointType.RUN: auth(quota(self._endpoint_handlers.handle_run)),
-            EndpointType.RUN_DETAILED: auth(quota(self._endpoint_handlers.handle_run_detailed)),
-            EndpointType.MERGE: auth(aux_quota(self._endpoint_handlers.handle_merge)),
+            EndpointType.RUN: auth(trial(quota(self._endpoint_handlers.handle_run))),
+            EndpointType.RUN_DETAILED: auth(trial(quota(self._endpoint_handlers.handle_run_detailed))),
+            EndpointType.MERGE: auth(trial(aux_quota(self._endpoint_handlers.handle_merge))),
         }
 
         route_configurator.configure(self._app, handlers)

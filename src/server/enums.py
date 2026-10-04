@@ -73,6 +73,10 @@ class HTTPHeader(Enum):
     CLIENT_NAME = "X-Client-Name"
     CLIENT_VERSION = "X-Client-Version"
     HOST_VERSION = "X-Host-Version"
+    # Trial headers (responses): when the caller's company-wide trial window
+    # started and when it ends. ISO-8601 UTC.
+    TRIAL_STARTED_AT = "X-Trial-Started-At"
+    TRIAL_EXPIRES_AT = "X-Trial-Expires-At"
 
 
 class HTTPContentType(Enum):
@@ -94,6 +98,9 @@ class ResponseKey(Enum):
     LIMIT = "limit"
     REMAINING = "remaining"
     RESET_AT = "reset_at"
+    TRIAL_STARTED_AT = "trial_started_at"
+    TRIAL_EXPIRES_AT = "trial_expires_at"
+    REMAINING_HOURS = "remaining_hours"
     WINDOW_NAME = "window_name"
     WINDOW_RESULTS = "window_results"
     PARTIAL_RESULTS = "partial_results"
@@ -135,6 +142,7 @@ class EndpointType(ExtendedEnumMixin, Enum):
     MERGE = "merge"
     STATS_CALCULATE = "calculate"
     MODEL_SPEC = "spec"
+    TRIAL_STATUS = "trial_status"
 
 
 class ServicePort(Enum):
@@ -187,6 +195,9 @@ class ErrorType(Enum):
     EXPIRED_JWT = "expired_jwt"
     INSUFFICIENT_PERMISSIONS = "insufficient_permissions"
     RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"
+    TRIAL_EXPIRED = "trial_expired"
+    TRIAL_DOMAIN_MISSING = "trial_domain_missing"
+    TRIAL_STORE_UNAVAILABLE = "trial_store_unavailable"
     MISSING_JSON = "missing_json"
     MISSING_FILE = "missing_file"
     VALIDATION_ERROR = "validation_error"
@@ -202,6 +213,9 @@ class ErrorMessage(Enum):
     EXPIRED_JWT = "JWT token has expired"
     INSUFFICIENT_PERMISSIONS = "Insufficient permissions"
     RATE_LIMIT_EXCEEDED = "Request limit reached. Try again after the reset time."
+    TRIAL_EXPIRED = "Your trial period has ended"
+    TRIAL_DOMAIN_MISSING = "Your sign-in domain is not registered for this trial"
+    TRIAL_STORE_UNAVAILABLE = "Trial service is temporarily unavailable. Try again later."
     MISSING_JSON = "No JSON data provided"
     MISSING_FILE = "No file provided in request"
     INTERNAL_ERROR = "Internal server error"

@@ -1,10 +1,13 @@
 # Auth & per-user rate limiting
 
 `server_lux` already supported three auth modes via the Strategy/Factory pattern
-(`AUTH_TYPE` = `token` | `auth0` | `none`). This adds a **per-user daily quota**
-on the prediction endpoints (`/v1/run`, `/v1/run/detailed`, `/v1/simulate`), used
-by the web daylight tool to cap free usage at 10 runs/day/user while the Revit
-add-in stays unlimited.
+(`AUTH_TYPE` = `token` | `auth0` | `none`). This adds two per-client policies:
+
+1. a **per-user daily quota** on the prediction endpoints (`/v1/run`,
+   `/v1/run/detailed`, `/v1/simulate`), used by the web daylight tool to cap
+   free usage at 10 runs/day/user while the Revit add-in stays unlimited;
+2. a **company-wide time-limited trial** (default 168 h) for the Revit trial
+   client, so the plugin can be sent to prospect companies with an expiry.
 
 > **Which endpoint?** The web tool predicts via **`/run`** (and `/run/detailed`
 > in debug), not `/simulate`. Revit uses the same shared endpoints (`/run`,
@@ -46,7 +49,10 @@ add-in stays unlimited.
 | `rate_limit_config.py` | `RateLimitConfig` (immutable, from env) |
 | `rate_limit_store.py` | `RateLimitStore` + Redis/InMemory/Null (rolling-window TTL) + factory |
 | `rate_limiter.py` | `RateLimiter.require_quota` decorator + identity resolver + client-id gate |
-| `auth_strategies.py` | Auth0 strategy now exposes `g.auth_subject` + `g.auth_client_id` |
+| `auth_strategies.py` | Auth0 strategy now exposes `g.auth_subject` + `g.auth_client_id` + `g.auth_domain` |
+| `trial_config.py` | `TrialConfig` (immutable, from env) |
+| `trial_store.py` | `TrialStore` + Redis (first-request `SET NX`) /InMemory/Null + factory |
+| `trial_guard.py` | `TrialGuard.require_trial` decorator + trial headers + status endpoint |
 
 ## Configuration
 
@@ -93,6 +99,70 @@ When the quota is spent, `429 Too Many Requests`:
 The web tool maps `429` → `QuotaExceededError` (localised message with reset
 time) and `401/403` → `AuthRequiredError` (prompt login).
 
+## Time-limited trial (Revit trial client)
+
+A separate Auth0 client (`TRIAL_CLIENT_ID`) is used for prospect companies. A
+dedicated Auth0 login Action (scoped to that client only) stamps the caller's
+email domain as a custom claim `https://upskiller/trial_domain` on the token.
+The domain is the company: all users at `foretagx.se` share one trial clock.
+
+- **Activation**: the company's **first request** writes the deadline to Redis
+  (`SET lux:trial:<domain> <expires> NX`) — no pre-registration, no per-user
+  state. Everyone at the company then sees the same fixed window.
+- **Scope**: only the trial client is guarded. Paying Revit customers and the
+  web app pass through untouched, even on the same endpoints.
+- **Fail-closed**: a trial token without the domain claim is rejected
+  (`trial_domain_missing`); a Redis outage blocks trial callers with a
+  retryable `trial_store_unavailable` (503) rather than handing out
+  unlimited access. Neither failure mode can affect paying customers.
+- **Startup validation**: `TRIAL_ENABLED=true` without `TRIAL_CLIENT_ID`
+  refuses to start (fail closed), instead of silently guarding nothing.
+
+### Configuration
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `TRIAL_ENABLED` | `false` | Master switch. |
+| `TRIAL_CLIENT_ID` | — | Auth0 client id the trial applies to (required when enabled). |
+| `TRIAL_HOURS` | `168` | Trial length from the company's first request (one week). |
+| `TRIAL_REDIS_URL` | — | Deadline store (falls back to `REDIS_URL`). |
+| `TRIAL_KEY_PREFIX` | `lux:trial` | Redis key namespace. |
+
+Enable AOF persistence on the Redis (the compose default runs without it) so a
+restart doesn't reset trial clocks. Extending or revoking a company's trial is
+a direct Redis edit of its `lux:trial:<domain>` deadline — immediate effect, no
+Auth0 changes.
+
+### Response contract
+
+Trial responses carry informational headers:
+
+```
+X-Trial-Started-At: 2026-10-03T14:32:00+00:00
+X-Trial-Expires-At: 2026-10-10T14:32:00+00:00
+```
+
+`GET /v1/trial/status` returns the same window as JSON (plus
+`remaining_hours`) without blocking — the route is authenticated but *not*
+wrapped in the trial guard, so an expired trial is reported (`"expired"`)
+rather than rejected; it answers `"not_applicable"` for non-trial clients.
+
+When the trial has ended, `403 Forbidden`:
+
+```json
+{
+  "status": "error",
+  "error": "Your trial period has ended",
+  "error_type": "trial_expired",
+  "trial_started_at": "2026-10-03T14:32:00+00:00",
+  "trial_expires_at": "2026-10-10T14:32:00+00:00"
+}
+```
+
+The plugin maps `trial_expired` → lock server features (permanent until
+extended server-side) and `trial_domain_missing` → "domain not registered"
+dialog.
+
 ## Scaleway Managed Redis
 
 1. Create a **Managed Database for Redis®** (Valkey) in `fr-par`, smallest node.
@@ -106,9 +176,12 @@ time) and `401/403` → `AuthRequiredError` (prompt login).
 
 `tests/server/test_rate_limiter.py` covers: allow-up-to-limit-then-block,
 per-subject isolation, disabled passthrough, IP fallback, subject-over-IP
-precedence, and the day-window reset math. Uses the in-memory store, no Redis
-needed. Run:
+precedence, and the day-window reset math. `tests/server/test_trial_guard.py`
+covers: clock starts on first request, fixed deadline, per-domain windows,
+expired blocking, missing-claim fail-closed, paying-customer passthrough,
+store-outage fail-closed, and the status endpoint. Both use the in-memory
+stores, no Redis needed. Run:
 
 ```bash
-python3 -m pytest tests/server/test_rate_limiter.py -q
+python3 -m pytest tests/server/test_rate_limiter.py tests/server/test_trial_guard.py -q
 ```
