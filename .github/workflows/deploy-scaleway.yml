@@ -62,6 +62,10 @@ on:
         description: "Pin that service to this branch/tag (empty = leave as-is)"
         type: string
         default: ""
+      release_order:
+        description: "Monotonic release counter from the sender (empty = no staleness check)"
+        type: string
+        default: ""
 
 # Never run two deploys against the same box at once.
 concurrency:
@@ -79,6 +83,7 @@ jobs:
         env:
           INPUT_SERVICE: ${{ inputs.service }}
           INPUT_SERVICE_REF: ${{ inputs.service_ref }}
+          INPUT_RELEASE_ORDER: ${{ inputs.release_order }}
           # Durable per-service pins. These are the source of truth a deploy
           # starts from; a tag deploy overrides only its own service, for its
           # own run. Unset is fine — deploy-scaleway.sh then falls back to what
@@ -144,6 +149,21 @@ jobs:
 
           [ -n "$ref" ] && validate_ref "$ref" "service_ref input"
 
+          # Digits only: the value is compared with -lt on the VM and ends up in
+          # the sourced env file, so anything else is either a shell hazard or an
+          # arithmetic error waiting to happen.
+          order="$INPUT_RELEASE_ORDER"
+          case "$order" in
+            "") ;;
+            *[!0-9]*)
+              echo "::error::release_order '$order' must be digits only."
+              exit 1 ;;
+          esac
+          if [ -n "$order" ] && [ -z "$short" ]; then
+            echo "::error::release_order was given without a service — it orders one service's releases."
+            exit 1
+          fi
+
           # Render all three pins every run, overriding only the targeted one.
           # Emitting just the dispatch's ref would drop the other two services'
           # pins from the rebuilt .env.scaleway on the box.
@@ -165,6 +185,8 @@ jobs:
             echo "compose_service=$compose_service"
             echo "ref_var=$ref_var"
             echo "ref=$ref"
+            echo "order_var=${ref_var%_REF}_ORDER"
+            echo "order=$order"
             echo "encoder_ref=$encoder_ref"
             echo "merger_ref=$merger_ref"
             echo "stats_ref=$stats_ref"
@@ -211,6 +233,11 @@ jobs:
           ENCODER_REF: ${{ steps.target.outputs.encoder_ref }}
           MERGER_REF: ${{ steps.target.outputs.merger_ref }}
           STATS_REF: ${{ steps.target.outputs.stats_ref }}
+          # <SERVICE>_ORDER for the one service this run targets. The deploy
+          # script compares it to the order already deployed and refuses to go
+          # backwards; only a tag deploy supplies it.
+          ORDER_VAR_NAME: ${{ steps.target.outputs.order_var }}
+          ORDER_VALUE: ${{ steps.target.outputs.order }}
         run: |
           umask 077
           # Fail fast: without MODEL_SERVICE_URL the runtime env would fall back to
@@ -256,6 +283,11 @@ jobs:
             "STATS_REF=$STATS_REF"; do
             [ -n "${kv#*=}" ] && printf '%s\n' "$kv" >> .env.runtime
           done
+          # The order's key name is dynamic (ENCODER_ORDER, MERGER_ORDER, ...),
+          # so it cannot live in the fixed list above.
+          if [ -n "${ORDER_VAR_NAME:-}" ] && [ -n "${ORDER_VALUE:-}" ]; then
+            printf '%s=%s\n' "$ORDER_VAR_NAME" "$ORDER_VALUE" >> .env.runtime
+          fi
 
       - name: Copy env and deploy over SSH
         env:

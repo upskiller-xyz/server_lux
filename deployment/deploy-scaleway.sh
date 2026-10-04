@@ -155,6 +155,8 @@ echo -e "${BLUE}Pinning microservices to their configured ref...${NC}"
 # waste — retagging the same commit under a new name rebuilds nothing, since
 # the image would be identical.
 PENDING_PINS=()
+# Services whose deploy was skipped as superseded (see the order check below).
+STALE_SKIPPED=()
 for repo_info in "${REPOS[@]}"; do
   name="${repo_info%%:*}"; url="${repo_info#*:}"
   short="${name#server_}"
@@ -171,6 +173,22 @@ for repo_info in "${REPOS[@]}"; do
   ref="${!ref_var:-}"
   [[ -n "$ref" ]] || ref="$(read_pin "$short")"
   [[ -n "$ref" ]] || ref="master"
+
+  # Refuse a superseded release. A tag deploy carries <NAME>_ORDER, a counter
+  # that only increases per service repo, and this compares it to the order
+  # already deployed. The check has to live HERE, inside the deploy, not in the
+  # workflow: the workflow's concurrency group serialises runs but GitHub does
+  # not guarantee the order they execute in, so two tags pushed together can
+  # arrive here newest-first. Without this, the older one would then win and
+  # silently roll the service back.
+  order_var="$(echo "$short" | tr '[:lower:]' '[:upper:]')_ORDER"
+  order="${!order_var:-}"
+  recorded_order="$(read_pin "${short}.order")"
+  if [[ -n "$order" && -n "$recorded_order" && "$order" -lt "$recorded_order" ]]; then
+    echo -e "${YELLOW}  $short: release $order is older than the deployed $recorded_order — skipping (superseded).${NC}"
+    STALE_SKIPPED+=("$short")
+    continue
+  fi
   if [[ -d "services/$name/.git" ]]; then
     echo "  $name @ $ref"
     # Fetch exactly the configured ref (branch or tag — not a pull, since the
@@ -191,7 +209,18 @@ for repo_info in "${REPOS[@]}"; do
     FORCE_BUILD=true
   fi
   PENDING_PINS+=("$short=$ref" "${short}.commit=$commit")
+  [[ -n "$order" ]] && PENDING_PINS+=("${short}.order=$order")
 done
+
+# A targeted deploy whose only target was superseded has nothing left to do.
+# Returning before Compose matters: --force-recreate would otherwise restart the
+# container that the NEWER release already put there, so a stale dispatch would
+# still bounce a healthy service for no reason.
+if [[ -n "$SERVICE_FILTER" && ${#STALE_SKIPPED[@]} -gt 0 ]]; then
+  echo -e "${YELLOW}Nothing to deploy: $SERVICE_FILTER was superseded by a newer release.${NC}"
+  echo "The newer release is already deployed; this run deliberately changed nothing."
+  exit 0
+fi
 
 # ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
 # nginx restores each visitor's real IP from these ranges (per-IP rate limiting)

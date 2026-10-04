@@ -107,6 +107,22 @@ force-pushed. Each service therefore records both `<service>=<ref>` and
 `<service>.commit=<sha>`. The converse also holds — retagging the same commit
 under a new name rebuilds nothing, since the image would be identical.
 
+**A superseded release is refused.** A tag deploy also carries
+`<SERVICE>_ORDER` — the sender's `github.run_id`, which only increases per
+service repo — and the deploy refuses a release older than the one already
+deployed, leaving the pin and the running container untouched.
+
+This check lives in `deploy-scaleway.sh`, not in the workflow, and that is the
+whole point. The workflow's concurrency group serialises deploys but GitHub
+[does not guarantee the execution order](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#concurrency)
+of runs within a group, and a sender's run finishes when the dispatch is
+*accepted*, not when the deploy completes. Two tags pushed together can
+therefore reach the box newest-first; by the time the script runs, the runs are
+serialised and it holds the lock, so it is the only place the comparison is
+sound. An equal order is allowed, so re-running a release is a retry rather
+than a rollback, and a manual deploy carries no order and is never blocked by
+one on record.
+
 All of this is locked by behaviour tests
 (`deployment/tests/test-deploy-scaleway.sh`, run in CI), not just stated here.
 
