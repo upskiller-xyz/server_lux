@@ -123,9 +123,11 @@ class TrialGuard:
         raw = getattr(g, AuthContextKey.DOMAIN.value, None)
         domain = TrialDomain.normalise(raw)
         if raw and not domain:
+            # The claim's own value is never logged — only its shape, since a
+            # non-string claim has no length to report.
             logger.warning(
-                "Trial domain claim is not a valid hostname — rejecting (length=%s)",
-                len(raw),
+                "Trial domain claim is not a valid hostname — rejecting (type=%s)",
+                type(raw).__name__,
             )
         return domain
 

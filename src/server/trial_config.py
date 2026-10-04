@@ -40,9 +40,16 @@ class TrialDomain:
         None means "cannot be attributed to a company", which the guard turns
         into a rejection; it never falls through to an unguarded request.
         """
-        if not raw:
+        if not isinstance(raw, str) or not raw:
+            # JWT custom claims are arbitrary JSON: a numeric or list claim must
+            # be rejected here, not raise on .strip() and become a 500.
             return None
-        domain = raw.strip().rstrip(cls.LABEL_SEPARATOR).lower()
+        domain = raw.strip().lower()
+        if domain.endswith(cls.LABEL_SEPARATOR):
+            # At most one DNS root dot. Any further trailing dot stays as an
+            # empty label and is rejected below, so "example.se.." cannot be
+            # normalised into something that happens to work.
+            domain = domain[:-1]
         if not domain or len(domain) > cls.MAX_LENGTH:
             return None
         labels = domain.split(cls.LABEL_SEPARATOR)
@@ -112,9 +119,11 @@ class TrialConfig:
                 os.getenv(EnvKey.TRIAL_REDIS_URL.value) or os.getenv(EnvKey.REDIS_URL.value)
             ), allow_local=allow_local_store)
         hours = int(os.getenv(EnvKey.TRIAL_HOURS.value, str(DEFAULT_TRIAL_HOURS)))
-        if hours <= 0:
+        if enabled and hours <= 0:
             # A non-positive window expires every trial caller on contact —
-            # almost certainly a misconfiguration, not an intent to block.
+            # almost certainly a misconfiguration, not an intent to block. Only
+            # checked when the trial is on: a disabled deployment must not fail
+            # to start over a setting nothing reads.
             raise ValueError("TRIAL_HOURS must be a positive number of hours")
         redis_url = os.getenv(EnvKey.TRIAL_REDIS_URL.value) or os.getenv(EnvKey.REDIS_URL.value) or None
         key_prefix = os.getenv(EnvKey.TRIAL_KEY_PREFIX.value, DEFAULT_TRIAL_KEY_PREFIX)

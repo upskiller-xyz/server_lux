@@ -144,26 +144,28 @@ class RedisTrialStore(TrialStore):
         deadline_key = self._keys.deadline(domain)
         started_key = self._keys.started(domain)
         now = int(time.time())
-        # Atomic NX pair: only the company's first request ever writes; later
-        # requests — including ones with a different duration configured — read
-        # the original pair. Concurrent first requests converge on one writer.
-        pipe = self._client.pipeline()
-        pipe.set(deadline_key, now + duration_seconds, nx=True)
-        pipe.set(started_key, now, nx=True)
-        pipe.execute()
+        # Read before writing. Writing both halves under NX up front looks
+        # atomic but silently corrupts the one case that matters: with the
+        # deadline alive and ``:started`` deleted, an NX write puts *now* in
+        # the start slot, so the repair below never sees a gap and the window
+        # is reported as starting after it ends.
         deadline_raw = self._client.get(deadline_key)
-        started_raw = self._client.get(started_key)
         if deadline_raw is None:
-            # The deadline — the key expiry is decided by — went missing
-            # between the SET and the GET (a FLUSH racing the activation).
-            # Restore it under NX so a concurrent writer still wins once, and
-            # re-read instead of trusting our own candidate value.
-            self._client.set(deadline_key, now + duration_seconds, nx=True)
+            # Not activated yet, or the deadline itself is gone. Write the pair
+            # under NX so concurrent first requests converge on one writer, and
+            # re-read rather than trusting our own candidate values.
+            pipe = self._client.pipeline()
+            pipe.set(deadline_key, now + duration_seconds, nx=True)
+            pipe.set(started_key, now, nx=True)
+            pipe.execute()
             deadline_raw = self._client.get(deadline_key)
+            started_raw = self._client.get(started_key)
+        else:
+            # A live deadline is never touched — overwriting it would hand the
+            # company a fresh window. Only the bookkeeping half may be
+            # repaired, and only from the deadline it must stay consistent with.
+            started_raw = self._client.get(started_key)
         if started_raw is None:
-            # Only the bookkeeping half is missing. Derive the original start
-            # from the surviving deadline — never overwrite a live deadline,
-            # which would hand the company a fresh window.
             started_raw = int(deadline_raw) - duration_seconds
             self._client.set(started_key, started_raw, nx=True)
         return self._state(domain, int(started_raw), int(deadline_raw))

@@ -536,3 +536,49 @@ class TestSharedStoreRequirement:
     def test_disabled_trial_needs_no_store(self):
         with patch.dict(os.environ, {"TRIAL_ENABLED": "false"}, clear=True):
             assert TrialConfig.from_environment().enabled is False
+
+
+class TestReviewFindings:
+    """Regressions for the findings raised on the hardening PR."""
+
+    HOUR = 3600
+
+    def test_claim_that_is_not_a_string_is_rejected(self):
+        # JWT custom claims are arbitrary JSON. A numeric or list claim must
+        # fail closed, not raise on .strip() and surface as a 500.
+        for claim in (42, 3.5, ["foretagx.se"], {"domain": "foretagx.se"}, True):
+            assert TrialDomain.normalise(claim) is None
+
+    def test_one_root_dot_is_trimmed_and_further_dots_are_rejected(self):
+        # A single trailing dot is the DNS root and is legitimate; more than
+        # one is malformed and must not be normalised into a working domain.
+        assert TrialDomain.normalise("foretagx.se.") == "foretagx.se"
+        assert TrialDomain.normalise("foretagx.se..") is None
+        assert TrialDomain.normalise("foretagx.se...") is None
+
+    def test_lost_started_key_is_derived_from_the_deadline_not_the_clock(self):
+        # Arrange: an old window whose bookkeeping half is gone. The deadline
+        # is the only surviving truth, so the start must be derived from it —
+        # writing the current time would report a window starting after it ends.
+        client = _FakeRedis()
+        store = RedisTrialStore(client, TEST_PREFIX)
+        keys = TrialKeyBuilder(TEST_PREFIX)
+        store.activate_or_get("foretagx.se", self.HOUR)
+        expired_deadline = int(datetime.now(timezone.utc).timestamp()) - 10 * self.HOUR
+        client.store[keys.deadline("foretagx.se")] = str(expired_deadline)
+        del client.store[keys.started("foretagx.se")]
+
+        # Act
+        repaired = store.activate_or_get("foretagx.se", self.HOUR)
+
+        # Assert
+        assert int(repaired.expires_at.timestamp()) == expired_deadline
+        assert int(repaired.started_at.timestamp()) == expired_deadline - self.HOUR
+        assert repaired.started_at < repaired.expires_at
+        assert repaired.is_expired
+
+    def test_disabled_trial_tolerates_a_nonpositive_window(self):
+        # TRIAL_HOURS is only a misconfiguration when something reads it; a
+        # disabled deployment must not refuse to start over it.
+        with patch.dict(os.environ, {"TRIAL_ENABLED": "false", "TRIAL_HOURS": "0"}, clear=True):
+            assert TrialConfig.from_environment().enabled is False
