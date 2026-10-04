@@ -27,6 +27,7 @@ from typing import Optional, Type
 from flask import g, request
 
 from ...enums import HTTPHeader, ServiceName
+from ...telemetry import HeaderValueSanitizer
 
 logger = logging.getLogger("logger")
 
@@ -93,13 +94,15 @@ class RequestIdMiddleware:
         app.after_request(self._echo)
 
     def _capture(self) -> None:
-        # Attacker-influenceable header: only ever used as a log field, but a
-        # newline in it could forge log lines — strip control characters.
+        # Attacker-influenceable header: control characters (log forging via
+        # fake log lines) and unbounded length (log amplification — the rid is
+        # copied into every [call] record and the per-window fan-out multiplies
+        # that). The telemetry sanitizer bounds both and collapses a
+        # control-only value to "-" — reuse it rather than a second policy.
         raw = request.headers.get(HTTPHeader.REQUEST_ID.value, "")
-        clean = "".join(ch for ch in raw if ch.isprintable()).strip()
         # Always set (never inherit a previous request's id on this thread):
-        # a missing or control-only header is an unknown id, not the old one.
-        setattr(g, self._TOKEN_KEY, RequestIdContext.set(clean or UNKNOWN_REQUEST_ID))
+        # a missing or control-only header sanitizes to "-", the unknown id.
+        setattr(g, self._TOKEN_KEY, RequestIdContext.set(HeaderValueSanitizer.sanitize(raw)))
 
     def _echo(self, response):
         response.headers[HTTPHeader.REQUEST_ID.value] = RequestIdContext.get()

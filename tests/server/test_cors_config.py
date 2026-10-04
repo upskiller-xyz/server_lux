@@ -34,6 +34,9 @@ def test_allowed_origin_gets_cors_headers_and_exposed_quota(monkeypatch):
     response = _client(monkeypatch, WEB_ORIGIN).post("/v1/run", headers={"Origin": WEB_ORIGIN})
     assert response.headers["Access-Control-Allow-Origin"] == WEB_ORIGIN
     assert "X-RateLimit-Remaining" in response.headers["Access-Control-Expose-Headers"]
+    # The correlation id is exposed so a client-side report can join on the
+    # same id the backend's [call] records carry.
+    assert "X-Request-Id" in response.headers["Access-Control-Expose-Headers"]
     assert "Access-Control-Allow-Credentials" not in response.headers
 
 

@@ -18,7 +18,14 @@ ALLOW_ALL_ORIGINS = "*"
 ALLOWED_METHODS: Tuple[str, ...] = ("GET", "POST", "OPTIONS")
 ALLOWED_HEADERS: Tuple[str, ...] = (HTTPHeader.AUTHORIZATION.value, HTTPHeader.CONTENT_TYPE.value)
 # The web app reads the quota from these headers; not readable cross-origin otherwise.
-EXPOSED_HEADERS: Tuple[str, ...] = (HEADER_LIMIT, HEADER_REMAINING, HEADER_RESET)
+# X-Request-Id: the correlation id echoed on responses, so a client-side report
+# can join on the same id the backend's [call] records carry.
+EXPOSED_HEADERS: Tuple[str, ...] = (
+    HEADER_LIMIT,
+    HEADER_REMAINING,
+    HEADER_RESET,
+    HTTPHeader.REQUEST_ID.value,
+)
 
 
 @dataclass(frozen=True)

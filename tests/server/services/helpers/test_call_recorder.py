@@ -23,6 +23,7 @@ from src.server.services.helpers.call_recorder import (
     RequestIdContext,
     RequestIdMiddleware,
 )
+from src.server.telemetry import MAX_HEADER_VALUE_LENGTH
 
 
 def _records(caplog):
@@ -147,6 +148,14 @@ class TestRequestIdMiddleware:
         response = client.get("/ping", headers={HTTPHeader.REQUEST_ID.value: "\x1b\x7f"})
 
         assert response.get_json()["rid"] == UNKNOWN_REQUEST_ID
+
+    def test_amplifying_header_value_is_truncated(self):
+        # The rid is copied into every [call] record and the per-window fan-out
+        # multiplies that, so a megabyte header must not reach the log.
+        client = self._app().test_client()
+        response = client.get("/ping", headers={HTTPHeader.REQUEST_ID.value: "x" * (MAX_HEADER_VALUE_LENGTH * 10)})
+
+        assert len(response.get_json()["rid"]) == MAX_HEADER_VALUE_LENGTH
 
     def test_missing_header_falls_back_to_unknown(self):
         client = self._app().test_client()
