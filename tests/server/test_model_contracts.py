@@ -1,11 +1,15 @@
 """Unit tests for ModelRequest and CondVecBuilder"""
 
 import math
+
 import numpy as np
 import pytest
 
 from src.server.enums import RequestField
-from src.server.services.remote.contracts.model_contracts import CondVecBuilder, ModelRequest
+from src.server.services.remote.contracts.model_contracts import (
+    CondVecBuilder,
+    ModelRequest,
+)
 
 
 def _make_content(**kwargs):

@@ -7,6 +7,7 @@ from typing import Dict, Tuple
 
 import redis
 
+from .constants import QuotaKeyBuilder
 from .rate_limit_config import RateLimitConfig
 
 logger = logging.getLogger("logger")
@@ -29,10 +30,10 @@ class QuotaState:
         # `used` counts the current request, so equality is still allowed.
         return self.used > self.limit
 
-
-def _reset_at(seconds_from_now: int) -> datetime:
-    """UTC timestamp `seconds_from_now` ahead — when the rolling window clears."""
-    return datetime.now(timezone.utc) + timedelta(seconds=max(0, seconds_from_now))
+    @staticmethod
+    def reset_at_in(seconds_from_now: int) -> datetime:
+        """UTC timestamp `seconds_from_now` ahead — when the rolling window clears."""
+        return datetime.now(timezone.utc) + timedelta(seconds=max(0, seconds_from_now))
 
 
 class RateLimitStore(ABC):
@@ -48,7 +49,7 @@ class NullRateLimitStore(RateLimitStore):
     """Used when rate limiting is disabled — never consumes anything."""
 
     def hit(self, identity: str, limit: int, window_seconds: int) -> QuotaState:
-        return QuotaState(limit=limit, used=0, reset_at=_reset_at(window_seconds))
+        return QuotaState(limit=limit, used=0, reset_at=QuotaState.reset_at_in(window_seconds))
 
 
 class InMemoryRateLimitStore(RateLimitStore):
@@ -61,7 +62,7 @@ class InMemoryRateLimitStore(RateLimitStore):
         self._counts: Dict[str, Tuple[int, float]] = {}
 
     def hit(self, identity: str, limit: int, window_seconds: int) -> QuotaState:
-        key = f"{self._key_prefix}:{identity}"
+        key = QuotaKeyBuilder.key(self._key_prefix, identity)
         now = time.time()
         count, expiry = self._counts.get(key, (0, 0.0))
         if now >= expiry:  # first hit, or the previous window has elapsed
@@ -69,7 +70,7 @@ class InMemoryRateLimitStore(RateLimitStore):
         count += 1
         self._counts[key] = (count, expiry)
         return QuotaState(
-            limit=limit, used=count, reset_at=_reset_at(int(expiry - now))
+            limit=limit, used=count, reset_at=QuotaState.reset_at_in(int(expiry - now))
         )
 
 
@@ -83,7 +84,7 @@ class RedisRateLimitStore(RateLimitStore):
         self._key_prefix = key_prefix
 
     def hit(self, identity: str, limit: int, window_seconds: int) -> QuotaState:
-        key = f"{self._key_prefix}:{identity}"
+        key = QuotaKeyBuilder.key(self._key_prefix, identity)
         used = int(self._client.incr(key))
         if used == 1:
             self._client.expire(key, window_seconds)
@@ -93,7 +94,7 @@ class RedisRateLimitStore(RateLimitStore):
             if ttl < 0:  # no TTL somehow set — repair it so the key can't leak
                 self._client.expire(key, window_seconds)
                 ttl = window_seconds
-        return QuotaState(limit=limit, used=used, reset_at=_reset_at(ttl))
+        return QuotaState(limit=limit, used=used, reset_at=QuotaState.reset_at_in(ttl))
 
 
 class RateLimitStoreFactory:

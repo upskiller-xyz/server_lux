@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
+from ....enums import RequestField, ResponseKey
 from .base_contracts import RemoteServiceRequest, StandardResponse
 from .domain_models import WindowGeometry
-from ....enums import RequestField, ResponseKey
 
 
 @dataclass

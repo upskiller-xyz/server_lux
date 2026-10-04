@@ -4,16 +4,13 @@ from typing import Any, Callable, Optional
 
 from flask import g, jsonify, make_response, request
 
-from .enums import ErrorType, ResponseKey
+from .constants import QuotaKeyBuilder
+from .enums import AuthContextKey, ErrorType, ResponseKey
 from .rate_limit_config import RateLimitConfig
 from .rate_limit_store import QuotaState, RateLimitStore, RateLimitStoreFactory
 from .response_builder import ErrorResponseBuilder
 
 logger = logging.getLogger("logger")
-
-# flask.g attributes the authenticator sets from the validated token.
-AUTH_SUBJECT_KEY = "auth_subject"
-AUTH_CLIENT_ID_KEY = "auth_client_id"  # Auth0 `azp` (authorized party = client id)
 
 # Standard rate-limit response headers (mirrors the IETF draft names).
 HEADER_LIMIT = "X-RateLimit-Limit"
@@ -40,10 +37,10 @@ class RequestIdentityResolver:
         self._trusted_proxy_hops = trusted_proxy_hops
 
     def resolve(self) -> str:
-        subject = getattr(g, AUTH_SUBJECT_KEY, None)
+        subject = getattr(g, AuthContextKey.SUBJECT.value, None)
         if subject:
-            return f"sub:{subject}"
-        return f"ip:{self._client_ip()}"
+            return QuotaKeyBuilder.subject(subject)
+        return QuotaKeyBuilder.ip(self._client_ip())
 
     def _client_ip(self) -> str:
         if self._trusted_proxy_hops > 0:
@@ -102,7 +99,7 @@ class RateLimiter:
         def decorated(*args: Any, **kwargs: Any) -> Any:
             if not self._applies_to_caller():
                 return f(*args, **kwargs)  # e.g. the Revit add-in — unlimited
-            identity = f"{bucket}:{self._identity.resolve()}"
+            identity = QuotaKeyBuilder.bucketed(bucket, self._identity.resolve())
             try:
                 state = self._store.hit(identity, limit, self._config.window_seconds)
             except Exception as exc:
@@ -127,7 +124,7 @@ class RateLimiter:
         the cap."""
         if not self._config.client_id:
             return True
-        azp = getattr(g, AUTH_CLIENT_ID_KEY, None)
+        azp = getattr(g, AuthContextKey.CLIENT_ID.value, None)
         if azp is None:
             return True  # unidentifiable caller → apply the limit, don't exempt
         return azp == self._config.client_id

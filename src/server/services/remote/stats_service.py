@@ -1,11 +1,7 @@
-from typing import Dict, Any
-import numpy as np
 
-from .contracts import StatsRequest
-from .contracts import StatsResponse
-
-from ...enums import ServiceName, EndpointType
+from ...enums import EndpointType, ServiceName
 from .base import RemoteService
+from .contracts import StatsRequest
 
 
 class StatsService(RemoteService):

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
-from src.server.services.helpers.parameter_validator import ParameterValidator
-from ....enums import RequestField, ResponseKey
+from ....enums import RequestField, ResponseKey, ValidationMessage
 from ....exceptions import RequestValidationError
 
 
@@ -56,11 +56,17 @@ class WindowGeometry:
         for field in core_required_fields:
             value = content.get(field.value)
             if value is None:
-                raise RequestValidationError(f"Required field '{field.value}' is missing")
+                raise RequestValidationError(
+                    ValidationMessage.MISSING_NAMED_FIELD.value.format(field=field.value)
+                )
             try:
                 validated[field.value] = float(value)
             except (TypeError, ValueError):
-                raise RequestValidationError(f"Field '{field.value}' must be a valid number, got {type(value).__name__}")
+                raise RequestValidationError(
+                    ValidationMessage.MUST_BE_NUMBER.value.format(
+                        field=field.value, actual=type(value).__name__
+                    )
+                )
 
         # Optional window_frame_ratio field
         if RequestField.WINDOW_FRAME_RATIO.value in content:

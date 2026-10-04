@@ -1,7 +1,6 @@
 from enum import Enum
-from typing import Optional
 
-from src.utils.extended_enum import ExtendedEnum, ExtendedEnumMixin
+from src.utils.extended_enum import ExtendedEnumMixin
 
 
 class Methods(Enum):
@@ -61,6 +60,49 @@ class ResponseStatus(Enum):
     SUCCESS = "success"
     ERROR = "error"
     PENDING = "pending"
+
+
+class TrialStatus(Enum):
+    """Trial status values reported by ``GET /v1/trial/status``.
+
+    Part of the API contract with the Revit plugin, so the values are enumed
+    rather than inlined at the call site.
+    """
+    NOT_APPLICABLE = "not_applicable"  # caller is not the trial client
+    NOT_STARTED = "not_started"        # no guarded request made yet
+    ACTIVE = "active"
+    EXPIRED = "expired"
+
+
+class TokenClaim(Enum):
+    """JWT claim names read off a validated Auth0 token.
+
+    ``TRIAL_DOMAIN`` is the namespace-qualified custom claim the trial login
+    Action stamps with the caller's email domain (e.g. "foretagx.se"); the
+    trial guard keys the company-wide trial clock on its value.
+    """
+    SUBJECT = "sub"
+    AUTHORIZED_PARTY = "azp"
+    EXPIRES_AT = "exp"
+    ISSUER = "iss"
+    AUDIENCE = "aud"
+    TRIAL_DOMAIN = "https://upskiller/trial_domain"
+
+
+class ApiVersion(Enum):
+    """URL version prefix for the public API. Independent of the package
+    version — a patch release must not move the routes."""
+    V1 = "v1"
+
+
+class AuthContextKey(Enum):
+    """``flask.g`` attribute names the authenticator populates from a validated
+    token. Single source of truth for the claim-to-guard boundary: the auth
+    strategy writes these, the rate limiter and the trial guard read them.
+    """
+    SUBJECT = "auth_subject"           # Auth0 `sub` (the end user)
+    CLIENT_ID = "auth_client_id"       # Auth0 `azp` (authorized party = client id)
+    DOMAIN = "auth_domain"             # custom trial-domain claim (the company)
 
 
 class HTTPHeader(Enum):
@@ -162,7 +204,7 @@ class ServiceHost(Enum):
     PRODUCTION_SERVER = "http://51.15.197.220"
 
 
-class AuthType(Enum):
+class AuthType(ExtendedEnumMixin, Enum):
     """Authentication type identifiers"""
     TOKEN = "token"
     AUTH0 = "auth0"
@@ -202,6 +244,32 @@ class ErrorType(Enum):
     MISSING_FILE = "missing_file"
     VALIDATION_ERROR = "validation_error"
     INTERNAL_ERROR = "internal_error"
+
+
+class ValidationMessage(Enum):
+    """Templates for the field-validation messages returned to callers.
+
+    Shared so the same defect reads identically wherever it is detected
+    (request parsing, contract parsing, parameter validation).
+    """
+    MISSING_FIELD = "Missing required field: {field}"
+    MISSING_NAMED_FIELD = "Required field '{field}' is missing"
+    MUST_BE_DICT = "Field '{field}' must be a dictionary"
+    MUST_BE_LIST = "Field '{field}' must be a list"
+    MUST_BE_MESH = "Field '{field}' must be a list, a split dict or a binary mesh payload"
+    MUST_BE_TYPE = "{field} must be a {expected}"
+    MUST_BE_NUMBER = "Field '{field}' must be a valid number, got {actual}"
+    MISSING_IN_DATA = "Missing '{field}' field in request data"
+    WINDOW_MISSING_FIELD = "Window '{window}' missing required field: {field}"
+
+
+class LogMessage(Enum):
+    """Fixed log-line texts, so the wording lives in one place rather than
+    inline at the logging call."""
+    AUTH_NONE = "Community Edition - No authentication required ✨"
+    AUTH_TOKEN = "Token-based authentication enabled"
+    AUTH_AUTH0 = "Auth0 JWT authentication enabled"
+    AUTH_UNKNOWN = "Unknown authentication type"
 
 
 class ErrorMessage(Enum):

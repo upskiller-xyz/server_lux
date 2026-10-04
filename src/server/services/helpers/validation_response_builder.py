@@ -1,5 +1,6 @@
-from typing import Dict, Any
-from ...enums import ResponseStatus, ResponseKey
+from typing import Any, Dict
+
+from ...enums import ResponseKey, ResponseStatus
 
 
 class ValidationResponseBuilder:

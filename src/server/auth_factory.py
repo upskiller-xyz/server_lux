@@ -1,12 +1,19 @@
 from typing import Dict, Type
-from .enums import AuthType
+
 from .auth_config import AuthConfig
 from .auth_strategies import (
-    AuthenticationStrategy,
-    TokenAuthenticationStrategy,
     Auth0AuthenticationStrategy,
-    NoAuthenticationStrategy
+    AuthenticationStrategy,
+    NoAuthenticationStrategy,
+    TokenAuthenticationStrategy,
 )
+from .enums import AuthType
+
+
+class AuthFactoryError:
+    """Templates for the strategy-selection failures raised in this module."""
+    UNSUPPORTED: str = "Unsupported authentication type: {auth_type}"
+    NO_STRATEGY: str = "Unable to create strategy for auth type: {auth_type}"
 
 
 class AuthenticationStrategyFactory:
@@ -35,7 +42,7 @@ class AuthenticationStrategyFactory:
         strategy_class = self._strategy_map.get(auth_type)
 
         if strategy_class is None:
-            raise ValueError(f"Unsupported authentication type: {auth_type}")
+            raise ValueError(AuthFactoryError.UNSUPPORTED.format(auth_type=auth_type))
 
         # Use Strategy pattern to instantiate appropriate strategy
         if auth_type == AuthType.TOKEN:
@@ -47,4 +54,4 @@ class AuthenticationStrategyFactory:
         elif auth_type == AuthType.NONE:
             return strategy_class()
 
-        raise ValueError(f"Unable to create strategy for auth type: {auth_type}")
+        raise ValueError(AuthFactoryError.NO_STRATEGY.format(auth_type=auth_type))

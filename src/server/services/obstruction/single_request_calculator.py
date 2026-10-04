@@ -1,12 +1,28 @@
-import logging
-from typing import Dict, Any, List, Optional
-import time
-import aiohttp
 import asyncio
-from ...enums import ServiceName, EndpointType, RequestField, ResponseKey, ResponseStatus, HTTPHeader, HTTPContentType
-from ...exceptions import ServiceConnectionError, ServiceTimeoutError, ServiceResponseError, ServiceAuthorizationError
-from .config import WindowGeometry, ObstructionCalculationConfig, ObstructionResult
+import logging
+import time
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
+from ...constants import AuthHeaderBuilder, EndpointPathBuilder, ObstructionLogTemplate
+from ...enums import (
+    EndpointType,
+    HTTPContentType,
+    HTTPHeader,
+    RequestField,
+    ResponseKey,
+    ResponseStatus,
+    ServiceName,
+)
+from ...exceptions import (
+    ServiceAuthorizationError,
+    ServiceConnectionError,
+    ServiceResponseError,
+    ServiceTimeoutError,
+)
 from .calculator_interface import IObstructionCalculator
+from .config import ObstructionCalculationConfig, ObstructionResult, WindowGeometry
 
 
 class SingleRequestObstructionCalculator(IObstructionCalculator):
@@ -35,7 +51,9 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
             ]
             return (horizon_angles, zenith_angles)
 
-        self._logger.error(f"Unknown response format! Keys: {list(result.keys())}")
+        self._logger.error(
+            ObstructionLogTemplate.UNKNOWN_FORMAT.format(keys=list(result.keys()))
+        )
         return ([], [])
 
     async def calculate(
@@ -56,7 +74,7 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
 
         headers = {HTTPHeader.CONTENT_TYPE.value: HTTPContentType.JSON.value}
         if self._api_token:
-            headers[HTTPHeader.AUTHORIZATION.value] = f"Bearer {self._api_token}"
+            headers[HTTPHeader.AUTHORIZATION.value] = AuthHeaderBuilder.bearer(self._api_token)
 
         try:
             timeout_obj = aiohttp.ClientTimeout(total=config.timeout_seconds)
@@ -70,7 +88,9 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
                 horizon_angles, zenith_angles = self._parse_response_angles(result)
 
                 if len(horizon_angles) == 0 or len(zenith_angles) == 0:
-                    self._logger.error(f"Empty angle arrays! Response keys: {list(result.keys())}")
+                    self._logger.error(
+                        ObstructionLogTemplate.EMPTY_ANGLES.format(keys=list(result.keys()))
+                    )
 
                 direction_angles = config.get_direction_angles(window.direction_angle)
 
@@ -86,17 +106,19 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
                         zenith_highest_point={}
                     ))
 
-                self._logger.info(f"Completed obstruction calculation in {request_time:.2f}s")
+                self._logger.info(
+                    ObstructionLogTemplate.SINGLE_COMPLETED.format(seconds=request_time)
+                )
                 return obstruction_results
             else:
                 error_msg = result.get(ResponseKey.ERROR.value, "Unknown error")
-                raise Exception(f"Obstruction service error: {error_msg}")
+                raise Exception(ObstructionLogTemplate.SERVICE_ERROR.format(error=error_msg))
 
         except aiohttp.ClientResponseError as e:
             if e.status == 403:
                 error = ServiceAuthorizationError(
                     service_name=ServiceName.OBSTRUCTION.value,
-                    endpoint=f"/{EndpointType.OBSTRUCTION_PARALLEL.value}",
+                    endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION_PARALLEL.value),
                     error_message=e.message
                 )
                 self._logger.error(error.get_log_message())
@@ -104,7 +126,7 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
             else:
                 error = ServiceResponseError(
                     service_name=ServiceName.OBSTRUCTION.value,
-                    endpoint=f"/{EndpointType.OBSTRUCTION_PARALLEL.value}",
+                    endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION_PARALLEL.value),
                     status_code=e.status,
                     error_message=e.message
                 )
@@ -113,7 +135,7 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
         except aiohttp.ClientConnectorError as e:
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION_PARALLEL.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION_PARALLEL.value),
                 address=self._api_url,
                 original_error=e
             )
@@ -122,16 +144,16 @@ class SingleRequestObstructionCalculator(IObstructionCalculator):
         except aiohttp.ClientError as e:
             error = ServiceConnectionError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION_PARALLEL.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION_PARALLEL.value),
                 address=self._api_url,
                 original_error=e
             )
             self._logger.error(error.get_log_message())
             raise error
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError:
             error = ServiceTimeoutError(
                 service_name=ServiceName.OBSTRUCTION.value,
-                endpoint=f"/{EndpointType.OBSTRUCTION_PARALLEL.value}",
+                endpoint=EndpointPathBuilder.path(EndpointType.OBSTRUCTION_PARALLEL.value),
                 timeout_seconds=config.timeout_seconds
             )
             self._logger.error(error.get_log_message())

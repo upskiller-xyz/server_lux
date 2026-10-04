@@ -1,6 +1,7 @@
-from typing import Dict, Any
-from ...enums import RequestField, ResponseStatus, ResponseKey
-from ...constants import MeshValidation
+from typing import Any, Dict
+
+from ...constants import FieldPathBuilder
+from ...enums import RequestField, ResponseKey, ResponseStatus, ValidationMessage
 from .validation_response_builder import ValidationResponseBuilder
 
 
@@ -31,10 +32,14 @@ class ParameterValidator:
         field_name = field.value if isinstance(field, RequestField) else field
 
         if not value:
-            return ValidationResponseBuilder.error(f"Missing required field: {field_name}")
+            return ValidationResponseBuilder.error(
+                ValidationMessage.MISSING_FIELD.value.format(field=field_name)
+            )
 
         if expected_type and not isinstance(value, expected_type):
-            error_msg = type_error_msg or f"{field_name} must be a {expected_type.__name__}"
+            error_msg = type_error_msg or ValidationMessage.MUST_BE_TYPE.value.format(
+                field=field_name, expected=expected_type.__name__
+            )
             return ValidationResponseBuilder.error(error_msg)
 
         return ValidationResponseBuilder.success()
@@ -45,7 +50,9 @@ class ParameterValidator:
             field = field_enum.value
             if field not in window_data:
                 return ValidationResponseBuilder.error(
-                    f"Window '{window_name}' missing required field: {field}"
+                    ValidationMessage.WINDOW_MISSING_FIELD.value.format(
+                        window=window_name, field=field
+                    )
                 )
         return ValidationResponseBuilder.success()
 
@@ -65,7 +72,9 @@ class ParameterValidator:
         expected_type, type_error_msg = ParameterValidator.TYPE_VALIDATORS[RequestField.WINDOWS]
         return ParameterValidator.validate_required_field(
             windows,
-            f"{RequestField.PARAMETERS.value}.{RequestField.WINDOWS.value}",
+            FieldPathBuilder.nested(
+                RequestField.PARAMETERS.value, RequestField.WINDOWS.value
+            ),
             expected_type,
             type_error_msg
         )

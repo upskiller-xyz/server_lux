@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, g, jsonify
 
-from src.server.enums import ErrorType, HTTPStatus, ResponseKey
+from src.server.enums import AuthContextKey, ErrorType, HTTPStatus, ResponseKey
 from src.server.rate_limit_config import RateLimitConfig
 from src.server.rate_limit_store import (
     InMemoryRateLimitStore,
@@ -16,8 +16,6 @@ from src.server.rate_limit_store import (
     RateLimitStore,
 )
 from src.server.rate_limiter import (
-    AUTH_CLIENT_ID_KEY,
-    AUTH_SUBJECT_KEY,
     HEADER_REMAINING,
     RateLimiter,
     RequestIdentityResolver,
@@ -54,9 +52,9 @@ def _app_with_route(limiter: RateLimiter, subject: str | None, client_id: str | 
     @app.before_request
     def _set_identity():
         if subject is not None:
-            setattr(g, AUTH_SUBJECT_KEY, subject)
+            setattr(g, AuthContextKey.SUBJECT.value, subject)
         if client_id is not None:
-            setattr(g, AUTH_CLIENT_ID_KEY, client_id)
+            setattr(g, AuthContextKey.CLIENT_ID.value, client_id)
 
     return app
 
@@ -202,7 +200,7 @@ def test_identity_prefers_subject_over_ip():
     resolver = RequestIdentityResolver()
     app = Flask(__name__)
     with app.test_request_context("/", environ_overrides={"REMOTE_ADDR": "9.9.9.9"}):
-        setattr(g, AUTH_SUBJECT_KEY, "auth0|carol")
+        setattr(g, AuthContextKey.SUBJECT.value, "auth0|carol")
         assert resolver.resolve() == "sub:auth0|carol"
 
 

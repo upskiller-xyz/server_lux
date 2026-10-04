@@ -6,16 +6,21 @@ a JSON body — so lux never parses the multi-MB mesh.
 """
 
 import io
-
-import numpy as np
 from unittest.mock import patch
 
-from src.server.services.remote.obstruction_service import ObstructionService
-from src.server.services.remote.contracts import ObstructionRequest
-from src.server.enums import EndpointType
+import numpy as np
 
+from src.server.constants import ServiceUrlBuilder
+from src.server.enums import EndpointType, RequestField
+from src.server.services.orchestration.orchestrator import Orchestrator
+from src.server.services.remote import EncoderService
+from src.server.services.remote.contracts import ObstructionRequest
+from src.server.services.remote.obstruction_service import ObstructionService
+
+FAKE_OBSTRUCTION_URL = "http://obstruction:8080"
 
 def _npy_bytes() -> bytes:
+
     buf = io.BytesIO()
     np.save(buf, np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32))
     return buf.getvalue()
@@ -76,7 +81,7 @@ def test_binary_mesh_routed_to_parallel_bin_even_for_non_parallel_endpoint():
     # routing decision (not a hard-coded mock return value).
     with patch.object(ObstructionService._http_client, "post_multipart", side_effect=fake_post_multipart), \
          patch.object(ObstructionService, "_get_url",
-                      side_effect=lambda ep: f"http://obstruction:8080/{ep.value}"), \
+                      side_effect=lambda ep: ServiceUrlBuilder.endpoint(FAKE_OBSTRUCTION_URL, ep.value)), \
          patch.object(ObstructionService, "_auth_headers", return_value={}):
         ObstructionService.run(EndpointType.OBSTRUCTION, request)
 
@@ -107,10 +112,6 @@ def test_orchestrator_drops_binary_mesh_after_obstruction():
     """Once obstruction has run, the raw binary mesh must be removed from params
     so it never leaks into the encoder/model/merger requests (bytes aren't JSON
     serializable). A JSON (list) mesh is left untouched."""
-    from src.server.services.orchestration.orchestrator import Orchestrator
-    from src.server.services.remote import EncoderService
-    from src.server.enums import RequestField
-
     orch = Orchestrator()
 
     # After ObstructionService: bytes mesh dropped.
@@ -136,8 +137,6 @@ def test_obstruction_all_uses_parallel_remote_endpoint():
     obstruction_parallel, so /obstruction_all must not become
     /obstruction_all_bin when the mesh is binary.
     """
-    from src.server.services.orchestration.orchestrator import Orchestrator
-
     orch = Orchestrator()
 
     assert (

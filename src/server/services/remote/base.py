@@ -1,17 +1,27 @@
-from typing import Any, Dict, TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, Any, Dict
 
-from src.server.config import SessionConfig, get_service_config
-from src.server.services.http_client import HTTPClient
+from src.server.config import get_service_config
 from src.server.services.helpers.logging_utils import LoggingFormatter
-from .contracts import RemoteServiceRequest
-from .contracts import RemoteServiceResponse, MergerResponse, EncoderResponse, ObstructionResponse, ModelResponse, StatsResponse, BinaryResponse
-from .outbound_auth import BackendResolver, BackendAuthMap
-from ...enums import ServiceName, EndpointType
-from ...maps import  PortMap, StandardMap
+from src.server.services.http_client import HTTPClient
+
+from ...constants import ServiceUrlBuilder
+from ...enums import EndpointType, ServiceName
+from ...maps import StandardMap
+from .contracts import (
+    BinaryResponse,
+    EncoderResponse,
+    MergerResponse,
+    ModelResponse,
+    ObstructionResponse,
+    RemoteServiceRequest,
+    RemoteServiceResponse,
+    StatsResponse,
+)
+from .outbound_auth import BackendAuthMap, BackendResolver
 
 if TYPE_CHECKING:
-    from .service_map import ServiceRequestMap
+    pass
 
 logger = logging.getLogger('logger')
 
@@ -34,7 +44,9 @@ class RemoteService:
 
         Uses Strategy Pattern - maps service name to request class.
         """
-        from .service_map import ServiceRequestMap
+        # Genuinely circular: service_map imports RemoteService from this
+        # module, so this one stays function-local by design.
+        from .service_map import ServiceRequestMap  # noqa: PLC0415
         return ServiceRequestMap.get(cls.name)
 
     @classmethod
@@ -42,12 +54,12 @@ class RemoteService:
         """Get full URL for endpoint"""
         config = get_service_config()
         base_url = config.get_service_url(cls.name.value)
-        return f"{base_url}/{endpoint.value}"
+        return ServiceUrlBuilder.endpoint(base_url, endpoint.value)
 
     @classmethod
     def _log_request(cls, endpoint: EndpointType, url: str, request: RemoteServiceRequest | None = None) -> None:
         """Log request being made"""
-        logger.info(f"Calling {cls.name.value} service: {url}")
+        logger.info("Calling %s service: %s", cls.name.value, url)
 
     @classmethod
     def _auth_headers(cls, url: str) -> Dict[str, str]:
@@ -86,16 +98,16 @@ class RemoteService:
         url = cls._get_url(endpoint)
         cls._log_request(endpoint, url, request)
 
-        logger.info(f"[{cls.name.value}] Calling remote endpoint: {url}")
+        logger.info("[%s] Calling remote endpoint: %s", cls.name.value, url)
 
         request_dict = request.to_dict
         formatted_request = LoggingFormatter.format_for_logging(request_dict)
-        logger.debug(f"[{cls.name.value}] Request data: {formatted_request}")
+        logger.debug("[%s] Request data: %s", cls.name.value, formatted_request)
 
         response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
 
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
-        logger.debug(f"[{cls.name.value}] Response received: {formatted_response}")
+        logger.debug("[%s] Response received: %s", cls.name.value, formatted_response)
 
 
         if response_class is None:

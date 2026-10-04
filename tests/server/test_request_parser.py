@@ -114,7 +114,7 @@ def test_zero_length_mesh_upload_is_kept_as_an_empty_payload():
     # A zero-length upload is neither JSON nor a recognisable binary mesh.
     # Parsing it as JSON raised and surfaced as a 500; it is now passed through
     # as the empty payload it is, for EmptyMeshPolicy to resolve.
-    with _multipart_bin_ctx({"model_type": "df", "parameters": {}}, b"") as ctx:
+    with _multipart_bin_ctx({"model_type": "df", "parameters": {}}, b""):
         params = RequestParser.extract_params(request)
 
     assert params["mesh"] == b""

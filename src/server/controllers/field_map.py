@@ -1,6 +1,11 @@
-from ..maps import StandardMap
 from ..enums import EndpointType, RequestField
-from ..services.orchestration.encode_orchestration_service import Orchestrator, SimulationOrchestrator, EncodeOrchestrator
+from ..maps import StandardMap
+from ..services.orchestration.encode_orchestration_service import (
+    EncodeOrchestrator,
+    Orchestrator,
+    SimulationOrchestrator,
+)
+
 
 class FieldMap(StandardMap):
 

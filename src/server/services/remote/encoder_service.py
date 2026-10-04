@@ -2,10 +2,9 @@ from typing import Any
 
 from src.server.services.remote.contracts.base_contracts import RemoteServiceResponse
 
-from .contracts import RemoteServiceRequest, MainRequest
-from .contracts import BinaryResponse
-from ...enums import ServiceName, EndpointType
+from ...enums import EndpointType, ServiceName
 from .base import RemoteService
+from .contracts import BinaryResponse, MainRequest, RemoteServiceRequest
 
 
 class EncoderService(RemoteService):

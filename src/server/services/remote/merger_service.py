@@ -1,9 +1,9 @@
-from typing import Dict, Any
 
-from ...enums import ServiceName, EndpointType
+import logging
+
+from ...enums import EndpointType, ServiceName
 from .base import RemoteService
 from .contracts import MergerRequest
-import logging
 
 logger = logging.getLogger('logger')
 

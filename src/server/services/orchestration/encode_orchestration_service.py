@@ -1,19 +1,21 @@
-from typing import Dict, Any
 import logging
+from typing import Any, Dict
+
 import numpy as np
 
 from src.server.services.remote.contracts import MergerRequest
 from src.server.services.remote.contracts.merger_contracts import MergerResponse
-from .orchestrator import Orchestrator
-from .window_processor import WindowProcessor
-from .result_merger import ResultMerger
 
-from ..remote import MergerService
+from ...constants import MergeError
 from ...enums import EndpointType, RequestField, ResponseKey
-from ..remote.service_map import ServiceEndpointMap
-from ...maps import StandardMap
-from ...interfaces.orchestration_interfaces import IOrchestrator
 from ...exceptions import MergeValidationError
+from ...interfaces.orchestration_interfaces import IOrchestrator
+from ...maps import StandardMap
+from ..remote import MergerService
+from ..remote.service_map import ServiceEndpointMap
+from .orchestrator import Orchestrator
+from .result_merger import ResultMerger
+from .window_processor import WindowProcessor
 
 
 class SimulationOrchestrator(IOrchestrator):
@@ -73,19 +75,20 @@ class SimulationOrchestrator(IOrchestrator):
             sim_arr = np.asarray(simulation) if simulation is not None else None
             if sim_arr is None or sim_arr.size == 0:
                 raise MergeValidationError(
-                    f"window '{window_name}' has no simulation result"
+                    MergeError.NO_SIMULATION.format(window=window_name)
                 )
 
             mask = masks.get(window_name)
             if mask is None:
                 raise MergeValidationError(
-                    f"window '{window_name}' has no mask"
+                    MergeError.NO_MASK.format(window=window_name)
                 )
             mask_arr = np.asarray(mask)
             if mask_arr.ndim != 2:
                 raise MergeValidationError(
-                    f"window '{window_name}' mask must be 2D, got "
-                    f"{mask_arr.ndim}D with shape {mask_arr.shape}"
+                    MergeError.MASK_NOT_2D.format(
+                        window=window_name, ndim=mask_arr.ndim, shape=mask_arr.shape
+                    )
                 )
 
     def _call_merger_service(self, merged_data: Dict[str, Any], file: Any) -> 'MergerResponse':
@@ -161,7 +164,7 @@ class EncodeOrchestrator(IOrchestrator):
             return result[RequestField.IMAGE.value]
 
         # No image data found - this is an error
-        raise ValueError(f"Encoder service did not return image data. Available keys: {list(result.keys())}")
+        raise ValueError(MergeError.NO_IMAGE_DATA.format(keys=list(result.keys())))
 
 
 class EndpointOrchestratorMap(StandardMap):

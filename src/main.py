@@ -1,32 +1,35 @@
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '0'
-os.environ['OMP_NUM_THREADS'] = '1'
-
-import sys
-from pathlib import Path
-
+# The project root must be importable before anything under `src.` is imported,
+# so this runs ahead of the environment setup below (which needs EnvKey).
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+from src.server.env_keys import EnvKey  # noqa: E402  (needs the path above)
+
+load_dotenv()
+
+os.environ[EnvKey.CUDA_VISIBLE_DEVICES.value] = '-1'
+os.environ[EnvKey.TF_CPP_MIN_LOG_LEVEL.value] = '3'
+os.environ[EnvKey.OPENCV_IO_ENABLE_OPENEXR.value] = '0'
+os.environ[EnvKey.OMP_NUM_THREADS.value] = '1'
 
 import logging
 
 from flasgger import Swagger
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify
 
-from src.__version__ import version
 from src.server.auth import Authenticator
 from src.server.controllers.base_controller import ServerController
 from src.server.cors_config import CorsConfig
 from src.server.endpoint_handlers import EndpointHandlers
 from src.server.enums import AuthType, EndpointType, ServiceName
+from src.server.maps import AuthTypeMessageMap
 from src.server.rate_limiter import RateLimiter
 from src.server.request_handler import EndpointRequestHandler
 from src.server.route_configurator import RouteBuilder, RouteConfigurator
@@ -82,7 +85,7 @@ class ServerApplication:
     @staticmethod
     def _api_docs_enabled() -> bool:
         """Swagger UI + apispec (/docs/, /apispec.json); disable on public gateways."""
-        return os.getenv("API_DOCS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
+        return os.getenv(EnvKey.API_DOCS_ENABLED.value, "true").strip().lower() in ("true", "1", "yes")
 
     def _initialize_components(self) -> None:
         """Initialize all application components"""
@@ -94,29 +97,29 @@ class ServerApplication:
         self._authenticator = Authenticator()
         self._rate_limiter = RateLimiter.from_environment()
         logger.info(
-            f"Per-user rate limiting: {'enabled' if self._rate_limiter.is_enabled else 'disabled'}"
+            "Per-user rate limiting: %s",
+            "enabled" if self._rate_limiter.is_enabled else "disabled",
         )
         self._trial_guard = TrialGuard.from_environment()
         logger.info(
-            f"Trial guard: {'enabled' if self._trial_guard.is_enabled else 'disabled'}"
+            "Trial guard: %s", "enabled" if self._trial_guard.is_enabled else "disabled"
         )
 
         # Log authentication mode for visibility
-        auth_type = os.getenv('AUTH_TYPE', 'token').lower()
-        auth_messages = {
-            AuthType.NONE.value: "Community Edition - No authentication required ✨",
-            AuthType.TOKEN.value: "Token-based authentication enabled",
-            AuthType.AUTH0.value: "Auth0 JWT authentication enabled"
-        }
-        auth_msg = auth_messages.get(auth_type, "Unknown authentication type")
-        logger.info(f"Authentication Type: {auth_type} ({auth_msg})")
+        auth_type_value = os.getenv(EnvKey.AUTH_TYPE.value, AuthType.TOKEN.value).lower()
+        auth_type = AuthType.by_value(auth_type_value)
+        logger.info(
+            "Authentication Type: %s (%s)",
+            auth_type_value,
+            AuthTypeMessageMap.get(auth_type),
+        )
 
         self._request_handler = EndpointRequestHandler()
         self._endpoint_handlers = EndpointHandlers(self._request_handler)
 
     def _setup_routes(self) -> None:
         """Setup Flask routes using route configurator"""
-        route_builder = RouteBuilder(version)
+        route_builder = RouteBuilder()
         route_configurator = RouteConfigurator(route_builder)
         auth = self._authenticator.require_auth
         quota = self._rate_limiter.require_quota          # prediction bucket (10/day)
@@ -131,8 +134,10 @@ class ServerApplication:
             # Read-only trial status for the plugin. NOT wrapped in the trial
             # guard — the guard would 403 an expired trial before this could
             # report it. get_status() performs the lookup itself and reports
-            # "expired" instead of rejecting; only authentication applies.
-            EndpointType.TRIAL_STATUS: auth(self._trial_guard.get_status),
+            # "expired" instead of rejecting. The aux quota applies for the same
+            # reason it does elsewhere: every /v1 route gets a ceiling, so no
+            # endpoint is unmetered by omission.
+            EndpointType.TRIAL_STATUS: auth(aux_quota(self._trial_guard.get_status)),
             # Auth outer, quota inner: authentication runs first and sets the
             # subject + client id the rate limiter keys/gates the daily quota on.
             # The web daylight tool predicts via /run (and /run/detailed in debug);
@@ -209,11 +214,13 @@ class ServerLauncher:
             port: Port number to bind to
             debug: Enable debug mode
         """
-        log_msg = (
-            f"Flask app '{app.app.name}' starting on "
-            f"host {host}, port {port}. Debug mode: {debug}"
+        app.app.logger.info(
+            "Flask app '%s' starting on host %s, port %s. Debug mode: %s",
+            app.app.name,
+            host,
+            port,
+            debug,
         )
-        app.app.logger.info(log_msg)
         app.app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 
@@ -221,8 +228,8 @@ def main() -> None:
     """Main entry point for running the server"""
     launcher = ServerLauncher()
     application = launcher.create_application()
-    port = int(os.getenv("PORT", 8080))
-    debug = os.getenv("FLASK_DEBUG", "false").strip().lower() in ("true", "1", "yes")
+    port = int(os.getenv(EnvKey.PORT.value, 8080))
+    debug = os.getenv(EnvKey.FLASK_DEBUG.value, "false").strip().lower() in ("true", "1", "yes")
     launcher.run_server(application, port=port, debug=debug)
 
 

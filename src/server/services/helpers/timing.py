@@ -15,6 +15,8 @@ from typing import Optional, Type
 class StageTimer:
     """Logs the wall time of a named stage on exit (always, even on exception)."""
 
+    LOG_TEMPLATE: str = "[timing] {stage}: {ms:.0f}ms"
+
     def __init__(self, stage: str, logger: logging.Logger):
         self._stage = stage
         self._logger = logger
@@ -31,5 +33,5 @@ class StageTimer:
         tb: Optional[TracebackType],
     ) -> bool:
         elapsed_ms = (time.perf_counter() - self._t0) * 1000
-        self._logger.info(f"[timing] {self._stage}: {elapsed_ms:.0f}ms")
+        self._logger.info(self.LOG_TEMPLATE.format(stage=self._stage, ms=elapsed_ms))
         return False  # never suppress exceptions

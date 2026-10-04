@@ -30,14 +30,14 @@ class ServerController:
             # Initialize all registered services
             for service_name, service in self._services.items():
                 if hasattr(service, 'initialize'):
-                    logger.debug(f"Initializing service: {service_name}")
+                    logger.debug("Initializing service: %s", service_name)
                     service.initialize()
 
             self._status = ServerStatus.RUNNING
             logger.info("Server controller initialized successfully")
         except Exception as e:
             self._status = ServerStatus.ERROR
-            logger.error(f"Failed to initialize server controller: {str(e)}")
+            logger.error("Failed to initialize server controller: %s", str(e))
             raise
 
     def get_status(self) -> Dict[str, Any]:

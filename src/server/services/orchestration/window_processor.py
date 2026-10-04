@@ -1,11 +1,12 @@
-from typing import Any, Tuple, List
 import asyncio
 import logging
+from typing import Any, List, Tuple
 
 from src.server.services.helpers.parallel import ParallelRequest
-from .request_builder import WindowRequestBuilder
+
 from ...enums import EndpointType, RequestField
 from ...exceptions import RequestValidationError
+from .request_builder import WindowRequestBuilder
 
 logger = logging.getLogger("logger")
 

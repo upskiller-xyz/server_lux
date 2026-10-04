@@ -1,12 +1,14 @@
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
-import logging
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
 from src.server.services.helpers.parameter_validator import ParameterValidator
-from ...enums import RequestField
 
+from ...constants import WindowNameBuilder
+from ...enums import RequestField
 
 # Domain models
 
@@ -187,7 +189,10 @@ class Parameters(RemoteServiceRequest):
     
     @classmethod
     def _parse_window_list(cls, windows:list[dict[Any,Any]])->list[tuple[str, WindowGeometry]]:
-        return [(f"window_{i}", WindowGeometry.from_dict(w)) for i, w in enumerate(windows)]
+        return [
+            (WindowNameBuilder.positional(i), WindowGeometry.from_dict(w))
+            for i, w in enumerate(windows)
+        ]
     
     @classmethod
     def _normalize_to_dict(cls, field):

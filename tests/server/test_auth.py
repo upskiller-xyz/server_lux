@@ -15,13 +15,13 @@ from src.server.auth import Authenticator, TokenAuthenticator
 from src.server.auth_config import Auth0Config, AuthConfig
 from src.server.auth_factory import AuthenticationStrategyFactory
 from src.server.auth_strategies import (
-    TRIAL_DOMAIN_CLAIM,
     Auth0AuthenticationStrategy,
     JwksProvider,
     NoAuthenticationStrategy,
     TokenAuthenticationStrategy,
 )
-from src.server.enums import AuthType, ErrorType
+from src.server.constants import AuthHeaderBuilder
+from src.server.enums import AuthType, ErrorType, HTTPHeader, TokenClaim
 
 
 def _generate_rsa_key_pair():
@@ -284,7 +284,7 @@ class TestAuth0AuthenticationStrategy:
         """Valid JWT signed with matching key is accepted."""
         strategy, private_key = strategy_with_jwks
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer)
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is True
         assert error is None
 
@@ -292,7 +292,7 @@ class TestAuth0AuthenticationStrategy:
         """Expired JWT is rejected with EXPIRED_JWT error."""
         strategy, private_key = strategy_with_jwks
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, exp_offset=-3600)
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.EXPIRED_JWT
 
@@ -300,7 +300,7 @@ class TestAuth0AuthenticationStrategy:
         """JWT with wrong audience is rejected."""
         strategy, private_key = strategy_with_jwks
         token = _make_jwt(private_key, 'https://wrong-audience.com', auth0_config.issuer)
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
 
@@ -308,7 +308,7 @@ class TestAuth0AuthenticationStrategy:
         """JWT with wrong issuer is rejected."""
         strategy, private_key = strategy_with_jwks
         token = _make_jwt(private_key, auth0_config.audience, 'https://wrong-issuer.com/')
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
 
@@ -320,7 +320,7 @@ class TestAuth0AuthenticationStrategy:
         strategy = Auth0AuthenticationStrategy(auth0_config)
         strategy._jwks.seed(jwks)
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, kid="test-key-id")
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
 
@@ -332,7 +332,7 @@ class TestAuth0AuthenticationStrategy:
             {"sub": "x", "aud": auth0_config.audience, "iss": auth0_config.issuer, "exp": now + 60},
             None, algorithm="none", headers={"kid": "test-key-id"},
         )
-        is_valid, error = strategy.validate_request(f'Bearer {token}')
+        is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
 
@@ -356,9 +356,9 @@ class TestAuth0AuthenticationStrategy:
             mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
             token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer)
-            strategy.validate_request(f'Bearer {token}')
+            strategy.validate_request(AuthHeaderBuilder.bearer(token))
             assert mock_get.call_count == 1
-            strategy.validate_request(f'Bearer {token}')
+            strategy.validate_request(AuthHeaderBuilder.bearer(token))
             assert mock_get.call_count == 1  # still 1 — cache hit
 
     def test_jwks_fetch_failure_returns_invalid_jwt(self, auth0_config):
@@ -368,7 +368,7 @@ class TestAuth0AuthenticationStrategy:
         private_key, _ = _generate_rsa_key_pair()
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer)
         with patch('requests.get', side_effect=req.RequestException("timeout")):
-            is_valid, error = strategy.validate_request(f'Bearer {token}')
+            is_valid, error = strategy.validate_request(AuthHeaderBuilder.bearer(token))
         assert is_valid is False
         assert error == ErrorType.INVALID_JWT
 
@@ -380,12 +380,13 @@ class TestAuth0AuthenticationStrategy:
         three must land on flask.g inside a request context.
         """
         strategy, private_key = strategy_with_jwks
-        extra_claims = {"azp": "lux-revit-trial", TRIAL_DOMAIN_CLAIM: "foretagx.se"}
+        extra_claims = {"azp": "lux-revit-trial", TokenClaim.TRIAL_DOMAIN.value: "foretagx.se"}
         token = _make_jwt(private_key, auth0_config.audience, auth0_config.issuer, extra_claims=extra_claims)
 
         app = Flask(__name__)
-        with app.test_request_context("/", headers={"Authorization": f"Bearer {token}"}):
-            is_valid, error = strategy.validate_request(f"Bearer {token}")
+        auth_header = AuthHeaderBuilder.bearer(token)
+        with app.test_request_context("/", headers={HTTPHeader.AUTHORIZATION.value: auth_header}):
+            is_valid, error = strategy.validate_request(auth_header)
             assert is_valid is True
             assert error is None
             assert g.auth_subject == "test-user"

@@ -1,14 +1,10 @@
-import asyncio
 import logging
-import math
 import os
 import threading
-import time
-from typing import Any, Dict, List, Union, cast
+from typing import Any, Dict, Union, cast
 
 import orjson
 
-from src.server.services.helpers.parallel import ParallelRequest
 from src.server.services.remote.contracts.obstruction_contracts import (
     ObstructionResponse,
 )
@@ -19,11 +15,9 @@ from ...enums import (
     HTTPStatus,
     RequestField,
     ResponseKey,
-    ResponseStatus,
     ServiceName,
 )
 from ...exceptions import ServiceResponseError
-from ...services.obstruction.calculator_interface import IObstructionCalculator
 from ...services.obstruction.empty_mesh_policy import EmptyMeshPolicy
 from .base import RemoteService
 from .contracts import ObstructionRequest, RemoteServiceRequest, RemoteServiceResponse
@@ -46,8 +40,10 @@ def _resolve_obstruction_concurrency() -> int:
         value = int(raw)
     except ValueError:
         logger.warning(
-            f"Invalid {ObstructionConcurrency.MAX_ENV}={raw!r}; "
-            f"falling back to {ObstructionConcurrency.DEFAULT_MAX}"
+            "Invalid %s=%r; falling back to %s",
+            ObstructionConcurrency.MAX_ENV,
+            raw,
+            ObstructionConcurrency.DEFAULT_MAX,
         )
         return ObstructionConcurrency.DEFAULT_MAX
     return max(1, value)
@@ -107,8 +103,8 @@ class ObstructionService(RemoteService):
         horizon_angles = response.horizon if response.horizon is not None else []
         zenith_angles = response.zenith if response.zenith is not None else []
 
-        logger.debug(f"[ObstructionService] Parsed horizon_angles: {horizon_angles}")
-        logger.debug(f"[ObstructionService] Parsed zenith_angles: {zenith_angles}")
+        logger.debug("[ObstructionService] Parsed horizon_angles: %s", horizon_angles)
+        logger.debug("[ObstructionService] Parsed zenith_angles: %s", zenith_angles)
 
         # For single-window requests (default window name), return flat structure
         # For multi-window orchestration, return nested structure
@@ -149,7 +145,7 @@ class ObstructionService(RemoteService):
         files = {
             RequestField.MESH.value: ("mesh.npy", mesh_bytes, "application/octet-stream")
         }
-        logger.info(f"[{cls.name.value}] Calling binary endpoint: {url}")
+        logger.info("[%s] Calling binary endpoint: %s", cls.name.value, url)
         response_dict = cls._http_client.post_multipart(
             url,
             files=files,

@@ -1,6 +1,15 @@
 from __future__ import annotations
+
 from typing import Any, Dict
-from .enums import ServiceName, ServicePort, EndpointType, DeploymentMode, ServiceHost
+
+from .enums import (
+    AuthType,
+    DeploymentMode,
+    LogMessage,
+    ServiceHost,
+    ServiceName,
+    ServicePort,
+)
 
 
 class StandardMap:
@@ -29,3 +38,12 @@ class PortMap(StandardMap):
 
 
     
+
+class AuthTypeMessageMap(StandardMap):
+    """Startup log line describing the active authentication mode."""
+    _content: Dict[AuthType, str] = {
+        AuthType.NONE: LogMessage.AUTH_NONE.value,
+        AuthType.TOKEN: LogMessage.AUTH_TOKEN.value,
+        AuthType.AUTH0: LogMessage.AUTH_AUTH0.value,
+    }
+    _default: str = LogMessage.AUTH_UNKNOWN.value

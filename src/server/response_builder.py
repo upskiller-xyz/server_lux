@@ -8,7 +8,6 @@ from .exceptions import (
     RequestValidationError,
     ServiceAuthorizationError,
     ServiceConnectionError,
-    ServiceException,
     ServiceResponseError,
     ServiceTimeoutError,
 )

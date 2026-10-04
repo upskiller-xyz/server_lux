@@ -1,7 +1,9 @@
+import math
 from dataclasses import dataclass
 from typing import List
-import math
+
 import numpy as np
+
 from ...constants import ObstructionAngleDefaults
 
 

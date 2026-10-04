@@ -1,13 +1,12 @@
 """Unit tests for model spec pipeline components"""
 
-import pytest
 
 from src.server.enums import RequestField
+from src.server.services.remote.contracts.main_request_contract import MainRequest
 from src.server.services.remote.contracts.model_spec_contracts import (
     ModelSpecRequest,
     ModelSpecResponse,
 )
-from src.server.services.remote.contracts.main_request_contract import MainRequest
 
 
 class TestModelSpecRequest:

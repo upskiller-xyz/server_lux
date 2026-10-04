@@ -26,6 +26,22 @@ jobs:
           python -m pip install --require-hashes -r requirements.txt
           python -m pip install "pytest==9.1.1"
 
+      - name: Lint (dead code, import placement, import sorting)
+        run: |
+          python -m pip install "ruff==0.16.5"
+          # Every rule configured in pyproject.toml, so the gate matches the
+          # config instead of a subset of it.
+          python -m ruff check src tests
+
+      - name: No f-strings
+        run: |
+          # Project convention: .format()/%-formatting and named template
+          # classes instead of f-strings, so messages stay greppable and log
+          # calls stay lazy. Keep this gate green rather than adding exceptions.
+          # AST-based: a grep for `f"` misses f'...', f'''...''' and friends,
+          # so the gate would pass while prohibited code remained.
+          python scripts/check_no_fstrings.py src tests
+
       - name: Run tests
         run: python -m pytest tests -q
 

@@ -1,15 +1,15 @@
-from typing import Dict, Any, Tuple
 import logging
 import traceback
+from typing import Any, Dict, Tuple
 
 import orjson
 from flask import Request, Response, jsonify
 
-from .enums import EndpointType, HTTPStatus, RequestField, ResponseKey
 from .controllers.endpoint_controller import EndpointController
+from .enums import EndpointType, HTTPStatus, RequestField, ResponseKey
 from .response_builder import ErrorResponseBuilder
-from .services.remote.model_prewarmer import ModelPrewarmer
 from .services.helpers.timing import StageTimer
+from .services.remote.model_prewarmer import ModelPrewarmer
 
 logger = logging.getLogger("logger")
 
@@ -150,7 +150,7 @@ class EndpointRequestHandler:
         endpoint = None
         try:
             endpoint = self._request_parser.extract_endpoint(request)
-            logger.info(f"Processing endpoint: {endpoint.value}")
+            logger.info("Processing endpoint: %s", endpoint.value)
 
             # Fire-and-forget GPU prewarm at the earliest point so the model's cold
             # start overlaps the CPU stages instead of stacking on /spec or /run.
@@ -169,6 +169,6 @@ class EndpointRequestHandler:
 
         except Exception as e:
             endpoint_str = endpoint.value if endpoint else "unknown"
-            logger.error(f"{endpoint_str} failed: {str(e)}")
-            logger.error(f"Traceback:\n{traceback.format_exc()}")
+            logger.error("%s failed: %s", endpoint_str, str(e))
+            logger.error("Traceback:\n%s", traceback.format_exc())
             return self._error_builder.build_from_exception(e)

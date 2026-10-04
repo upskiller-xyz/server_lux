@@ -1,10 +1,13 @@
-from typing import Any, Dict, List
 import logging
+from typing import Any, Dict
 
-from .contracts import RemoteServiceRequest, DirectionAngleRequest
-from .contracts import DirectionAngleResponse
-from ...enums import ServiceName, EndpointType
+from ...enums import EndpointType, ServiceName
 from .base import RemoteService
+from .contracts import (
+    DirectionAngleRequest,
+    DirectionAngleResponse,
+    RemoteServiceRequest,
+)
 
 logger = logging.getLogger("logger")
 

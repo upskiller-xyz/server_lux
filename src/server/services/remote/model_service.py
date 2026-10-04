@@ -1,12 +1,12 @@
-from typing import Any
 import io
 import json
 import logging
+from typing import Any
 
-from .contracts import RemoteServiceRequest, ModelRequest, RemoteServiceResponse
+from ...enums import EndpointType, RequestField, ServiceName
 from .base import RemoteService, ServiceResponseMap
+from .contracts import ModelRequest, RemoteServiceRequest, RemoteServiceResponse
 from .image_converters import EncoderOutputConverter
-from ...enums import ServiceName, EndpointType, RequestField
 
 logger = logging.getLogger('logger')
 

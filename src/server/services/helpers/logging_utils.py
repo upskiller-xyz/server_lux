@@ -1,5 +1,24 @@
-from typing import Any, Dict, List, Set
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Set
+
+# numpy is an unconditional dependency (pinned in requirements.in), so the
+# formatter imports it like any other — it is not an optional extra.
+import numpy as np
+
+
+class SummaryTemplate:
+    """Templates for the abbreviated value summaries written to the log.
+
+    The angle-bracket shapes are what a reader greps for, so they live here
+    instead of being spelled out at each branch.
+    """
+    EMPTY: str = "<empty {type}>"
+    SEQUENCE: str = "<{type} of {length} items, first={first}>"
+    LIST: str = "<list of {length} items, first={first}>"
+    DICT: str = "<dict with keys: {keys}>"
+    STRING: str = "<string of {length} chars>"
+    ARRAY: str = "<array shape={shape}, first={first}>"
+    SIZED: str = "<{type} length={length}, first={first}>"
 
 
 class ILoggingFormatter(ABC):
@@ -92,28 +111,32 @@ class LengthReplacementStrategy:
         if isinstance(value, (list, tuple)):
             length = len(value)
             if length == 0:
-                return f"<empty {type(value).__name__}>"
+                return SummaryTemplate.EMPTY.format(type=type(value).__name__)
 
             first_elem = cls._safe_get_first_element(value)
-            return f"<{type(value).__name__} of {length} items, first={first_elem}>"
+            return SummaryTemplate.SEQUENCE.format(
+                type=type(value).__name__, length=length, first=first_elem
+            )
 
         elif isinstance(value, dict):
             keys = list(value.keys())
-            return f"<dict with keys: {keys}>"
+            return SummaryTemplate.DICT.format(keys=keys)
 
         elif isinstance(value, str):
             if len(value) > 100:
-                return f"<string of {len(value)} chars>"
+                return SummaryTemplate.STRING.format(length=len(value))
             return value
 
         elif hasattr(value, 'shape'):  # numpy arrays
             first_elem = cls._safe_get_first_element(value)
-            return f"<array shape={value.shape}, first={first_elem}>"
+            return SummaryTemplate.ARRAY.format(shape=value.shape, first=first_elem)
 
         elif hasattr(value, '__len__'):
             length = len(value)
             first_elem = cls._safe_get_first_element(value)
-            return f"<{type(value).__name__} length={length}, first={first_elem}>"
+            return SummaryTemplate.SIZED.format(
+                type=type(value).__name__, length=length, first=first_elem
+            )
 
         return value
 
@@ -148,12 +171,8 @@ class LengthReplacementStrategy:
             return {k: cls._round_nested_floats(v, max_depth, _current_depth + 1) for k, v in value.items()}
         elif hasattr(value, 'shape'):  # numpy array
             # For numpy arrays, use numpy's round
-            try:
-                import numpy as np
-                if np.issubdtype(value.dtype, np.floating):
-                    return np.round(value, 2)
-            except ImportError:
-                pass
+            if np.issubdtype(value.dtype, np.floating):
+                return np.round(value, 2)
         return value
 
     @staticmethod
@@ -251,7 +270,7 @@ class LoggingDictFormatter(ILoggingFormatter):
         # For large lists, show summary with first element
         if len(data) > 10:
             first_elem = LengthReplacementStrategy._safe_get_first_element(data)
-            return f"<list of {len(data)} items, first={first_elem}>"
+            return SummaryTemplate.LIST.format(length=len(data), first=first_elem)
 
         # For small lists, format each item
         return [self.format(item, max_depth, current_depth + 1) for item in data]

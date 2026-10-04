@@ -1,16 +1,27 @@
-from typing import Dict, Any, Optional
 import logging
 import threading
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from urllib.parse import urlparse
-from ..exceptions import ServiceConnectionError, ServiceTimeoutError, ServiceResponseError, ServiceAuthorizationError
+
+from ..exceptions import (
+    ServiceAuthorizationError,
+    ServiceConnectionError,
+    ServiceResponseError,
+    ServiceTimeoutError,
+)
 
 logger = logging.getLogger("logger")
 
 
 class HTTPClient:
+
+    # How much of a failing response body goes into the log — enough to identify
+    # the error, short enough not to flood the log with a multi-MB payload.
+    RESPONSE_LOG_LIMIT: int = 500
 
     def __init__(self, timeout: int = 300, max_retries: int = 3, backoff_factor: float = 0.3):
         self._timeout = timeout
@@ -129,7 +140,7 @@ class HTTPClient:
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
-            logger.info(f"Response received from {url} (status: {response.status_code})")
+            logger.info("Response received from %s (status: %s)", url, response.status_code)
             return response.json()
 
         except requests.exceptions.RequestException as e:
@@ -150,13 +161,13 @@ class HTTPClient:
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
-            logger.info(f"Response received from {url} (status: {response.status_code})")
+            logger.info("Response received from %s (status: %s)", url, response.status_code)
             return response.json()
 
         except requests.exceptions.RequestException as e:
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response body: {e.response.text[:500]}")
+                logger.error("Response status: %s", e.response.status_code)
+                logger.error("Response body: %s", e.response.text[:self.RESPONSE_LOG_LIMIT])
             self._handle_request_error(e, url)
 
     def post_multipart(
@@ -167,7 +178,7 @@ class HTTPClient:
         headers: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any] | None:
         try:
-            logger.info(f"POST multipart request to {url} (timeout: {self._timeout}s)")
+            logger.info("POST multipart request to %s (timeout: %ss)", url, self._timeout)
 
             session = self._get_session()
 
@@ -179,7 +190,7 @@ class HTTPClient:
                 timeout=(10, self._timeout)
             )
             response.raise_for_status()
-            logger.info(f"Response received from {url} (status: {response.status_code})")
+            logger.info("Response received from %s (status: %s)", url, response.status_code)
             return response.json()
 
         except requests.exceptions.RequestException as e:
@@ -188,8 +199,8 @@ class HTTPClient:
             # with no clue whether it was a 502/503 under load, a timeout, or a real
             # remote traceback.
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response body: {e.response.text[:500]}")
+                logger.error("Response status: %s", e.response.status_code)
+                logger.error("Response body: %s", e.response.text[:self.RESPONSE_LOG_LIMIT])
             self._handle_request_error(e, url)
 
     def post_binary(
@@ -216,7 +227,7 @@ class HTTPClient:
                     error_msg = error_data.get('error') or error_data.get('message') or 'Unknown error from service'
                     service_name = self._parse_service_name(url)
                     endpoint = self._parse_endpoint(url)
-                    logger.error(f"Service error: {error_msg}")
+                    logger.error("Service error: %s", error_msg)
                     raise ServiceResponseError(service_name, endpoint, response.status_code, str(error_msg))
                 except (ValueError, KeyError):
                     # JSON parsing failed, fall through to raise_for_status

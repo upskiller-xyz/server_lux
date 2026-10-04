@@ -1,9 +1,12 @@
 from typing import Any, Dict
 
-from .contracts import RemoteServiceRequest, ReferencePointRequest
-from .contracts import ReferencePointResponse
-from ...enums import ServiceName, EndpointType
+from ...enums import EndpointType, ServiceName
 from .base import RemoteService
+from .contracts import (
+    ReferencePointRequest,
+    ReferencePointResponse,
+    RemoteServiceRequest,
+)
 
 
 class ReferencePointService(RemoteService):

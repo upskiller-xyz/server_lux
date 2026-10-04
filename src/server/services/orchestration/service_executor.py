@@ -1,8 +1,9 @@
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
-import asyncio
 
 from src.server.services.helpers.parallel import ParallelRequest
+
 from ...enums import EndpointType
 
 

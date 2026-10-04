@@ -11,16 +11,19 @@ import requests
 from flask import g, has_app_context, request
 from jwt import PyJWK, PyJWTError
 
-from .auth_config import Auth0Config, AuthConfig
-from .enums import AuthType, ErrorType
+from .auth_config import Auth0Config
+from .constants import AuthHeaderBuilder
+from .enums import AuthContextKey, ErrorType, TokenClaim
 from .response_builder import ErrorResponseBuilder
 
 logger = logging.getLogger("logger")
 
-# Custom namespace-qualified claim the trial login Action stamps on the token
-# with the caller's email domain (e.g. "foretagx.se"). The trial guard keys the
-# company-wide trial clock on this value.
-TRIAL_DOMAIN_CLAIM = "https://upskiller/trial_domain"
+
+class JwksError:
+    """Templates for the JWKS/key-resolution failures raised in this module."""
+    FETCH_FAILED: str = "Failed to fetch JWKS: {error}"
+    INVALID_HEADER: str = "Invalid token header: {error}"
+    UNKNOWN_KID: str = "Unable to find signing key for kid: {kid}"
 
 
 class AuthenticationStrategy(ABC):
@@ -107,11 +110,9 @@ class TokenAuthenticationStrategy(AuthenticationStrategy):
         if not auth_header:
             return False, ErrorType.MISSING_AUTHORIZATION
 
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
+        token = AuthHeaderBuilder.extract_token(auth_header)
+        if not token:
             return False, ErrorType.INVALID_AUTH_FORMAT
-
-        token = parts[1]
 
         if not self.is_configured():
             # Fail closed: without a configured token nothing can be validated.
@@ -193,7 +194,7 @@ class JwksProvider:
             self._jwks = response.json()
         except requests.RequestException as e:
             if self._jwks is None:
-                raise RuntimeError(f"Failed to fetch JWKS: {e}")
+                raise RuntimeError(JwksError.FETCH_FAILED.format(error=e))
             # Keep serving the last good key set during an Auth0 outage.
             logger.warning("JWKS refresh failed, keeping cached keys: %s", e)
         finally:
@@ -227,12 +228,12 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
         try:
             unverified_header = jwt.get_unverified_header(token)
         except PyJWTError as e:
-            raise ValueError(f"Invalid token header: {e}")
+            raise ValueError(JwksError.INVALID_HEADER.format(error=e))
 
         kid = unverified_header.get('kid')
         key = self._jwks.get_key(kid)
         if key is None:
-            raise ValueError(f"Unable to find signing key for kid: {kid}")
+            raise ValueError(JwksError.UNKNOWN_KID.format(kid=kid))
         return PyJWK(key).key
 
     def validate_request(self, auth_header: Optional[str]) -> tuple[bool, Optional[ErrorType]]:
@@ -247,11 +248,9 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
         if not auth_header:
             return False, ErrorType.MISSING_AUTHORIZATION
 
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
+        token = AuthHeaderBuilder.extract_token(auth_header)
+        if not token:
             return False, ErrorType.INVALID_AUTH_FORMAT
-
-        token = parts[1]
 
         try:
             signing_key = self._get_signing_key(token)
@@ -263,7 +262,11 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
                 algorithms=self._config.algorithms,
                 audience=self._config.audience,
                 issuer=self._config.issuer,
-                options={"require": ["exp", "iss", "aud"]},
+                options={"require": [
+                    TokenClaim.EXPIRES_AT.value,
+                    TokenClaim.ISSUER.value,
+                    TokenClaim.AUDIENCE.value,
+                ]},
             )
 
             # Expose the subject + authorized-party (client id) so downstream
@@ -271,9 +274,9 @@ class Auth0AuthenticationStrategy(AuthenticationStrategy):
             # authenticated identity/app without re-parsing. Guarded: validation
             # must not depend on a Flask app context existing.
             if has_app_context():
-                g.auth_subject = payload.get("sub")
-                g.auth_client_id = payload.get("azp")
-                g.auth_domain = payload.get(TRIAL_DOMAIN_CLAIM)
+                setattr(g, AuthContextKey.SUBJECT.value, payload.get(TokenClaim.SUBJECT.value))
+                setattr(g, AuthContextKey.CLIENT_ID.value, payload.get(TokenClaim.AUTHORIZED_PARTY.value))
+                setattr(g, AuthContextKey.DOMAIN.value, payload.get(TokenClaim.TRIAL_DOMAIN.value))
 
             # Token is valid
             return True, None

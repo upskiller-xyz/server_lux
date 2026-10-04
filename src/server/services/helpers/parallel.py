@@ -1,5 +1,5 @@
-from typing import List, Any
 import asyncio
+from typing import Any, List
 
 
 class ParallelRequest:

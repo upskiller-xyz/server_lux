@@ -25,10 +25,10 @@ def main() -> None:
     url = os.environ.get("SERVER_URL", _DEFAULT_URL)
 
     if not image_path.is_file():
-        raise SystemExit(f"❌ Sample image not found: {image_path}")
+        raise SystemExit("❌ Sample image not found: {path}".format(path=image_path))
 
     with open(image_path, "rb") as f:
-        print(f"📂 Loading image: {image_path}")
+        print("📂 Loading image: {path}".format(path=image_path))
         files = {"file": (image_path.name, f)}
         resp = requests.post(
             url,
@@ -39,7 +39,7 @@ def main() -> None:
             },
         )
 
-    print(f"📊 Response status: {resp.status_code}")
+    print("📊 Response status: {status}".format(status=resp.status_code))
     print(json.dumps(resp.json(), indent=2))
 
 

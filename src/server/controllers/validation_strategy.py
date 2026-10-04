@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from ..enums import RequestField
+from ..enums import RequestField, ValidationMessage
 from ..exceptions import RequestValidationError
 
 
@@ -27,7 +27,7 @@ class PresenceValidator(IFieldValidator):
 
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         if field.value not in request_data:
-            return f"Missing required field: {field.value}"
+            return ValidationMessage.MISSING_FIELD.value.format(field=field.value)
         return None
 
 
@@ -37,7 +37,7 @@ class DictTypeValidator(IFieldValidator):
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         value = request_data.get(field.value)
         if value is not None and not isinstance(value, dict):
-            return f"Field '{field.value}' must be a dictionary"
+            return ValidationMessage.MUST_BE_DICT.value.format(field=field.value)
         return None
 
 
@@ -47,7 +47,7 @@ class ListTypeValidator(IFieldValidator):
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         value = request_data.get(field.value)
         if value is not None and not isinstance(value, list):
-            return f"Field '{field.value}' must be a list"
+            return ValidationMessage.MUST_BE_LIST.value.format(field=field.value)
         return None
 
 
@@ -66,7 +66,7 @@ class MeshTypeValidator(IFieldValidator):
     def validate(self, request_data: Dict[str, Any], field: RequestField) -> Optional[str]:
         value = request_data.get(field.value)
         if value is not None and not isinstance(value, self._ACCEPTED_TYPES):
-            return f"Field '{field.value}' must be a list, a split dict or a binary mesh payload"
+            return ValidationMessage.MUST_BE_MESH.value.format(field=field.value)
         return None
 
 
@@ -101,7 +101,9 @@ class ValidationStrategy:
             # No chain configured: presence is the whole contract for this field.
             if not validators:
                 if field.value not in request_data:
-                    raise RequestValidationError(f"Missing required field: {field.value}")
+                    raise RequestValidationError(
+                        ValidationMessage.MISSING_FIELD.value.format(field=field.value)
+                    )
                 continue
 
             for validator in validators:

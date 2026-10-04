@@ -1,7 +1,19 @@
 import os
 from typing import Callable, Dict
-from .enums import ServicePort, ServiceName, DeploymentMode
+
+from .enums import DeploymentMode, ServiceName, ServicePort
+from .env_keys import EnvKey
 from .maps import BaseUrlMap
+
+
+class ServiceAddressBuilder:
+    """Builds the default ``host:port`` address for a co-located service."""
+    TEMPLATE: str = "{host}:{port}"
+    UNKNOWN_SERVICE: str = "Unknown service name: {service}"
+
+    @classmethod
+    def address(cls, host: str, port: int) -> str:
+        return cls.TEMPLATE.format(host=host, port=port)
 
 
 class SessionConfig:
@@ -40,7 +52,7 @@ class ServiceConfig:
         self._adapters = self._build_url_adapters()
 
     def _get_deployment_mode(self) -> DeploymentMode:
-        mode = os.getenv("DEPLOYMENT_MODE", "production").lower()
+        mode = os.getenv(EnvKey.DEPLOYMENT_MODE.value, "production").lower()
         if mode == "local":
             return DeploymentMode.LOCAL
         return DeploymentMode.PRODUCTION
@@ -64,13 +76,13 @@ class ServiceConfig:
     @staticmethod
     def _create_url_adapter(env_var: str, host: str, port: ServicePort) -> Callable[[], str]:
         def get_url() -> str:
-            return os.getenv(env_var, f"{host}:{port.value}")
+            return os.getenv(env_var, ServiceAddressBuilder.address(host, port.value))
         return get_url
 
     def get_service_url(self, service_name: str) -> str:
         adapter = self._adapters.get(service_name)
         if not adapter:
-            raise ValueError(f"Unknown service name: {service_name}")
+            raise ValueError(ServiceAddressBuilder.UNKNOWN_SERVICE.format(service=service_name))
 
         return adapter()
 

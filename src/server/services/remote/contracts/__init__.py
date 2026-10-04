@@ -1,56 +1,28 @@
 from .base_contracts import (
+    BinaryResponse,
     RemoteServiceRequest,
     RemoteServiceResponse,
     StandardResponse,
-    BinaryResponse
 )
-from .domain_models import (
-    WindowGeometry,
-    RoomPolygon,
-    Simulation,
-    EncoderParameters
-)
-from .obstruction_contracts import (
-    ObstructionRequest,
-    ObstructionMultiRequest,
-    ObstructionParallelRequest,
-    ObstructionResponse
-)
-from .direction_angle_contracts import (
-    DirectionAngleRequest,
-    DirectionAngleResponse
-)
-from .reference_point_contracts import (
-    ReferencePointRequest,
-    ReferencePointResponse
-)
+from .direction_angle_contracts import DirectionAngleRequest, DirectionAngleResponse
+from .domain_models import EncoderParameters, RoomPolygon, Simulation, WindowGeometry
+from .encoder_contracts import EncoderResponse, Parameters
 from .external_reference_point_contracts import (
     ExternalReferencePointRequest,
-    ExternalReferencePointResponse
+    ExternalReferencePointResponse,
 )
-from .encoder_contracts import (
-    Parameters,
-    EncoderResponse
+from .main_request_contract import MainRequest
+from .merger_contracts import MergerRequest, MergerResponse
+from .model_contracts import ModelRequest, ModelResponse
+from .model_spec_contracts import ModelSpecRequest, ModelSpecResponse
+from .obstruction_contracts import (
+    ObstructionMultiRequest,
+    ObstructionParallelRequest,
+    ObstructionRequest,
+    ObstructionResponse,
 )
-from .model_contracts import (
-    ModelRequest,
-    ModelResponse
-)
-from .merger_contracts import (
-    MergerRequest,
-    MergerResponse
-)
-from .stats_contracts import (
-    StatsRequest,
-    StatsResponse
-)
-from .main_request_contract import (
-    MainRequest
-)
-from .model_spec_contracts import (
-    ModelSpecRequest,
-    ModelSpecResponse
-)
+from .reference_point_contracts import ReferencePointRequest, ReferencePointResponse
+from .stats_contracts import StatsRequest, StatsResponse
 
 __all__ = [
     # Base contracts

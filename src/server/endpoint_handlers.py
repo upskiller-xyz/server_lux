@@ -1,5 +1,6 @@
 from typing import Tuple
-from flask import Request, Response, jsonify, request
+
+from flask import Response, request
 
 from .request_handler import EndpointRequestHandler
 

@@ -1,12 +1,13 @@
-from typing import Any, Dict
 import logging
+from typing import Any, Dict
 
-from .service_executor import ExecutorFactory
-from .mask_extractor import MaskExtractor
-from ..remote.service_map import EndpointServiceMap, ServiceEndpointMap
-from ..remote import DirectionAngleService
 from ...enums import EndpointType, RequestField, ResponseKey
 from ...interfaces.orchestration_interfaces import IOrchestrator
+from ..remote import DirectionAngleService, ObstructionService
+from ..remote.model_spec_service import ModelSpecService
+from ..remote.service_map import EndpointServiceMap, ServiceEndpointMap
+from .mask_extractor import MaskExtractor
+from .service_executor import ExecutorFactory
 
 logger = logging.getLogger("logger")
 
@@ -35,14 +36,14 @@ class Orchestrator(IOrchestrator):
         for service in services:
             # Skip service if its output already exists in params
             if self._should_skip_service(service, params):
-                logger.debug(f"Skipping {service.__name__}: output already in params")
+                logger.debug("Skipping %s: output already in params", service.__name__)
                 self._drop_binary_mesh(service, params)
                 continue
 
             response = self._execute_service(service, endpoint, params, file)
             self._update_params(params, response)
             self._drop_binary_mesh(service, params)
-            logger.debug(f"After {service.__name__}: params keys={[k for k in params if k not in ('parameters', 'mesh')]}")
+            logger.debug("After %s: params keys=%s", service.__name__, [k for k in params if k not in ('parameters', 'mesh')])
 
         if ResponseKey.STATUS.value not in params:
             params[ResponseKey.STATUS.value] = ResponseKey.SUCCESS.value
@@ -96,8 +97,6 @@ class Orchestrator(IOrchestrator):
         For ObstructionService, use the original endpoint (zenith, horizon, etc.)
         For other services, use the mapped endpoint
         """
-        from ..remote import ObstructionService
-
         # /obstruction_all is orchestrated in lux: reference point, direction,
         # and external reference point are resolved first, then the remote
         # obstruction service receives the standard parallel obstruction request.
@@ -136,8 +135,6 @@ class Orchestrator(IOrchestrator):
         serializable). Only affects the binary path — a JSON (list) mesh is left
         untouched for backward compatibility.
         """
-        from ..remote import ObstructionService
-
         if service is ObstructionService and isinstance(
             params.get(RequestField.MESH.value), (bytes, bytearray)
         ):
@@ -153,9 +150,6 @@ class Orchestrator(IOrchestrator):
         Returns:
             True if service should be skipped, False otherwise
         """
-        from ..remote import ObstructionService
-        from ..remote.model_spec_service import ModelSpecService
-
         # Skip ObstructionService if both horizon and zenith already exist
         if service == ObstructionService:
             has_horizon = ResponseKey.HORIZON.value in params

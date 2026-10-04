@@ -4,18 +4,13 @@ from typing import Any, Callable, Optional
 
 from flask import g, jsonify, make_response
 
-from .enums import ErrorType, HTTPHeader, ResponseKey
-from .rate_limiter import AUTH_CLIENT_ID_KEY
+from .enums import AuthContextKey, ErrorType, HTTPHeader, ResponseKey
 from .response_builder import ErrorResponseBuilder
 from .trial_config import TrialConfig
-from .trial_store import NullTrialStore, TrialState, TrialStore, TrialStoreFactory
+from .trial_store import TrialState, TrialStore, TrialStoreFactory
 
 logger = logging.getLogger("logger")
 
-# flask.g attribute the Auth0 strategy sets from the validated token's custom
-# trial-domain claim.
-AUTH_DOMAIN_KEY = "auth_domain"
-AUTH_CLIENT_ID_KEY = "auth_client_id"  # Auth0 `azp` (authorized party = client id)
 
 
 class TrialGuard:
@@ -54,7 +49,7 @@ class TrialGuard:
         def decorated(*args: Any, **kwargs: Any) -> Any:
             if not self._applies_to_caller():
                 return f(*args, **kwargs)
-            domain = getattr(g, AUTH_DOMAIN_KEY, None)
+            domain = getattr(g, AuthContextKey.DOMAIN.value, None)
             if not domain:
                 # Fail closed: the trial Action must stamp the domain claim —
                 # a token without it cannot be attributed to a company, so it
@@ -88,7 +83,7 @@ class TrialGuard:
         """
         if not self._applies_to_caller():
             return jsonify({ResponseKey.STATUS.value: "not_applicable"})
-        domain = getattr(g, AUTH_DOMAIN_KEY, None)
+        domain = getattr(g, AuthContextKey.DOMAIN.value, None)
         if not domain:
             return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
         try:
@@ -111,7 +106,7 @@ class TrialGuard:
         configured trial client is guarded."""
         if not self._config.enabled or not self._config.client_id:
             return False
-        azp = getattr(g, AUTH_CLIENT_ID_KEY, None)
+        azp = getattr(g, AuthContextKey.CLIENT_ID.value, None)
         return azp == self._config.client_id
 
     def _reject(self, error_type: ErrorType, state: Optional[TrialState] = None):
