@@ -67,6 +67,8 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `CORS_ORIGINS` | recommended | Comma-separated browser origins allowed to call the API (the web app); empty = any origin |
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | **required** | Pinned host key (output of `ssh-keyscan <host>`, verified out of band); deploy fails if unset |
+| Secret | `DEPLOY_VARS_TOKEN` | for tag deploys | Lets a tag deploy record its ref as a GitHub Variable — see [Per-service deploys](#per-service-deploys). Without it the pin is still kept on the box, just not durably |
+| Variable | `ENCODER_REF`, `MERGER_REF`, `STATS_REF` | optional | Per-service pin; normally written automatically by a tag deploy. Unset = fall back to the box's record, then `master` |
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
 [.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
@@ -91,9 +93,22 @@ as they are, so a targeted deploy can never move code it isn't redeploying.
    quietly reverting to `master` on the next unrelated deploy.
 3. `master`.
 
-Set the **GitHub Variable** when a pin should be the durable, declared answer
-for a service: it outranks the on-box record and survives the instance being
-rebuilt. A tag dispatch on its own persists only via (2).
+**A successful tag deploy writes (1) itself**, so the pin becomes the declared
+answer rather than only a box-local side effect — and therefore survives the
+instance being rebuilt. That write needs `DEPLOY_VARS_TOKEN`: a token allowed
+to write Actions variables for the `prod` environment of this repo (confirm the
+exact fine-grained permission name against GitHub's current docs when creating
+it — the endpoint is `PUT /repos/{owner}/{repo}/environments/{env}/variables/{name}`).
+
+The write runs only after the deploy succeeds, so a Variable can never claim a
+ref that is not actually running, and it is deliberately non-fatal: if the
+token is missing or lacks permission, the run logs a warning and keeps the
+on-box record. A tag deploy still works without the token — the pin is just no
+longer durable, which is the state this whole mechanism exists to avoid, so
+treat that warning as something to fix rather than noise.
+
+Set a Variable by hand to pin a service without cutting a tag, or to roll back
+to an earlier one.
 
 Two ways to trigger:
 
