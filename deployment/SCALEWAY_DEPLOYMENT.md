@@ -51,7 +51,8 @@ only that one — see [Per-service deploys](#per-service-deploys) below).
 
 ### One-time GitHub configuration
 
-Settings → Secrets and variables → Actions (under the `prod` environment):
+Settings → Secrets and variables → Actions, **under the `prod` environment** —
+with one exception called out below the table.
 
 | Kind | Name | Required? | Purpose |
 |------|------|-----------|---------|
@@ -68,7 +69,34 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | **required** | Pinned host key (output of `ssh-keyscan <host>`, verified out of band); deploy fails if unset |
 | Secret | `DEPLOY_VARS_TOKEN` | for tag deploys | Token with `Variables: Read and write` on this repo, so a tag deploy can record its ref as a repository Variable — see [Per-service deploys](#per-service-deploys). Without it the pin is still kept on the box, just not durably |
-| Variable | `ENCODER_REF`, `MERGER_REF`, `STATS_REF` | optional | Per-service pin; normally written automatically by a tag deploy. Unset = fall back to the box's record, then `master` |
+
+#### The exception: the per-service pins are **repository** variables
+
+`ENCODER_REF`, `MERGER_REF` and `STATS_REF` go under **Settings → Secrets and
+variables → Actions → Variables**, at repository level — *not* under the `prod`
+environment like everything in the table above.
+
+| Kind | Name | Required? | Purpose |
+|------|------|-----------|---------|
+| Repository variable | `ENCODER_REF`, `MERGER_REF`, `STATS_REF` | optional | Per-service pin; normally written automatically by a tag deploy. Unset = fall back to the box's record, then `master` |
+
+This is not a style preference. `vars.*` resolves the environment scope before
+the repository scope, and a tag deploy writes the **repository** one (so its
+token needs only `Variables`, not `Environments` — see
+[Per-service deploys](#per-service-deploys)). An environment-level pin would
+therefore shadow it: the deploy would report writing a fresh pin while every
+later run kept reading the stale environment value. Automatic persistence and
+manual rollbacks would both look like they worked and silently not.
+
+**If an environment-level `ENCODER_REF` / `MERGER_REF` / `STATS_REF` already
+exists, delete it** (prod environment → Environment variables → remove), and
+re-create it at repository level if you were relying on its value. Check with:
+
+```bash
+gh api repos/upskiller-xyz/server_lux/environments/prod/variables \
+  --jq '.variables[].name'   # must not list any *_REF
+gh variable list --repo upskiller-xyz/server_lux
+```
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
 [.env.scaleway.example](.env.scaleway.example); the workflow appends the secrets
