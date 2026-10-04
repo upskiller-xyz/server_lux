@@ -98,11 +98,17 @@ merger, stats) — the only services whose source is pinned on the box. A
 targeted `--service nginx` deploy touches no checkout, so it records no pins
 and only restarts and revalidates the gateway.
 
-A pin is recorded only after Compose has successfully deployed that ref, and
-when the resolved ref differs from the recorded one the deploy forces a rebuild
-— so the pin always describes the image that is actually running. This is
-locked by behaviour tests (`deployment/tests/test-deploy-scaleway.sh`, run in
-CI), not just stated here.
+A pin is recorded only after Compose has successfully deployed it, and the
+deploy forces a rebuild whenever the checkout's **commit** differs from the
+recorded one — so the pin always describes the image that is actually running.
+The comparison is on the commit rather than the ref name because a name says
+nothing about whether the code moved: `master` advances, and a tag can be
+force-pushed. Each service therefore records both `<service>=<ref>` and
+`<service>.commit=<sha>`. The converse also holds — retagging the same commit
+under a new name rebuilds nothing, since the image would be identical.
+
+All of this is locked by behaviour tests
+(`deployment/tests/test-deploy-scaleway.sh`, run in CI), not just stated here.
 
 **A successful tag deploy writes (1) itself**, so the pin becomes the declared
 answer rather than only a box-local side effect — and therefore survives the

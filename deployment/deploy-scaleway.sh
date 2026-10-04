@@ -31,6 +31,12 @@ set -euo pipefail
 # the next deploy; without the on-box record the checkout would quietly return
 # to master and the next rebuild would replace the tagged release.
 #
+# services/.deployed-refs also records the COMMIT each service was built from,
+# and a commit that moved forces a rebuild. Tracking only the ref name would
+# miss the common case: `master` advances and force-pushed tags keep their
+# name, so the checkout changes while the name does not — and Compose would
+# keep running the old image under a pin claiming it was current.
+#
 # Prereqs on the instance: docker + docker compose v2, git.
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -116,7 +122,13 @@ declare -a REPOS=(
 # actually running — never a ref whose build or start failed halfway.
 PIN_FILE="services/.deployed-refs"
 
-read_pin() {  # $1 = short service name (encoder|merger|stats)
+# Each service records two keys: "<short>=<ref>" (what to check out) and
+# "<short>.commit=<sha>" (what was actually built). The ref answers "which
+# branch/tag"; the commit answers "is the running image still current", which a
+# ref name cannot — "master" and a force-moved tag both keep their name while
+# pointing somewhere new. Reading "<short>" never picks up "<short>.commit"
+# because the pattern is anchored on the "=" immediately after the name.
+read_pin() {  # $1 = key (encoder | encoder.commit | …)
   [[ -f "$PIN_FILE" ]] || return 0
   # Last match wins, so a rewritten pin supersedes an older line.
   sed -n "s/^$1=//p" "$PIN_FILE" | tail -n 1
@@ -131,10 +143,17 @@ write_pin() {  # $1 = short name, $2 = ref
 }
 
 echo -e "${BLUE}Pinning microservices to their configured ref...${NC}"
-# Refs staged here are written to $PIN_FILE only once the whole deploy has
-# succeeded, and a ref that differs from the recorded one forces a rebuild —
-# without --build, Compose would restart the OLD image while the checkout sits
-# on the new ref, and the pin would then describe code that never ran.
+# Pins staged here are written to $PIN_FILE only once the whole deploy has
+# succeeded, and a checkout whose COMMIT differs from the recorded one forces a
+# rebuild — without --build, Compose would restart the OLD image while the
+# checkout sits on new code, and the pin would then describe code that never ran.
+#
+# The comparison is on the commit, not the ref name, because a ref name staying
+# the same does not mean the code did: `master` moves, and a tag can be
+# force-pushed to a new commit. Comparing names would call both of those
+# "unchanged" and skip the rebuild. Comparing commits also avoids the opposite
+# waste — retagging the same commit under a new name rebuilds nothing, since
+# the image would be identical.
 PENDING_PINS=()
 for repo_info in "${REPOS[@]}"; do
   name="${repo_info%%:*}"; url="${repo_info#*:}"
@@ -163,11 +182,15 @@ for repo_info in "${REPOS[@]}"; do
     echo "  cloning $name @ $ref"
     git clone --quiet --depth 1 --branch "$ref" "$url" "services/$name"
   fi
-  if [[ "$ref" != "$(read_pin "$short")" ]]; then
-    echo "  ref changed for $short — forcing a rebuild so the image matches"
+  commit="$(git -C "services/$name" rev-parse HEAD)"
+  recorded_commit="$(read_pin "${short}.commit")"
+  if [[ "$commit" != "$recorded_commit" ]]; then
+    # Covers a changed ref, a moved branch, a force-moved tag, and the first
+    # deploy after this record was introduced (no commit stored yet).
+    echo "  $short is at a new commit (${commit:0:12}) — forcing a rebuild so the image matches"
     FORCE_BUILD=true
   fi
-  PENDING_PINS+=("$short=$ref")
+  PENDING_PINS+=("$short=$ref" "${short}.commit=$commit")
 done
 
 # ── 3. Refresh Cloudflare's published IP ranges ──────────────────────────────
