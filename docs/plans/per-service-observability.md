@@ -35,22 +35,28 @@ that shows up in its tests. Push everything that has one correct answer into
 code; keep the model for the part that actually requires judgment — deciding
 whether a deviation matters and what to do about it.
 
-## Step 1: `[call]` records at the three outbound call sites
+## Step 1: `[call]` records at the outbound call sites — **DONE (PR #94)**
 
-Every outbound request in this codebase funnels through exactly three call
-sites in `RemoteService` (`src/server/services/remote/base.py`):
+**Correction to the first write-up: it is five call sites, not three.** The
+original table missed two — and one of them is the heaviest call in the
+pipeline:
 
 | Site | Used by |
 |---|---|
 | `base.py:107` (`run`) | encoder, merger, stats, obstruction |
 | `base.py:144` (`run_binary`) | binary-response endpoints |
-| `model_service.py:64` (`run_multipart`) | **Modal** |
+| `model_service.py:64` (`run`) | **Modal** |
+| `obstruction_service.py:149` (`_run_binary` → `post_multipart`) | **the binary mesh transport — the multi-MB payload path** |
+| `model_spec_service.py:33` (`get`) | `/spec` |
+
+Instrumenting only the original three would have silently dropped the most
+expensive obstruction calls (the `_bin` route) and every spec fetch.
 
 A `CallRecorder`, shaped like `StageTimer` so it reads as the same pattern,
 wraps each call and emits one JSON line:
 
 ```
-{"ts": "...", "rid": "...", "service": "encoder", "endpoint": "/encode", "ms": 842, "outcome": "ok"}
+{"ts": ..., "rid": "...", "service": "encoder", "endpoint": "/encode", "ms": 842, "outcome": "ok"}
 ```
 
 **Service name must come from `cls.name` (the `ServiceName` enum each
@@ -72,21 +78,45 @@ the `log_format` change already planned for the nginx access log (adding
 config work, same motivation (today's access log has no timing and no
 correlation id).
 
-## Step 2: fix `window_processor.py`'s thread pool before any of this matters
+Two things the review of PR #94 added, both now part of the implementation:
 
-`window_processor.py:66-75` fans out per-window work with
-`loop.run_in_executor(None, self.process_single_window, ...)`.
+- **The rid is attacker-controlled input** (in direct deployments without the
+  gateway, any client sets it) that lands in every `[call]` record — where the
+  per-window fan-out multiplies it. It is sanitized with the existing
+  telemetry `HeaderValueSanitizer` before use: control characters stripped
+  (log forging), 128-char cap (log amplification), control-only collapses to
+  `"-"`.
+- **`X-Request-Id` must be in CORS `EXPOSED_HEADERS`** or browsers hide it
+  from the web app — and a client-side report that can't read the id can't
+  join on it.
+
+**Known gap, deliberately not in step 1:** lux does not forward the rid on
+its *outbound* calls (`_auth_headers` carries auth only), so the services
+(encoder, obstruction, merger, stats) cannot correlate even if they wanted
+to. The lux-side records see each hop from the caller's side, which answers
+"which hop is slow"; per-service instrumentation is worth adding only when
+the reduce output names the service that needs it (the recorder is a
+self-contained helper, trivial to port). Forwarding the rid outbound is a
+small change that unlocks the per-service half later without touching the
+five repos now.
+
+## Step 2: fix the thread pools before any of this matters — **DONE (PR #94)**
+
+**Correction to the first write-up: there are two fan-outs, not one.**
+`window_processor.py:66-75` (per-window) *and*
+`service_executor.py:49` (`ParallelServiceExecutor` — the reference-point /
+obstruction fan-out) both used `loop.run_in_executor(None, ...)`.
 **`run_in_executor` does not propagate context to the worker thread** — a
 span or correlation id set as a contextvar on the calling thread will not be
-visible inside the executor thread. Every span created inside the per-window
+visible inside the executor thread. Every span created inside either
 fan-out would become a disconnected root instead of a child of the request's
 span, producing N unrelated trace fragments per run instead of one tree.
 
-Fix: switch to `asyncio.to_thread(...)`, which copies the context via
-`contextvars.copy_context()`. One-line change, no behavior difference beyond
-fixing the context propagation, and it is a prerequisite for `rid`
-correlation to actually work across the fan-out — not just for OpenTelemetry
-later.
+Fix: switch both to `asyncio.to_thread(...)`, which copies the context via
+`contextvars.copy_context()`. One-line change per site, no behavior
+difference beyond fixing the context propagation, and it is a prerequisite
+for `rid` correlation to actually work across the fan-outs — not just for
+OpenTelemetry later.
 
 This also matters for the CI/CD-adjacent question of how much CPU the
 encoder needs: a single request can fan out to up to 39 windows (seen in the
@@ -119,10 +149,15 @@ want traceparent-correlated traces per run.
 ## Step 4: one place to put all of it
 
 **JSONL to Object Storage, one file per day.** Credentials already exist
-(`SCW_ACCESS_KEY` / `SCW_SECRET_KEY` / `SCW_ENDPOINT_URL`, currently used for
-the model bucket) and no new infrastructure is needed. At this volume
-(roughly 8 runs/day, a handful of calls each) a week of data is a few hundred
-kilobytes.
+(`SCW_ACCESS_KEY` / `SCW_SECRET_KEY` / `SCW_ENDPOINT_URL` — used for the model
+bucket in the full-stack setup; optional in the Scaleway stack, so this step
+adds them to that deploy) and no new infrastructure is needed. At this
+volume (roughly 8 runs/day, a handful of calls each) a week of data is a few
+hundred kilobytes.
+
+Until this step is built, the records live only in container stdout
+(`docker logs` / `docker compose logs`), so they reset on every deploy — the
+same discontinuity the deploy marker (step 5) exists to explain.
 
 Why not push straight into an observability backend (Cockpit, Tempo,
 Prometheus): a flat file is readable by a reduce script with no API keys, no
@@ -203,17 +238,17 @@ When the full job is built:
 
 ## Order to build
 
-1. `[call]` JSONL at the three `RemoteService` call sites, with service name
-   from `cls.name` — plus the `asyncio.to_thread` fix, without which
-   correlation across the fan-out doesn't work.
+1. **DONE (PR #94):** `[call]` JSONL at all five `RemoteService` call sites,
+   with service name from `cls.name` — plus the `asyncio.to_thread` fix in
+   both fan-outs, without which correlation across them doesn't work.
 2. `traceparent` propagation into the Modal app (or, cheaper first cut, pull
    from Modal's API in the reduce step).
 3. Daily rotation to Object Storage.
 4. The deploy marker in `deploy-scaleway.yml`.
-5. The reducer, committed to the repo with tests. `concurrency.py` and
-   `modal_stats.py` (built ad hoc during the Modal-log analysis) are the
-   prototype for this — same pattern, promote them from scratch scripts to
-   tested, committed tooling rather than writing the reducer from zero.
+5. The reducer, committed to the repo with tests. **Correction:** the
+   original write-up said `concurrency.py` and `modal_stats.py` (built ad hoc
+   during the Modal-log analysis) were in the repo to promote — they never
+   were committed; the reducer is written from zero when this step comes up.
 6. The weekly job — once 1–5 have enough days of real data behind them.
 
 ## Relationship to OpenTelemetry
@@ -228,7 +263,7 @@ auto-instrumentation cuts against this codebase's explicit, no-hidden-control-fl
 style (`CLAUDE.md`).
 
 The reconciliation: build the `[call]` log lines at exactly the seams
-OpenTelemetry would use — the same three call sites, the Flask request
+OpenTelemetry would use — the same five call sites, the Flask request
 entry, the same correlation id discipline. When OpenTelemetry is justified
 by actual traffic, the migration is replacing the emit layer at seams already
 cut correctly, not re-discovering where the seams should be.
