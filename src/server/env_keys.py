@@ -61,3 +61,14 @@ class EnvKey(ExtendedEnumMixin, Enum):
     TRIAL_REDIS_URL = "TRIAL_REDIS_URL"
     TRIAL_KEY_PREFIX = "TRIAL_KEY_PREFIX"
     TRIAL_ALLOW_LOCAL_STORE = "TRIAL_ALLOW_LOCAL_STORE"
+
+    # ── Call-record persistence ([call] JSONL → Object Storage) ────────────
+    # Disabled unless CALL_RECORDS_BUCKET is set: without a bucket the
+    # records still go to stdout (docker logs) and are simply not persisted.
+    CALL_RECORDS_BUCKET = "CALL_RECORDS_BUCKET"
+    CALL_RECORDS_DIR = "CALL_RECORDS_DIR"
+    CALL_RECORDS_FLUSH_SECONDS = "CALL_RECORDS_FLUSH_SECONDS"
+    SCW_ACCESS_KEY = "SCW_ACCESS_KEY"
+    SCW_SECRET_KEY = "SCW_SECRET_KEY"
+    SCW_REGION = "SCW_REGION"
+    SCW_ENDPOINT_URL = "SCW_ENDPOINT_URL"

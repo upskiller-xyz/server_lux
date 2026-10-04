@@ -31,6 +31,7 @@ from flask import g, request
 
 from ...enums import HTTPHeader, ServiceName
 from ...telemetry import HeaderValueSanitizer
+from .call_record_store import CallRecordStore
 
 logger = logging.getLogger("logger")
 
@@ -166,6 +167,7 @@ class CallRecorder:
     ) -> bool:
         record = self.build_record(outcome=CallOutcome.ERROR if exc_type else CallOutcome.OK)
         logger.info(self.LOG_PREFIX + " %s", json.dumps(record))
+        CallRecordStore.record(record)
         return False  # never suppress exceptions
 
     def build_record(self, outcome: str) -> dict:

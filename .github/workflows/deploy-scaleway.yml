@@ -298,6 +298,10 @@ jobs:
           BUILD: ${{ inputs.build }}
           FORCE_BUILD: ${{ steps.target.outputs.force_build }}
           COMPOSE_SERVICE: ${{ steps.target.outputs.compose_service }}
+          # Deploy marker fields: the sha actually deployed (after the fetch,
+          # master may have moved) and who/what triggered the run.
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
           # Fail fast on missing connection config — clearer than a later SSH/cd error.
@@ -345,6 +349,25 @@ jobs:
           shred -u "$HOME/.lux_env.runtime" 2>/dev/null || rm -f "$HOME/.lux_env.runtime"
           bash deploy-scaleway.sh $BUILD_FLAG $SERVICE_FLAG
           REMOTE
+
+          # 3. Deploy marker: one JSON line in the same record stream, so a
+          #    reduced report can segment by "before/after sha X" instead of
+          #    only reporting a latency number with no cause attached. Same
+          #    directory the [call] records live in; the app's next flush
+          #    cycle uploads it with the day file. Deliberately non-fatal —
+          #    the deploy already succeeded and a missing marker degrades the
+          #    report, not the deployment.
+          marker_env=$(printf 'DEPLOY_REF=%q SHA=%q ACTOR=%q BUILD_FLAG=%q SERVICE_FLAG=%q' \
+            "$DEPLOY_REF" "$SHA" "$ACTOR" "$build_flag" "$service_flag")
+          ssh $ssh_opts "${USER_}@${HOST}" "$marker_env bash -s" <<'MARKER'
+          set -euo pipefail
+          mkdir -p /var/log/lux/call-records
+          built=false; [ "$BUILD_FLAG" = "--build" ] && built=true
+          service=""; [ -n "$SERVICE_FLAG" ] && service="${SERVICE_FLAG#--service }"
+          printf '{"ts": %s, "kind": "deploy", "ref": "%s", "sha": "%s", "actor": "%s", "built": %s, "service": "%s"}\n' \
+            "$(date -u +%s.%N)" "$DEPLOY_REF" "$SHA" "$ACTOR" "$built" "$service" \
+            >> /var/log/lux/call-records/deployments.jsonl
+          MARKER
 
       - name: Persist the deployed ref as a GitHub Variable
         # Only a run that pinned a ref has something new worth recording; a

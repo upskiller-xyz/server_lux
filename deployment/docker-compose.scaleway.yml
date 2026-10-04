@@ -88,6 +88,23 @@ services:
       # this box (shared across gunicorn workers); override with an external
       # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.
       - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
+      # [call]-record persistence: JSONL on a bind-mounted dir, uploaded to
+      # Object Storage. Unset CALL_RECORDS_BUCKET = stdout-only (ephemeral).
+      - CALL_RECORDS_BUCKET=${CALL_RECORDS_BUCKET:-}
+      - CALL_RECORDS_DIR=${CALL_RECORDS_DIR:-/var/log/lux/call-records}
+      - CALL_RECORDS_FLUSH_SECONDS=${CALL_RECORDS_FLUSH_SECONDS:-30}
+      - SCW_ACCESS_KEY=${SCW_ACCESS_KEY:-}
+      - SCW_SECRET_KEY=${SCW_SECRET_KEY:-}
+      - SCW_REGION=${SCW_REGION:-fr-par}
+      - SCW_ENDPOINT_URL=${SCW_ENDPOINT_URL:-https://s3.fr-par.scw.cloud}
+    volumes:
+      # Survives container recreation (a deploy is `up -d --force-recreate`,
+      # which would otherwise wipe the records exactly when they matter).
+      - /var/log/lux:/var/log/lux
+    logging:
+      driver: "local"
+      options:
+        max-size: "50m"
     env_file:
       - .env.scaleway
     depends_on:

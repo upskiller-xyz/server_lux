@@ -33,6 +33,7 @@ from src.server.maps import AuthTypeMessageMap
 from src.server.rate_limiter import RateLimiter
 from src.server.request_handler import EndpointRequestHandler
 from src.server.route_configurator import RouteBuilder, RouteConfigurator
+from src.server.services.helpers.call_record_store import CallRecordStore
 from src.server.services.helpers.call_recorder import RequestIdMiddleware
 from src.server.services.remote import (
     EncoderService,
@@ -78,6 +79,10 @@ class ServerApplication:
 
         if self._api_docs_enabled():
             Swagger(self._app, template=get_swagger_template(), config=get_swagger_config())
+
+        # Before any component starts: [call] records buffer up from the first
+        # request, so the store must exist first. No-op unless a bucket is set.
+        CallRecordStore.configure()
 
         self._initialize_components()
         self._setup_routes()
