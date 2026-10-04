@@ -49,7 +49,10 @@ def _config(enabled: bool = True, client_id: str | None = TRIAL_CLIENT, hours: i
 
 
 def _guard(config: TrialConfig | None = None, store: TrialStore | None = None) -> TrialGuard:
-    return TrialGuard(config or _config(), store or InMemoryTrialStore("test:trial"))
+    resolved = config or _config()
+    # The store owns the window length, so it is built from the same config
+    # the guard reads — exactly as TrialStoreFactory does in production.
+    return TrialGuard(resolved, store or InMemoryTrialStore("test:trial", resolved.duration_seconds))
 
 
 def _app_with_route(
@@ -109,7 +112,7 @@ def test_deadline_is_fixed_after_first_request():
 
 
 def test_trial_is_per_domain():
-    store = InMemoryTrialStore("test:trial")
+    store = InMemoryTrialStore("test:trial", 168 * 3600)
     guard = _guard(store=store)
     x = _app_with_route(guard, client_id=TRIAL_CLIENT, domain="foretagx.se").test_client()
     y = _app_with_route(guard, client_id=TRIAL_CLIENT, domain="foretagy.se").test_client()
@@ -246,23 +249,24 @@ class _ExpiredTrialStore(TrialStore):
     """A store whose every window is already in the past."""
 
     EXPIRED_HOURS = 1
+    DURATION_SECONDS = 168 * 3600
 
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def activate_or_get(self, domain: str) -> TrialState:
         started = datetime.now(timezone.utc) - timedelta(
-            seconds=duration_seconds + self.EXPIRED_HOURS * 3600
+            seconds=self.DURATION_SECONDS + self.EXPIRED_HOURS * 3600
         )
-        expires = started + timedelta(seconds=duration_seconds)
+        expires = started + timedelta(seconds=self.DURATION_SECONDS)
         return TrialState(domain=domain, started_at=started, expires_at=expires)
 
     def get(self, domain: str) -> TrialState:
         # The window exists, it is simply over — distinct from "not started".
-        return self.activate_or_get(domain, 168 * 3600)
+        return self.activate_or_get(domain)
 
 
 class _FailingTrialStore(TrialStore):
     """A store whose backend is unavailable."""
 
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def activate_or_get(self, domain: str) -> TrialState:
         raise RuntimeError("redis down")
 
     def get(self, domain: str) -> TrialState:
@@ -271,7 +275,7 @@ class _FailingTrialStore(TrialStore):
 def test_status_does_not_start_the_clock():
     # A plugin polling status on startup must not burn trial time: the window
     # only starts on a real guarded request.
-    store = InMemoryTrialStore("test:trial")
+    store = InMemoryTrialStore("test:trial", 168 * 3600)
     guard = _guard(store=store)
     client = _app_with_route(guard, client_id=TRIAL_CLIENT, domain="foretagx.se").test_client()
 
@@ -379,20 +383,24 @@ class TestRedisTrialStore:
     HOUR = 3600
 
     def test_first_call_activates_and_second_call_reads_the_same_window(self):
-        store = RedisTrialStore(_FakeRedis(), "test:trial")
+        store = RedisTrialStore(_FakeRedis(), "test:trial", self.HOUR)
 
-        first = store.activate_or_get("foretagx.se", self.HOUR)
-        second = store.activate_or_get("foretagx.se", self.HOUR)
+        first = store.activate_or_get("foretagx.se")
+        second = store.activate_or_get("foretagx.se")
 
         assert first == second
         assert not first.is_expired
 
     def test_changed_duration_does_not_move_an_active_window(self):
-        store = RedisTrialStore(_FakeRedis(), "test:trial")
+        # TRIAL_HOURS raised after activation. The length now lives on the
+        # store, so the restart is modelled as a second store over the same
+        # Redis — the running window must not grow with it.
+        client = _FakeRedis()
+        store = RedisTrialStore(client, "test:trial", self.HOUR)
+        restarted = RedisTrialStore(client, "test:trial", 100 * self.HOUR)
 
-        original = store.activate_or_get("foretagx.se", self.HOUR)
-        # TRIAL_HOURS raised after activation: the running window must not grow.
-        later = store.activate_or_get("foretagx.se", 100 * self.HOUR)
+        original = store.activate_or_get("foretagx.se")
+        later = restarted.activate_or_get("foretagx.se")
 
         assert later.expires_at == original.expires_at
         assert later.started_at == original.started_at
@@ -401,11 +409,11 @@ class TestRedisTrialStore:
         # Item 14: repairing the bookkeeping half must never overwrite a live
         # deadline — that would reset an expired company's trial.
         client = _FakeRedis()
-        store = RedisTrialStore(client, "test:trial")
-        original = store.activate_or_get("foretagx.se", self.HOUR)
+        store = RedisTrialStore(client, "test:trial", self.HOUR)
+        original = store.activate_or_get("foretagx.se")
         del client.store[TrialKeyBuilder(TEST_PREFIX).started("foretagx.se")]
 
-        repaired = store.activate_or_get("foretagx.se", self.HOUR)
+        repaired = store.activate_or_get("foretagx.se")
 
         assert repaired.expires_at == original.expires_at
         assert repaired.started_at == original.started_at
@@ -415,11 +423,11 @@ class TestRedisTrialStore:
         # The deadline is the canonical key; losing it genuinely loses the
         # trial, and the pair is restored whole.
         client = _FakeRedis()
-        store = RedisTrialStore(client, "test:trial")
-        store.activate_or_get("foretagx.se", self.HOUR)
+        store = RedisTrialStore(client, "test:trial", self.HOUR)
+        store.activate_or_get("foretagx.se")
         client.store.clear()
 
-        restored = store.activate_or_get("foretagx.se", self.HOUR)
+        restored = store.activate_or_get("foretagx.se")
 
         assert not restored.is_expired
         keys = TrialKeyBuilder(TEST_PREFIX)
@@ -428,18 +436,18 @@ class TestRedisTrialStore:
 
     def test_get_is_a_pure_read(self):
         client = _FakeRedis()
-        store = RedisTrialStore(client, "test:trial")
+        store = RedisTrialStore(client, "test:trial", self.HOUR)
 
         assert store.get("foretagx.se") is None
         assert client.store == {}
 
-        store.activate_or_get("foretagx.se", self.HOUR)
+        store.activate_or_get("foretagx.se")
         assert store.get("foretagx.se").expires_at
 
     def test_get_is_keyed_per_domain(self):
-        store = RedisTrialStore(_FakeRedis(), "test:trial")
+        store = RedisTrialStore(_FakeRedis(), "test:trial", self.HOUR)
 
-        store.activate_or_get("foretagx.se", self.HOUR)
+        store.activate_or_get("foretagx.se")
 
         assert store.get("foretagy.se") is None
 
@@ -561,15 +569,15 @@ class TestReviewFindings:
         # is the only surviving truth, so the start must be derived from it —
         # writing the current time would report a window starting after it ends.
         client = _FakeRedis()
-        store = RedisTrialStore(client, TEST_PREFIX)
+        store = RedisTrialStore(client, TEST_PREFIX, self.HOUR)
         keys = TrialKeyBuilder(TEST_PREFIX)
-        store.activate_or_get("foretagx.se", self.HOUR)
+        store.activate_or_get("foretagx.se")
         expired_deadline = int(datetime.now(timezone.utc).timestamp()) - 10 * self.HOUR
         client.store[keys.deadline("foretagx.se")] = str(expired_deadline)
         del client.store[keys.started("foretagx.se")]
 
         # Act
-        repaired = store.activate_or_get("foretagx.se", self.HOUR)
+        repaired = store.activate_or_get("foretagx.se")
 
         # Assert
         assert int(repaired.expires_at.timestamp()) == expired_deadline
@@ -582,3 +590,25 @@ class TestReviewFindings:
         # disabled deployment must not refuse to start over it.
         with patch.dict(os.environ, {"TRIAL_ENABLED": "false", "TRIAL_HOURS": "0"}, clear=True):
             assert TrialConfig.from_environment().enabled is False
+
+    def test_get_derives_a_lost_start_instead_of_reporting_the_deadline(self):
+        # Arrange: a live window whose bookkeeping half is gone. The pure read
+        # has no activation to repair it, so it must derive the start from the
+        # deadline and its own window length — reporting the deadline itself
+        # would claim a window that starts when it ends.
+        client = _FakeRedis()
+        store = RedisTrialStore(client, TEST_PREFIX, self.HOUR)
+        keys = TrialKeyBuilder(TEST_PREFIX)
+        store.activate_or_get("foretagx.se")
+        deadline = int(client.store[keys.deadline("foretagx.se")])
+        del client.store[keys.started("foretagx.se")]
+
+        # Act
+        state = store.get("foretagx.se")
+
+        # Assert
+        assert int(state.expires_at.timestamp()) == deadline
+        assert int(state.started_at.timestamp()) == deadline - self.HOUR
+        assert state.started_at < state.expires_at
+        # And the read stayed pure: nothing was written back.
+        assert keys.started("foretagx.se") not in client.store

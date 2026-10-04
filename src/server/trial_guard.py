@@ -55,7 +55,7 @@ class TrialGuard:
                 # gets no trial window.
                 return self._reject(ErrorType.TRIAL_DOMAIN_MISSING)
             try:
-                state = self._store.activate_or_get(domain, self._config.duration_seconds)
+                state = self._store.activate_or_get(domain)
             except Exception as exc:
                 # A store outage must not take the server down; failing closed
                 # here is safe because it only affects trial callers, never

@@ -66,10 +66,14 @@ class TrialStore(ABC):
     A company's clock starts on its first request (``activate_or_get``); every
     later request reads the same fixed window. ``get`` is the pure read used by
     the status endpoint, which must never start a clock.
+
+    The window length is the store's own, fixed at construction rather than
+    passed per call, so the activation path and the read path cannot disagree
+    about how long a window is.
     """
 
     @abstractmethod
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def activate_or_get(self, domain: str) -> TrialState:
         """Return the existing trial window for ``domain``, or start one now.
 
         Idempotent and atomic: concurrent first requests from the same company
@@ -88,19 +92,20 @@ class InMemoryTrialStore(TrialStore):
     """Process-local trial deadlines. Not shared across workers — only for
     local development and tests."""
 
-    def __init__(self, key_prefix: str):
+    def __init__(self, key_prefix: str, duration_seconds: int):
         self._keys = TrialKeyBuilder(key_prefix)
+        self._duration_seconds = duration_seconds
         self._lock = threading.Lock()
         # deadline key -> (started_epoch_seconds, expires_epoch_seconds)
         self._windows: Dict[str, Tuple[float, float]] = {}
 
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def activate_or_get(self, domain: str) -> TrialState:
         key = self._keys.deadline(domain)
         now = time.time()
         with self._lock:
             window = self._windows.get(key)
             if window is None:
-                started, expires = now, now + duration_seconds
+                started, expires = now, now + self._duration_seconds
                 self._windows[key] = (started, expires)
             else:
                 started, expires = window
@@ -136,11 +141,12 @@ class RedisTrialStore(TrialStore):
     expired company a brand-new trial.
     """
 
-    def __init__(self, client, key_prefix: str):
+    def __init__(self, client, key_prefix: str, duration_seconds: int):
         self._client = client
         self._keys = TrialKeyBuilder(key_prefix)
+        self._duration_seconds = duration_seconds
 
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def activate_or_get(self, domain: str) -> TrialState:
         deadline_key = self._keys.deadline(domain)
         started_key = self._keys.started(domain)
         now = int(time.time())
@@ -155,7 +161,7 @@ class RedisTrialStore(TrialStore):
             # under NX so concurrent first requests converge on one writer, and
             # re-read rather than trusting our own candidate values.
             pipe = self._client.pipeline()
-            pipe.set(deadline_key, now + duration_seconds, nx=True)
+            pipe.set(deadline_key, now + self._duration_seconds, nx=True)
             pipe.set(started_key, now, nx=True)
             pipe.execute()
             deadline_raw = self._client.get(deadline_key)
@@ -166,7 +172,7 @@ class RedisTrialStore(TrialStore):
             # repaired, and only from the deadline it must stay consistent with.
             started_raw = self._client.get(started_key)
         if started_raw is None:
-            started_raw = int(deadline_raw) - duration_seconds
+            started_raw = int(deadline_raw) - self._duration_seconds
             self._client.set(started_key, started_raw, nx=True)
         return self._state(domain, int(started_raw), int(deadline_raw))
 
@@ -179,9 +185,17 @@ class RedisTrialStore(TrialStore):
         if deadline_raw is None:
             return None
         deadline = int(deadline_raw)
-        # A missing ``:started`` must not hide an active window from the status
-        # endpoint; fall back to the deadline as the best known start.
-        started = int(started_raw) if started_raw is not None else deadline
+        if started_raw is None:
+            # A missing ``:started`` must not hide an active window from the
+            # status endpoint, and must not be reported as the deadline either
+            # — that claims a window starting when it ends. Derive it from the
+            # deadline and the store's own window length, exactly as the
+            # activation path repairs it. The reported start therefore follows
+            # the configured length, which is the same compromise the repair
+            # on the write path already makes.
+            started = deadline - self._duration_seconds
+        else:
+            started = int(started_raw)
         return self._state(domain, started, deadline)
 
     @staticmethod
@@ -196,12 +210,15 @@ class RedisTrialStore(TrialStore):
 class NullTrialStore(TrialStore):
     """Used when the trial guard is disabled — never starts or blocks anything."""
 
-    def activate_or_get(self, domain: str, duration_seconds: int) -> TrialState:
+    def __init__(self, duration_seconds: int = 0):
+        self._duration_seconds = duration_seconds
+
+    def activate_or_get(self, domain: str) -> TrialState:
         started_at = datetime.now(timezone.utc)
         return TrialState(
             domain=domain,
             started_at=started_at,
-            expires_at=started_at + timedelta(seconds=duration_seconds),
+            expires_at=started_at + timedelta(seconds=self._duration_seconds),
         )
 
     def get(self, domain: str) -> Optional[TrialState]:
@@ -214,14 +231,14 @@ class TrialStoreFactory:
 
     def create(self, config: TrialConfig) -> TrialStore:
         if not config.enabled or not config.client_id:
-            return NullTrialStore()
+            return NullTrialStore(config.duration_seconds)
 
         if config.redis_url:
             client = redis.Redis.from_url(config.redis_url, decode_responses=True)
-            return RedisTrialStore(client, config.key_prefix)
+            return RedisTrialStore(client, config.key_prefix, config.duration_seconds)
 
         logger.warning(
             "TRIAL_ENABLED but no REDIS_URL set — using in-memory trial store. "
             "This is NOT shared across gunicorn workers/instances; set REDIS_URL in production."
         )
-        return InMemoryTrialStore(config.key_prefix)
+        return InMemoryTrialStore(config.key_prefix, config.duration_seconds)
