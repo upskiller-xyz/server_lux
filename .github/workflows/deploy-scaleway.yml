@@ -331,16 +331,24 @@ jobs:
             echo "::warning::DEPLOY_VARS_TOKEN is not set. The pin was recorded on the box (services/.deployed-refs) but not as a GitHub Variable, so it will not survive the instance being rebuilt."
             exit 0
           fi
+          # Repository-level, not --env prod: writing an environment variable
+          # needs the "Environments" permission, which also governs that
+          # environment's protection rules — so the token could remove the
+          # required reviewers gating this very deploy. Repository variables
+          # need "Variables" instead, which touches nothing but variables.
+          # vars.<NAME>_REF still reads it: lookup falls back from environment
+          # to repository. Do NOT also create an environment-level <NAME>_REF —
+          # it would shadow what this writes, and the deploy would read a stale
+          # pin while reporting a fresh one.
+          #
           # Deliberately non-fatal. The deploy itself already succeeded and the
           # on-box record already holds the pin, so failing the run here would
           # misreport a deploy that worked. The warning is the signal that
           # durable persistence degraded to the box-local record.
-          # --env must match this job's `environment:` so the value is read back
-          # by vars.<NAME>_REF on the next run.
-          if gh variable set "$REF_VAR_NAME" --env prod --body "$REF_VALUE"; then
-            echo "Recorded ${REF_VAR_NAME}=${REF_VALUE} (environment: prod)."
+          if gh variable set "$REF_VAR_NAME" --body "$REF_VALUE"; then
+            echo "Recorded ${REF_VAR_NAME}=${REF_VALUE} (repository variable)."
           else
-            echo "::warning::Could not set ${REF_VAR_NAME}. Check DEPLOY_VARS_TOKEN's permission to write Actions variables for the prod environment. The pin is still recorded on the box."
+            echo "::warning::Could not set ${REF_VAR_NAME}. Check that DEPLOY_VARS_TOKEN has Variables: write on this repo. The pin is still recorded on the box."
           fi
 
       - name: Clean up local secrets

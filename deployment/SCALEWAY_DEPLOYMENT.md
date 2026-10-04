@@ -67,7 +67,7 @@ Settings → Secrets and variables → Actions (under the `prod` environment):
 | Variable | `CORS_ORIGINS` | recommended | Comma-separated browser origins allowed to call the API (the web app); empty = any origin |
 | Variable | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | when `AUTH_TYPE=auth0` | Auth0 tenant + API identifier (public, not secrets) |
 | Variable | `SSH_KNOWN_HOSTS` | **required** | Pinned host key (output of `ssh-keyscan <host>`, verified out of band); deploy fails if unset |
-| Secret | `DEPLOY_VARS_TOKEN` | for tag deploys | Lets a tag deploy record its ref as a GitHub Variable — see [Per-service deploys](#per-service-deploys). Without it the pin is still kept on the box, just not durably |
+| Secret | `DEPLOY_VARS_TOKEN` | for tag deploys | Token with `Variables: Read and write` on this repo, so a tag deploy can record its ref as a repository Variable — see [Per-service deploys](#per-service-deploys). Without it the pin is still kept on the box, just not durably |
 | Variable | `ENCODER_REF`, `MERGER_REF`, `STATS_REF` | optional | Per-service pin; normally written automatically by a tag deploy. Unset = fall back to the box's record, then `master` |
 
 Non-secret tunables (workers/CPUs/RAM) stay in the committed
@@ -112,10 +112,19 @@ All of this is locked by behaviour tests
 
 **A successful tag deploy writes (1) itself**, so the pin becomes the declared
 answer rather than only a box-local side effect — and therefore survives the
-instance being rebuilt. That write needs `DEPLOY_VARS_TOKEN`: a token allowed
-to write Actions variables for the `prod` environment of this repo (confirm the
-exact fine-grained permission name against GitHub's current docs when creating
-it — the endpoint is `PUT /repos/{owner}/{repo}/environments/{env}/variables/{name}`).
+instance being rebuilt. That write needs `DEPLOY_VARS_TOKEN` with
+**`Variables: Read and write`** on this repo.
+
+These are **repository** variables, not environment ones, on purpose. Writing
+an environment variable requires the `Environments` permission, which also
+governs that environment's protection rules — a token with it could remove the
+required reviewers gating this very deploy. `Variables` touches nothing but
+variables. `vars.ENCODER_REF` still resolves, because lookup falls back from
+environment to repository scope.
+
+**Do not also define an environment-level `ENCODER_REF` / `MERGER_REF` /
+`STATS_REF`.** It would shadow what the deploy writes, so a run would read a
+stale pin while reporting a fresh one.
 
 The write runs only after the deploy succeeds, so a Variable can never claim a
 ref that is not actually running, and it is deliberately non-fatal: if the
