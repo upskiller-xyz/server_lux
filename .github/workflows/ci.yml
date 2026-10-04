@@ -38,10 +38,9 @@ jobs:
           # Project convention: .format()/%-formatting and named template
           # classes instead of f-strings, so messages stay greppable and log
           # calls stay lazy. Keep this gate green rather than adding exceptions.
-          if grep -rnE '(^|[^A-Za-z0-9_-])f"' src tests --include='*.py'; then
-            echo "::error::f-strings are not allowed — use .format() or a template class"
-            exit 1
-          fi
+          # AST-based: a grep for `f"` misses f'...', f'''...''' and friends,
+          # so the gate would pass while prohibited code remained.
+          python scripts/check_no_fstrings.py src tests
 
       - name: Run tests
         run: python -m pytest tests -q

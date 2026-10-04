@@ -208,7 +208,6 @@ Calculate direction angles for windows.
 - `/v1/obstruction_parallel` - Parallel obstruction calculation
 - `/v1/encode_raw` - Raw encoding without preprocessing
 - `/v1/merge` - Merge multiple window results
-- `GET /v1/trial/status` - Trial window status for the caller (read-only; never starts the clock)
 
 ---
 

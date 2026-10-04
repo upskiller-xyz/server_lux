@@ -1,0 +1,5 @@
+# TLS origin cert + key are secrets — never commit them.
+# Keep the directory (and this file) tracked so the compose bind-mount has a target.
+*
+!.gitignore
+!README.md

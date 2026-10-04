@@ -336,39 +336,6 @@ Merge multiple window simulation results into a single combined image.
 
 ---
 
-### Trial
-
-#### `GET /v1/trial/status`
-
-Read-only status of the caller's company-wide trial window. Requires
-authentication; no request body. A pure read — it never starts the trial clock
-and never fails on an expired trial, so the plugin can render the state
-directly. Only the trial Auth0 client gets a real window; every other client is
-reported as `not_applicable`.
-
-**Response (trial running):**
-```json
-{
-  "status": "active",
-  "trial_started_at": "2026-10-01T08:14:03+00:00",
-  "trial_expires_at": "2026-10-08T08:14:03+00:00",
-  "remaining_hours": 93.4
-}
-```
-
-**`status` values:**
-- `not_applicable` — the caller is not the trial client (paying customer, web app)
-- `not_started` — no guarded request made yet; `remaining_hours` is the full window
-- `active` — trial running
-- `expired` — window has passed; guarded endpoints now return `403 trial_expired`
-
-Responses for a known window also carry the `X-Trial-Started-At` and
-`X-Trial-Expires-At` headers, as every guarded endpoint does. See
-[auth-and-rate-limiting.md](auth-and-rate-limiting.md) for the full trial
-mechanics.
-
----
-
 ## Error Responses
 
 All endpoints return errors in the following format:

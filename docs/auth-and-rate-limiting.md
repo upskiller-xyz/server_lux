@@ -107,37 +107,16 @@ email domain as a custom claim `https://upskiller/trial_domain` on the token.
 The domain is the company: all users at `foretagx.se` share one trial clock.
 
 - **Activation**: the company's **first request** writes the deadline to Redis
-  (`SET lux:trial:deadline:<domain> <expires> NX`, plus a
-  `lux:trial:started:<domain>` sibling recording the original start) — no
-  pre-registration, no per-user state. Everyone at the company then sees the
-  same fixed window. The domain is always the **last** key segment, so no
-  domain value can address another company's keys.
+  (`SET lux:trial:<domain> <expires> NX`) — no pre-registration, no per-user
+  state. Everyone at the company then sees the same fixed window.
 - **Scope**: only the trial client is guarded. Paying Revit customers and the
   web app pass through untouched, even on the same endpoints.
-- **Fail-closed**: a trial token without the domain claim — or with one that is
-  not a valid hostname — is rejected (`trial_domain_missing`); a Redis outage
-  blocks trial callers with a retryable `trial_store_unavailable` (503) rather
-  than handing out unlimited access. Neither failure mode can affect paying
-  customers.
-- **The claim is validated, not trusted**: the domain is stamped by an Auth0
-  Action, outside this codebase, and then becomes part of a Redis key. It is
-  normalised (trimmed, lower-cased) and checked against RFC 1035 hostname rules
-  before use, so a claim carrying the key separator, whitespace or a newline
-  cannot reach another company's keys or the log.
-- **No TTL on the keys**: expiry is decided by comparing the stored deadline to
-  the clock, never by the key disappearing — a TTL (or a Redis eviction) would
-  hand an expired company a brand-new trial. Hence `--maxmemory-policy
-  noeviction` on the compose Redis.
-- **Startup validation**: `TRIAL_ENABLED=true` refuses to start unless
-  `TRIAL_CLIENT_ID` is set, `TRIAL_HOURS` is positive, `AUTH_TYPE=auth0`, and a
-  shared deadline store is configured (`TRIAL_REDIS_URL`/`REDIS_URL`). The
-  process-local store is not shared across gunicorn workers, so it would give
-  one company a separate clock per worker and reset them all on restart — the
-  control failing open while the log says "enabled". Local development opts in
-  with `TRIAL_ALLOW_LOCAL_STORE=true`.
-  The guard matches callers on the Auth0 `azp` claim, so under token/no auth it
-  would match nobody and silently protect nothing — fail closed instead of
-  logging "enabled".
+- **Fail-closed**: a trial token without the domain claim is rejected
+  (`trial_domain_missing`); a Redis outage blocks trial callers with a
+  retryable `trial_store_unavailable` (503) rather than handing out
+  unlimited access. Neither failure mode can affect paying customers.
+- **Startup validation**: `TRIAL_ENABLED=true` without `TRIAL_CLIENT_ID`
+  refuses to start (fail closed), instead of silently guarding nothing.
 
 ### Configuration
 
@@ -145,17 +124,14 @@ The domain is the company: all users at `foretagx.se` share one trial clock.
 |---------|---------|---------|
 | `TRIAL_ENABLED` | `false` | Master switch. |
 | `TRIAL_CLIENT_ID` | — | Auth0 client id the trial applies to (required when enabled). |
-| `TRIAL_HOURS` | `168` | Trial length from the company's first request (one week). Must be > 0. |
+| `TRIAL_HOURS` | `168` | Trial length from the company's first request (one week). |
 | `TRIAL_REDIS_URL` | — | Deadline store (falls back to `REDIS_URL`). |
 | `TRIAL_KEY_PREFIX` | `lux:trial` | Redis key namespace. |
-| `TRIAL_ALLOW_LOCAL_STORE` | `false` | Accept the process-local store (development only — it cannot enforce a company-wide trial). |
 
-`AUTH_TYPE` must be `auth0` whenever the trial is enabled (see startup
-validation above). The compose Redis runs with AOF persistence and a named
-volume so a restart doesn't reset trial clocks. Extending or revoking a company's trial is
-a direct Redis edit of its `lux:trial:deadline:<domain>` value (a unix
-timestamp) — immediate effect, no Auth0 changes. Leave
-`lux:trial:started:<domain>` alone; it only records when the window began.
+Enable AOF persistence on the Redis (the compose default runs without it) so a
+restart doesn't reset trial clocks. Extending or revoking a company's trial is
+a direct Redis edit of its `lux:trial:<domain>` deadline — immediate effect, no
+Auth0 changes.
 
 ### Response contract
 
@@ -166,18 +142,10 @@ X-Trial-Started-At: 2026-10-03T14:32:00+00:00
 X-Trial-Expires-At: 2026-10-10T14:32:00+00:00
 ```
 
-`GET /v1/trial/status` is authenticated and carries the auxiliary quota like
-every other `/v1` route, so no endpoint is left unmetered by omission. (In
-practice the trial client is exempt from the quota the same way it is on the
-compute endpoints — the ceiling binds the web app and any caller without an
-`azp`. A status call is two Redis reads, cheaper than any endpoint a trial
-caller can already reach.) It returns the same window as JSON (plus
+`GET /v1/trial/status` returns the same window as JSON (plus
 `remaining_hours`) without blocking — the route is authenticated but *not*
 wrapped in the trial guard, so an expired trial is reported (`"expired"`)
-rather than rejected. It is also a **pure read**: polling it never starts the
-clock, so a plugin that checks status on startup cannot burn trial time the
-user never used. A company with no guarded request yet gets `"not_started"`
-with the full `remaining_hours`; non-trial clients get `"not_applicable"`.
+rather than rejected; it answers `"not_applicable"` for non-trial clients.
 
 When the trial has ended, `403 Forbidden`:
 

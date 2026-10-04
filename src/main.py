@@ -214,14 +214,13 @@ class ServerLauncher:
             port: Port number to bind to
             debug: Enable debug mode
         """
-        log_msg = (
+        app.app.logger.info(
             "Flask app '%s' starting on host %s, port %s. Debug mode: %s",
             app.app.name,
             host,
             port,
             debug,
         )
-        app.app.logger.info(log_msg)
         app.app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 
