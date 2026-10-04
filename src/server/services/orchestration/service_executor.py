@@ -45,8 +45,9 @@ class ParallelServiceExecutor(ServiceExecutor):
 
     def execute(self, service: type, endpoint: EndpointType, requests: List[Any], file: Any) -> Any:
         async def process_all():
-            loop = asyncio.get_event_loop()
-            tasks = [loop.run_in_executor(None, service.run, endpoint, req, file) for req in requests]
+            # to_thread for the same reason as WindowProcessor: the correlation
+            # id must follow each parallel call into its worker thread.
+            tasks = [asyncio.to_thread(service.run, endpoint, req, file) for req in requests]
             return await asyncio.gather(*tasks)
 
         results = ParallelRequest.run(process_all, [])

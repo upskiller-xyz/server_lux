@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict
 
 from src.server.config import get_service_config
+from src.server.services.helpers.call_recorder import CallRecorder
 from src.server.services.helpers.logging_utils import LoggingFormatter
 from src.server.services.http_client import HTTPClient
 
@@ -82,7 +83,8 @@ class RemoteService:
         endpoint: EndpointType,
         request: RemoteServiceRequest,
         file:Any=None,
-        response_class: type[RemoteServiceResponse] | None = None
+        response_class: type[RemoteServiceResponse] | None = None,
+        wait_ms: float | None = None,
     ) -> Any:
         """Template method for standard request/response flow
 
@@ -91,6 +93,8 @@ class RemoteService:
             request: Typed request object
             file: Optional file upload
             response_class: Response class to parse with (optional, defaults to service's response class)
+            wait_ms: Optional gate-acquisition time (e.g. semaphore wait) to
+                stamp onto the [call] record
 
         Returns:
             Parsed response data
@@ -104,7 +108,11 @@ class RemoteService:
         formatted_request = LoggingFormatter.format_for_logging(request_dict)
         logger.debug("[%s] Request data: %s", cls.name.value, formatted_request)
 
-        response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
+        recorder = CallRecorder(cls.name, endpoint.value)
+        if wait_ms is not None:
+            recorder.record_wait(wait_ms)
+        with recorder:
+            response_dict = cls._http_client.post(url, request_dict, headers=cls._auth_headers(url))
 
         formatted_response = LoggingFormatter.format_for_logging(response_dict)
         logger.debug("[%s] Response received: %s", cls.name.value, formatted_response)
@@ -121,7 +129,8 @@ class RemoteService:
         endpoint: EndpointType,
         request: RemoteServiceRequest,
         response_class: type[BinaryResponse],
-        file:Any=None
+        file:Any=None,
+        wait_ms: float | None = None,
     ) -> BinaryResponse:
         """Template method for binary response flow
 
@@ -129,8 +138,8 @@ class RemoteService:
             endpoint: Endpoint to call
             request: Typed request object
             response_class: Binary response class
-            http_client: HTTP client instance
-            base_url: Base URL for service
+            file: Optional file upload
+            wait_ms: Optional gate-acquisition time to stamp onto the record
 
         Returns:
             Binary data
@@ -141,10 +150,14 @@ class RemoteService:
         # Convert request to dict
         request_dict = request.to_dict
 
-        binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
-        
+        recorder = CallRecorder(cls.name, endpoint.value)
+        if wait_ms is not None:
+            recorder.record_wait(wait_ms)
+        with recorder:
+            binary_data = cls._http_client.post_binary(url, request_dict, headers=cls._auth_headers(url))
+
         # Factory Pattern: Check for explicit marker
-        
+
         return response_class(binary_data)
 
 

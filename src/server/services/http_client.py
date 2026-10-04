@@ -63,11 +63,10 @@ class HTTPClient:
 
     @staticmethod
     def _parse_service_name(url: str) -> str:
-        parsed = urlparse(url)
-        path_parts = parsed.path.strip('/').split('/')
-        if path_parts:
-            return path_parts[0]
-        return parsed.hostname or "unknown"
+        """The hostname names the service ("encoder-service", the Modal app) —
+        the first path segment does not ("encode", "predict" are endpoints).
+        Mislabeling every error message was the status quo this replaced."""
+        return urlparse(url).hostname or "unknown"
 
     @staticmethod
     def _parse_endpoint(url: str) -> str:

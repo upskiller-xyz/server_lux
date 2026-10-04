@@ -33,6 +33,7 @@ from src.server.maps import AuthTypeMessageMap
 from src.server.rate_limiter import RateLimiter
 from src.server.request_handler import EndpointRequestHandler
 from src.server.route_configurator import RouteBuilder, RouteConfigurator
+from src.server.services.helpers.call_recorder import RequestIdMiddleware
 from src.server.services.remote import (
     EncoderService,
     MergerService,
@@ -80,6 +81,7 @@ class ServerApplication:
 
         self._initialize_components()
         self._setup_routes()
+        RequestIdMiddleware().register(self._app)
         TelemetryMiddleware().register(self._app)
 
     @staticmethod
