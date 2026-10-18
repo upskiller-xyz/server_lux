@@ -96,6 +96,10 @@ services:
       # this box (shared across gunicorn workers); override with an external
       # Managed Redis rediss:// URL via .env.scaleway if you run multiple hosts.
       - RATE_LIMIT_REDIS_URL=${RATE_LIMIT_REDIS_URL:-redis://redis:6379}
+      # Shared trial-deadline store (same Redis; persistence is enabled below so
+      # a restart does not reset trial clocks). The trial does NOT read
+      # RATE_LIMIT_REDIS_URL, so without this an enabled trial refuses to start.
+      - TRIAL_REDIS_URL=${TRIAL_REDIS_URL:-redis://redis:6379}
     # Same deal as the gateway: a cap so the [call] lines cannot fill the disk.
     # Persistence comes from alloy pushing them to Cockpit, not from here.
     logging:
@@ -127,15 +131,27 @@ services:
           cpus: "${LUX_CPUS:-2}"
           memory: ${LUX_MEM:-2g}
 
-  # ── Rolling-window quota counter (daily rate limit) ─────────────────────────
-  # Pure in-memory cache (no persistence): a restart just resets counters, which
-  # is fine for a fair-use limit. Co-located so it is shared across gunicorn
-  # workers. For multi-host, point RATE_LIMIT_REDIS_URL at a Managed Redis instead.
+  # ── Shared state: daily rate limit + trial deadlines ────────────────────────
+  # Co-located so it is shared across gunicorn workers. AOF persistence on a
+  # named volume keeps trial clocks across restarts, recreates and reboots
+  # (rate-limit counters may reset, that is fine for a fair-use limit — trial
+  # deadlines must not). For multi-host, point the *_REDIS_URL keys at a
+  # Managed Redis instead.
   redis:
     image: redis:7-alpine
     container_name: redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # noeviction: trial deadlines have no TTL by design (expiry is decided by
+    # comparing the stored deadline to the clock), so an evicted key would hand
+    # the company a brand-new trial. Fail on OOM instead of silently resetting.
+    command: [
+      "redis-server",
+      "--appendonly", "yes",
+      "--appendfsync", "everysec",
+      "--maxmemory-policy", "noeviction",
+    ]
+    volumes:
+      - redis-data:/data
     networks:
       - lux-network
     healthcheck:
@@ -303,6 +319,7 @@ services:
 
 volumes:
   alloy-data:
+  redis-data:
 
 networks:
   lux-network:

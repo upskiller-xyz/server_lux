@@ -24,6 +24,8 @@ name: Deploy to Scaleway
 #              public identifiers, not secrets), CORS_ORIGINS,
 #              RATE_LIMIT_ENABLED + RATE_LIMIT_PER_DAY + RATE_LIMIT_WINDOW_HOURS
 #              + RATE_LIMIT_AUX_PER_DAY + RATE_LIMIT_CLIENT_ID, API_DOCS_ENABLED,
+#              TRIAL_ENABLED + TRIAL_CLIENT_ID + TRIAL_HOURS (TRIAL_ENABLED=true
+#              requires AUTH_TYPE=auth0 and TRIAL_CLIENT_ID),
 #              COMPOSE_PROFILES (`cockpit` starts the log agent) + COCKPIT_LOKI_URL
 #              (the push endpoint of your OWN logs data source — the
 #              preconfigured "Scaleway Logs" source answers 403).
@@ -37,7 +39,9 @@ name: Deploy to Scaleway
 # truth per key. What has to be here is anything secret, anything that differs
 # per environment, and anything whose code default is not the value we want:
 # RATE_LIMIT_ENABLED defaults to "false" in rate_limit_config.py, so leaving it
-# out of both files silently disables the quota.
+# out of both files silently disables the quota. TRIAL_ENABLED is the same:
+# unrendered, a deploy turns the trial off and the trial client gets unlimited
+# access.
 #
 # One trigger, two callers:
 #   - A human, from the Actions tab. Optionally targets one service
@@ -287,6 +291,13 @@ jobs:
           # External Managed Redis; unset keeps the co-located redis service.
           RATE_LIMIT_REDIS_URL: ${{ secrets.RATE_LIMIT_REDIS_URL }}
           API_DOCS_ENABLED: ${{ vars.API_DOCS_ENABLED }}
+          # Time-limited trial for the Revit trial client. Same failure mode as
+          # the rate limit: these reach the container via env_file only, and
+          # TRIAL_ENABLED defaults to "false" — unrendered, a deploy (including
+          # one dispatched by a microservice tag) silently ends the trial gate.
+          TRIAL_ENABLED: ${{ vars.TRIAL_ENABLED }}
+          TRIAL_CLIENT_ID: ${{ vars.TRIAL_CLIENT_ID }}
+          TRIAL_HOURS: ${{ vars.TRIAL_HOURS }}
           # Log shipping to Cockpit. Same split as obstruction above: the push
           # endpoint is a public identifier (Variable), the token is a Secret.
           # COMPOSE_PROFILES=cockpit is what starts the agent at all — set it
@@ -329,6 +340,14 @@ jobs:
             echo "::error::AUTH_TYPE=auth0 requires the AUTH0_DOMAIN and AUTH0_AUDIENCE variables."
             exit 1
           fi
+          # The trial keys on the Auth0 `azp` claim; lux refuses to start with an
+          # enabled trial under any other auth mode or without a client id.
+          if [ "${TRIAL_ENABLED:-}" = "true" ]; then
+            if [ "$AUTH_TYPE" != "auth0" ] || [ -z "${TRIAL_CLIENT_ID:-}" ]; then
+              echo "::error::TRIAL_ENABLED=true requires AUTH_TYPE=auth0 and the TRIAL_CLIENT_ID variable."
+              exit 1
+            fi
+          fi
           # Only write keys that are actually set; appended after the committed
           # config template on the box, so these override its placeholders/defaults.
           : > .env.runtime
@@ -352,6 +371,9 @@ jobs:
             "RATE_LIMIT_CLIENT_ID=$RATE_LIMIT_CLIENT_ID" \
             "RATE_LIMIT_REDIS_URL=$RATE_LIMIT_REDIS_URL" \
             "API_DOCS_ENABLED=$API_DOCS_ENABLED" \
+            "TRIAL_ENABLED=$TRIAL_ENABLED" \
+            "TRIAL_CLIENT_ID=$TRIAL_CLIENT_ID" \
+            "TRIAL_HOURS=$TRIAL_HOURS" \
             "COCKPIT_LOKI_URL=$COCKPIT_LOKI_URL" \
             "COCKPIT_TOKEN=$COCKPIT_TOKEN" \
             "COMPOSE_PROFILES=$COMPOSE_PROFILES" \
