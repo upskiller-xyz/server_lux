@@ -88,7 +88,7 @@ Postprocess:     http://postprocess:8080
 ## Local Development
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.14
 - pip
 
 ### Setup

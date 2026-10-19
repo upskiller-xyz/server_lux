@@ -11,6 +11,21 @@ from ...constants import ImageConversionError
 
 logger = logging.getLogger('logger')
 
+class UnitRangeScaler:
+    """Scales unit-range (0..1) image data up to the 0..255 byte range.
+
+    The product is computed in the input dtype promoted with uint8, which is
+    what numpy 1.x did for ``data * 255``. Under numpy 2 (NEP 50) the bare
+    Python int keeps the input dtype, so int8 input raised OverflowError
+    instead of being upcast to int16; every other dtype is unchanged.
+    """
+    BYTE_MAX: int = 255
+
+    @classmethod
+    def scale(cls, data: np.ndarray) -> np.ndarray:
+        return np.multiply(data, cls.BYTE_MAX, dtype=np.promote_types(data.dtype, np.uint8))
+
+
 class ImageDataConverter:
     """Converts different image data types to bytes using Adapter-Map pattern
 
@@ -33,7 +48,7 @@ class ImageDataConverter:
         # Ensure uint8 format
         if data.dtype != np.uint8:
             if data.max() <= 1.0:
-                data = (data * 255).astype(np.uint8)
+                data = UnitRangeScaler.scale(data).astype(np.uint8)
             else:
                 data = data.astype(np.uint8)
 
@@ -132,7 +147,7 @@ class EncoderOutputConverter:
 
                     # Normalize if needed (convert to 0-255 uint8 range)
                     if image_array.max() <= 1.0:
-                        image_array = (image_array * 255).astype(np.uint8)
+                        image_array = UnitRangeScaler.scale(image_array).astype(np.uint8)
                     else:
                         image_array = image_array.astype(np.uint8)
 

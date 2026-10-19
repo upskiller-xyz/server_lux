@@ -1,5 +1,5 @@
 # Base image pinned by digest (reproducible, tamper-evident); Dependabot bumps it.
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 # Set working directory
 WORKDIR /app
@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 # --build-arg if a newer patched release is needed. These pins clear the
 # pip / setuptools / wheel CVE scan findings (setuptools 83 also vendors the
 # patched jaraco.context 6.1 + wheel 0.46.3 under setuptools/_vendor/).
-ARG PIP_VERSION=26.1.2
+ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=83.0.0
 ARG WHEEL_VERSION=0.47.0
 # Upgrade build tooling (fixes pip / setuptools / wheel CVEs), then purge the old
