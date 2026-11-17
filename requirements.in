@@ -32,7 +32,9 @@ setuptools>=81.0.0,<84.0.0
 python-dotenv>=1.0.0,<2.0.0
 
 # Computer Vision & Scientific Computing
-opencv-python>=4.10.0.84,<5.0.0
+# Headless build: no Qt/GUI, so it needs no libGL/libX* at runtime (the
+# distroless runtime image has none). The code only decodes/encodes images.
+opencv-python-headless>=4.10.0.84,<5.0.0
 numpy>=2.3.3,<3.0.0
 # Pillow: PIL.Image is imported by src/server/services/remote/image_converters.py
 pillow>=12.3.0,<13.0.0
