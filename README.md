@@ -85,7 +85,7 @@ The server provides a unified REST API at `/v1`, managing multi-service orchestr
 
 ### Built With
 
-* [Python 3.10+](https://www.python.org/)
+* [Python 3.14](https://www.python.org/)
 * [Flask](https://flask.palletsprojects.com/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -97,7 +97,7 @@ To get a local copy up and running follow these simple steps.
 
 ### Prerequisites
 
-* [Python 3.10+](https://www.python.org/downloads/)
+* [Python 3.14](https://www.python.org/downloads/)
 
 ### Installation
 
