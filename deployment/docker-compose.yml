@@ -25,7 +25,8 @@ services:
       # Optional: Mount logs directory for persistence
       - ./logs:/var/log/server-lux
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      # Exec form with the image's venv python: the runtime image has no shell or curl.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3

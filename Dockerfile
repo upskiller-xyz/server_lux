@@ -1,64 +1,51 @@
-# Base image pinned by digest (reproducible, tamper-evident); Dependabot bumps it.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+# Gateway image on Project Hummingbird (Red Hat hardened, distroless Python).
+#
+# Two stages: the -builder image (has pip and a shell) builds a venv, and the
+# distroless runtime image (no shell, no package manager, runs as UID 65532)
+# only receives the venv and the source. Both are pinned by index digest
+# (multi-arch); bump tag and digest together:
+#   docker buildx imagetools inspect registry.access.redhat.com/hi/python:3.14
+#   docker buildx imagetools inspect registry.access.redhat.com/hi/python:3.14-builder
+#
+# No OS packages are installed: OpenCV is the headless wheel, which needs no
+# libGL/libX*, and the wheels bundle the native libraries they need.
 
-# Set working directory
+FROM registry.access.redhat.com/hi/python:3.14-builder@sha256:b7ae4033035309fb6e1c6e9d2efa3b7d53bee243fdafe3ca13da4c782110ce54 AS build
+
+# The builder image runs as 65532 too; installing into /opt needs root.
+USER 0
+RUN python3 -m venv /opt/venv
+# Hash-locked requirements (generated from requirements.in); every artifact
+# must match its pinned hash. pip is removed from the venv afterwards: nothing
+# runs it at runtime, and it would only add scan findings.
+COPY requirements.txt /tmp/requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
+    && /opt/venv/bin/pip uninstall --yes pip
+
+FROM registry.access.redhat.com/hi/python:3.14@sha256:1ac4921724237d985a35cc23bbcd779fd5b984089e039182bf8e22cd108490d6
+
 WORKDIR /app
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080 \
+    DEPLOYMENT_MODE=production
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Pinned build-tooling versions keep the image reproducible; override with
-# --build-arg if a newer patched release is needed. These pins clear the
-# pip / setuptools / wheel CVE scan findings (setuptools 83 also vendors the
-# patched jaraco.context 6.1 + wheel 0.46.3 under setuptools/_vendor/).
-ARG PIP_VERSION=26.2.1
-ARG SETUPTOOLS_VERSION=83.0.0
-ARG WHEEL_VERSION=0.47.0
-# Upgrade build tooling (fixes pip / setuptools / wheel CVEs), then purge the old
-# bundled/cached wheels the base image ships (ensurepip stashes vulnerable
-# pip/setuptools/wheel .whl files that scanners still flag even after an upgrade).
-# The upgrade stays &&-gated so a failed upgrade fails the build; the cleanup runs
-# in a best-effort block so every step runs regardless of the others' exit codes.
-RUN pip install --no-cache-dir --upgrade "pip==${PIP_VERSION}" "setuptools==${SETUPTOOLS_VERSION}" "wheel==${WHEEL_VERSION}" \
-    && { \
-        find /usr/local/lib -type d -name "_bundled" -path "*ensurepip*" -exec rm -rf {} + 2>/dev/null; \
-        rm -rf /root/.cache/pip; \
-        true; \
-    }
-
-# Copy the hash-locked requirements (generated from requirements.in)
-COPY requirements.txt .
-
-# Install Python dependencies; every artifact must match its pinned hash
-RUN pip install --no-cache-dir --require-hashes -r requirements.txt
-
-# Unprivileged runtime user (no shell, no home); the app never writes to disk.
-RUN groupadd --system --gid 10001 app \
-    && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
-
-# Copy application source (root-owned, read-only for the app user)
+COPY --from=build /opt/venv /opt/venv
+# Application source (root-owned, read-only for the app user; the app never
+# writes to disk).
 COPY src/ ./src/
+COPY gunicorn.conf.py .
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8080
-ENV DEPLOYMENT_MODE=production
-
-# Health check
+# Exec form: the runtime image has no shell. Any HTTP error fails the check.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:${PORT}/', timeout=5)" || exit 1
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/' % os.environ.get('PORT', '8080'), timeout=5)"]
 
-# Expose port
 EXPOSE 8080
 
-USER app
+# The image default (65532), stated explicitly so a base-image change cannot
+# silently make the gateway run as root.
+USER 65532
 
-# Run with gunicorn (WORKERS/THREADS overridable via env; defaults match prior behavior)
-CMD exec gunicorn --bind 0.0.0.0:$PORT --workers ${WORKERS:-1} --threads ${THREADS:-8} --timeout 900 --chdir src main:app
+# Bind ($PORT), WORKERS (default 1) and THREADS (default 8) are read from the
+# environment by gunicorn.conf.py, since exec form does no variable expansion.
+CMD ["gunicorn", "-c", "/app/gunicorn.conf.py", "--timeout", "900", "--chdir", "src", "main:app"]
