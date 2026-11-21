@@ -10,7 +10,7 @@
 # No OS packages are installed: OpenCV is the headless wheel, which needs no
 # libGL/libX*, and the wheels bundle the native libraries they need.
 
-FROM registry.access.redhat.com/hi/python:3.14-builder@sha256:b7ae4033035309fb6e1c6e9d2efa3b7d53bee243fdafe3ca13da4c782110ce54 AS build
+FROM registry.access.redhat.com/hi/python:3.15-builder@sha256:41b08fc687e756ba1d099e14ab3595028ef4b1f649f328336cad74b318a539df AS build
 
 # The builder image runs as 65532 too; installing into /opt needs root.
 USER 0
@@ -22,7 +22,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
     && /opt/venv/bin/pip uninstall --yes pip
 
-FROM registry.access.redhat.com/hi/python:3.14@sha256:1ac4921724237d985a35cc23bbcd779fd5b984089e039182bf8e22cd108490d6
+FROM registry.access.redhat.com/hi/python:3.15@sha256:1739a8c22a807a31cb06a266747b72a276d8e416910a920941b168681a72420b
 
 WORKDIR /app
 ENV PATH=/opt/venv/bin:$PATH \
